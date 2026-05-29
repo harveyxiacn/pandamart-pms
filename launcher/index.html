@@ -1,0 +1,459 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PandaMart PMS 绠＄悊鍣?/title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI','Microsoft YaHei',sans-serif;background:linear-gradient(135deg,#fff5f5 0%,#fff 50%,#fef2f2 100%);min-height:100vh;color:#1e1e1e}
+.header{background:linear-gradient(135deg,#dc2626,#b91c1c);color:#fff;padding:20px 32px;display:flex;align-items:center;gap:16px;box-shadow:0 2px 12px rgba(220,38,38,.3)}
+.header img{width:48px;height:48px;border-radius:12px;background:#fff;padding:4px}
+.header h1{font-size:22px;font-weight:700}
+.header p{font-size:13px;opacity:.85;margin-top:2px}
+.main{max-width:780px;margin:24px auto;padding:0 16px 40px}
+.card{background:#fff;border:1px solid #fecdd3;border-radius:14px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.04);overflow:hidden}
+.card-head{display:flex;align-items:center;gap:12px;padding:16px 20px;cursor:pointer;user-select:none;transition:background .15s}
+.card-head:hover{background:#fff5f5}
+.step-num{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0}
+.step-num.pending{background:#f1f5f9;color:#94a3b8}
+.step-num.done{background:#dcfce7;color:#16a34a}
+.step-num.running{background:#fef3c7;color:#d97706;animation:pulse 1.2s infinite}
+.step-num.error{background:#fee2e2;color:#dc2626}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.card-title{font-size:15px;font-weight:600;flex:1}
+.card-status{font-size:12px;padding:3px 10px;border-radius:20px;font-weight:500}
+.card-status.done{background:#dcfce7;color:#16a34a}
+.card-status.running{background:#fef3c7;color:#d97706}
+.card-status.error{background:#fee2e2;color:#dc2626}
+.card-body{padding:0 20px 20px;display:none}
+.card.open .card-body{display:block}
+.card-body .desc{font-size:13px;color:#64748b;margin-bottom:14px;line-height:1.6}
+.form-row{display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.form-group{flex:1;min-width:180px}
+.form-group label{display:block;font-size:12px;font-weight:600;color:#475569;margin-bottom:4px}
+.form-group input{width:100%;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;outline:none;transition:border .2s}
+.form-group input:focus{border-color:#dc2626;box-shadow:0 0 0 2px rgba(220,38,38,.12)}
+.btn{padding:9px 20px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:6px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-primary{background:#dc2626;color:#fff}
+.btn-primary:hover:not(:disabled){background:#b91c1c}
+.btn-secondary{background:#f1f5f9;color:#475569}
+.btn-secondary:hover:not(:disabled){background:#e2e8f0}
+.btn-success{background:#16a34a;color:#fff}
+.btn-success:hover:not(:disabled){background:#15803d}
+.btn-danger{background:#dc2626;color:#fff}
+.btn-danger:hover:not(:disabled){background:#b91c1c}
+.btn-row{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+.console{background:#1e293b;color:#e2e8f0;border-radius:8px;padding:12px 16px;font-family:'Cascadia Mono','Consolas',monospace;font-size:12px;line-height:1.7;max-height:240px;overflow-y:auto;margin-top:12px;white-space:pre-wrap;word-break:break-all}
+.console:empty{display:none}
+.info-box{background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 16px;font-size:13px;color:#1e40af;line-height:1.6;margin-top:12px}
+.info-box.success{background:#f0fdf4;border-color:#86efac;color:#166534}
+.info-box.error{background:#fef2f2;border-color:#fca5a5;color:#991b1b}
+.server-panel{background:linear-gradient(135deg,#f0fdf4,#fff);border:2px solid #86efac;border-radius:14px;padding:20px;margin-top:16px;text-align:center}
+.server-panel.off{background:linear-gradient(135deg,#fef2f2,#fff);border-color:#fca5a5}
+.server-url{font-size:18px;font-weight:700;color:#16a34a;margin:8px 0}
+.server-url a{color:inherit;text-decoration:none}
+.server-url a:hover{text-decoration:underline}
+.footer{text-align:center;padding:20px;font-size:12px;color:#94a3b8}
+.arrow{transition:transform .2s;font-size:12px;color:#94a3b8}
+.card.open .arrow{transform:rotate(90deg)}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <img src="/logo.png" alt="Logo" onerror="this.style.display='none'">
+  <div>
+    <h1>馃惣 PandaMart PMS 绠＄悊鍣?/h1>
+    <p>鐔婄尗瓒呭競鏅鸿兘搴撳瓨绠＄悊绯荤粺 鈥?瀹夎涓庣鐞嗘帶鍒堕潰鏉?/p>
+  </div>
+</div>
+
+<div class="main">
+
+<!-- 鐜妫€娴?-->
+<div class="card open" id="card-env">
+  <div class="card-head" onclick="$('card-env').classList.toggle('open')">
+    <div class="step-num pending" id="step-env" style="font-size:16px">鈿?/div>
+    <div class="card-title">鐜鍑嗗</div>
+    <span class="card-status" id="status-env" style="display:none"></span>
+    <span class="arrow">鈻?/span>
+  </div>
+  <div class="card-body">
+    <div class="desc">绯荤粺杩愯闇€瑕?Node.js 鍜?MySQL銆傛娴嬪綋鍓嶇幆澧冨苟鎸夐渶瀹夎銆?/div>
+    <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:12px">
+      <tr style="border-bottom:1px solid #e2e8f0">
+        <td style="padding:10px 0;font-weight:600">Node.js</td>
+        <td id="env-node" style="padding:10px 0;color:#94a3b8">妫€娴嬩腑...</td>
+        <td style="padding:10px 0;text-align:right"><span id="env-node-badge"></span></td>
+      </tr>
+      <tr>
+        <td style="padding:10px 0;font-weight:600">MySQL</td>
+        <td id="env-mysql" style="padding:10px 0;color:#94a3b8">妫€娴嬩腑...</td>
+        <td style="padding:10px 0;text-align:right" id="env-mysql-actions"></td>
+      </tr>
+    </table>
+    <div id="env-mysql-install" style="display:none">
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="installMysql()">馃摜 涓€閿畨瑁?MySQL</button>
+        <button class="btn btn-secondary" onclick="window.open('https://dev.mysql.com/downloads/installer/')">馃寪 鎵嬪姩涓嬭浇</button>
+      </div>
+      <div class="console" id="console-mysql"></div>
+    </div>
+    <div id="env-create-db" style="display:none;margin-top:12px">
+      <div class="desc" style="margin-bottom:8px">MySQL 宸插畨瑁呫€傝緭鍏?root 瀵嗙爜鏉ヨ嚜鍔ㄥ垱寤烘暟鎹簱 <code>pandamart_pms</code>锛?/div>
+      <div class="form-row">
+        <div class="form-group"><label>MySQL root 瀵嗙爜</label><input id="env-db-pwd" type="password" placeholder="杈撳叆 MySQL root 瀵嗙爜"></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-success" onclick="createDb()">馃梽锔?鍒涘缓鏁版嵁搴?/button>
+      </div>
+      <div id="msg-env-db"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 姝ラ 1: 閰嶇疆鏁版嵁搴?-->
+<div class="card" id="card-1">
+  <div class="card-head" onclick="toggle(1)">
+    <div class="step-num pending" id="step-1">1</div>
+    <div class="card-title">閰嶇疆鏁版嵁搴撳拰瀹夊叏瀵嗛挜</div>
+    <span class="card-status" id="status-1" style="display:none"></span>
+    <span class="arrow">鈻?/span>
+  </div>
+  <div class="card-body">
+    <div class="desc">濉啓 MySQL 鏁版嵁搴撹繛鎺ヤ俊鎭€傚瘑鐮佽濉啓浣犲湪涓婁竴姝ュ畨瑁?MySQL 鏃惰缃殑 root 瀵嗙爜銆?/div>
+    <div class="form-row">
+      <div class="form-group"><label>鏁版嵁搴撳湴鍧€</label><input id="DB_HOST" value="127.0.0.1"></div>
+      <div class="form-group"><label>绔彛</label><input id="DB_PORT" value="3306"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>鐢ㄦ埛鍚?/label><input id="DB_USER" value="root"></div>
+      <div class="form-group"><label>瀵嗙爜</label><input id="DB_PASSWORD" type="password" placeholder="杈撳叆鏁版嵁搴撳瘑鐮?></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>鏁版嵁搴撳悕</label><input id="DB_NAME" value="pandamart_pms"></div>
+      <div class="form-group"><label>绯荤粺绔彛</label><input id="PORT" value="3000"></div>
+    </div>
+    <details style="margin-top:10px">
+      <summary style="font-size:13px;color:#64748b;cursor:pointer">楂樼骇璁剧疆锛堝畨鍏ㄥ瘑閽ワ級</summary>
+      <div class="form-row" style="margin-top:10px">
+        <div class="form-group"><label>JWT 瀵嗛挜</label><input id="JWT_SECRET" placeholder="鑷姩鐢熸垚"></div>
+        <div class="form-group"><label>AI 鍔犲瘑瀵嗛挜</label><input id="AI_ENCRYPTION_KEY" placeholder="鑷姩鐢熸垚"></div>
+      </div>
+      <div class="desc" style="margin:0">鐣欑┖灏嗚嚜鍔ㄧ敓鎴愰殢鏈哄瘑閽ャ€?/div>
+    </details>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="saveConfig()">馃捑 淇濆瓨閰嶇疆</button>
+    </div>
+    <div id="msg-1"></div>
+  </div>
+</div>
+
+<!-- 姝ラ 2: 瀹夎渚濊禆 -->
+<div class="card" id="card-2">
+  <div class="card-head" onclick="toggle(2)">
+    <div class="step-num pending" id="step-2">2</div>
+    <div class="card-title">瀹夎椤圭洰渚濊禆</div>
+    <span class="card-status" id="status-2" style="display:none"></span>
+    <span class="arrow">鈻?/span>
+  </div>
+  <div class="card-body">
+    <div class="desc">鑷姩涓嬭浇骞跺畨瑁呴」鐩墍闇€鐨勫叏閮ㄤ緷璧栧寘銆傞娆″畨瑁呭ぇ绾﹂渶瑕?3-5 鍒嗛挓锛岃鑰愬績绛夊緟銆?/div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="runStep('install-deps',2)" id="btn-install">馃摝 寮€濮嬪畨瑁?/button>
+    </div>
+    <div class="console" id="console-2"></div>
+  </div>
+</div>
+
+<!-- 姝ラ 3: 娴嬭瘯鏁版嵁搴撹繛鎺?-->
+<div class="card" id="card-3">
+  <div class="card-head" onclick="toggle(3)">
+    <div class="step-num pending" id="step-3">3</div>
+    <div class="card-title">娴嬭瘯鏁版嵁搴撹繛鎺?/div>
+    <span class="card-status" id="status-3" style="display:none"></span>
+    <span class="arrow">鈻?/span>
+  </div>
+  <div class="card-body">
+    <div class="desc">楠岃瘉鏁版嵁搴撹繛鎺ラ厤缃槸鍚︽纭€傚鏋滄祴璇曞け璐ワ紝璇疯繑鍥炴楠?1 妫€鏌ユ暟鎹簱閰嶇疆銆?/div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="testDb()">馃攲 娴嬭瘯杩炴帴</button>
+    </div>
+    <div id="msg-3"></div>
+  </div>
+</div>
+
+<!-- 姝ラ 4: 鍒濆鍖栨暟鎹簱 -->
+<div class="card" id="card-4">
+  <div class="card-head" onclick="toggle(4)">
+    <div class="step-num pending" id="step-4">4</div>
+    <div class="card-title">鍒濆鍖栨暟鎹簱</div>
+    <span class="card-status" id="status-4" style="display:none"></span>
+    <span class="arrow">鈻?/span>
+  </div>
+  <div class="card-body">
+    <div class="desc">鍒涘缓鏁版嵁琛ㄧ粨鏋勫苟瀵煎叆鍒濆鏁版嵁锛堢鐞嗗憳璐﹀彿銆佸晢鍝佸垎绫汇€佹紨绀烘暟鎹級銆?br>鈿狅笍 棣栨浣跨敤鏃舵墽琛屻€傚鏋滄暟鎹簱宸叉湁鏁版嵁锛屼細鑷姩璺宠繃銆?/div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="runStep('init-db',4)" id="btn-initdb">馃梽锔?鍒濆鍖栨暟鎹簱</button>
+    </div>
+    <div class="console" id="console-4"></div>
+  </div>
+</div>
+
+<!-- 姝ラ 5: 鏋勫缓绯荤粺 -->
+<div class="card" id="card-5">
+  <div class="card-head" onclick="toggle(5)">
+    <div class="step-num pending" id="step-5">5</div>
+    <div class="card-title">鏋勫缓绯荤粺</div>
+    <span class="card-status" id="status-5" style="display:none"></span>
+    <span class="arrow">鈻?/span>
+  </div>
+  <div class="card-body">
+    <div class="desc">缂栬瘧鍓嶇鍜屽悗绔唬鐮侊紝鐢熸垚鍙繍琛岀殑鐢熶骇鐗堟湰銆傞娆℃瀯寤虹害闇€ 1-2 鍒嗛挓銆?/div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="runStep('build',5)" id="btn-build">馃敤 寮€濮嬫瀯寤?/button>
+    </div>
+    <div class="console" id="console-5"></div>
+  </div>
+</div>
+
+<!-- 姝ラ 6: 鍚姩绯荤粺 -->
+<div class="card" id="card-6">
+  <div class="card-head" onclick="toggle(6)">
+    <div class="step-num pending" id="step-6">6</div>
+    <div class="card-title">鍚姩绯荤粺</div>
+    <span class="card-status" id="status-6" style="display:none"></span>
+    <span class="arrow">鈻?/span>
+  </div>
+  <div class="card-body">
+    <div class="desc">鍚姩 PandaMart PMS 鏈嶅姟鍣ㄣ€傚惎鍔ㄥ悗鍙互閫氳繃娴忚鍣ㄨ闂郴缁熴€?/div>
+    <div class="btn-row">
+      <button class="btn btn-success" onclick="startServer()" id="btn-start">馃殌 鍚姩鏈嶅姟鍣?/button>
+      <button class="btn btn-danger" onclick="stopServer()" id="btn-stop" style="display:none">鈴癸笍 鍋滄鏈嶅姟鍣?/button>
+    </div>
+    <div id="server-info" style="display:none">
+      <div class="server-panel" id="server-panel">
+        <div style="font-size:14px">鉁?绯荤粺宸插惎鍔紝璇峰湪娴忚鍣ㄤ腑鎵撳紑锛?/div>
+        <div class="server-url"><a id="server-link" href="#" target="_blank"></a></div>
+        <div style="font-size:13px;color:#64748b;margin-top:4px">榛樿璐﹀彿锛歛dmin &nbsp;/&nbsp; 瀵嗙爜锛歅andaMart2026!</div>
+      </div>
+    </div>
+    <div class="console" id="console-6"></div>
+  </div>
+</div>
+
+<div class="footer">PandaMart PMS v1.0 路 绠＄悊鍣ㄦ帶鍒堕潰鏉?路 Node.js <span id="node-ver"></span></div>
+</div>
+
+<script>
+function $(id){return document.getElementById(id)}
+function toggle(n){$('card-'+n).classList.toggle('open')}
+
+function setStepStatus(n,status,text){
+  const el=$('step-'+n),st=$('status-'+n);
+  el.className='step-num '+status;
+  if(text){st.textContent=text;st.className='card-status '+status;st.style.display='';}
+  else{st.style.display='none';}
+}
+
+async function api(url,method='GET',body=null){
+  const opts={method,headers:{'Content-Type':'application/json'}};
+  if(body)opts.body=JSON.stringify(body);
+  const r=await fetch(url,opts);
+  return r.json();
+}
+
+async function loadStatus(){
+  const r=await api('/api/status');
+  if(!r.success)return;
+  const d=r.data;
+  $('node-ver').textContent=d.nodeVersion;
+
+  // 鐜妫€娴?  $('env-node').textContent=d.nodeVersion;
+  $('env-node-badge').innerHTML='<span class="card-status done">宸插畨瑁?/span>';
+
+  if(d.mysqlInstalled){
+    $('env-mysql').textContent=d.mysqlVersion||'宸插畨瑁?;
+    $('env-mysql-actions').innerHTML='<span class="card-status done">宸插畨瑁?/span>';
+    $('env-mysql-install').style.display='none';
+    $('env-create-db').style.display='';
+    setStepStatus('env','done','灏辩华');
+  }else{
+    $('env-mysql').textContent='鏈畨瑁?;
+    $('env-mysql-actions').innerHTML='<span class="card-status error">鏈畨瑁?/span>';
+    $('env-mysql-install').style.display='';
+    $('env-create-db').style.display='none';
+    setStepStatus('env','error','闇€瀹夎 MySQL');
+  }
+
+  if(d.envExists&&d.envConfig){
+    setStepStatus(1,'done','宸查厤缃?);
+    $('DB_HOST').value=d.envConfig.DB_HOST||'';
+    $('DB_PORT').value=d.envConfig.DB_PORT||'';
+    $('DB_USER').value=d.envConfig.DB_USER||'';
+    $('DB_NAME').value=d.envConfig.DB_NAME||'';
+    $('PORT').value=d.envConfig.PORT||'3000';
+  }
+  if(d.serverDepsInstalled&&d.clientDepsInstalled)setStepStatus(2,'done','宸插畨瑁?);
+  if(d.serverBuilt&&d.clientBuilt)setStepStatus(5,'done','宸叉瀯寤?);
+  if(d.serverReady){
+    setStepStatus(6,'done','杩愯涓?);
+    showServerRunning(d.serverPort);
+  }else if(d.serverRunning){
+    setStepStatus(6,'running','鍚姩涓?..');
+  }
+}
+
+async function installMysql(){
+  const con=$('console-mysql');
+  con.textContent='姝ｅ湪鍚姩 MySQL 瀹夎鑴氭湰...\n';
+  const r=await api('/api/install-mysql','POST');
+  if(!r.success){con.textContent='閿欒: '+r.error;return;}
+  const taskId=r.taskId;
+  const timer=setInterval(async()=>{
+    const tr=await api('/api/task/'+taskId);
+    if(!tr.success)return;
+    con.textContent=tr.data.output;
+    con.scrollTop=con.scrollHeight;
+    if(tr.data.status!=='running'){
+      clearInterval(timer);
+      if(tr.data.status==='done'){
+        setTimeout(()=>loadStatus(),2000);
+      }
+    }
+  },1500);
+}
+
+async function createDb(){
+  const pwd=$('env-db-pwd').value;
+  $('msg-env-db').innerHTML='<div class="info-box">姝ｅ湪鍒涘缓鏁版嵁搴?..</div>';
+  const r=await api('/api/create-database','POST',{DB_PASSWORD:pwd});
+  if(r.success){
+    $('msg-env-db').innerHTML='<div class="info-box success">鉁?'+r.message+' 璇风户缁笅涓€姝ラ厤缃€?/div>';
+    // auto-fill password into step 1
+    $('DB_PASSWORD').value=pwd;
+    $('card-env').classList.remove('open');$('card-1').classList.add('open');
+  }else{
+    $('msg-env-db').innerHTML='<div class="info-box error">鉂?'+r.error+'</div>';
+  }
+}
+
+async function saveConfig(){
+  const body={
+    DB_HOST:$('DB_HOST').value,DB_PORT:$('DB_PORT').value,
+    DB_USER:$('DB_USER').value,DB_PASSWORD:$('DB_PASSWORD').value,
+    DB_NAME:$('DB_NAME').value,PORT:$('PORT').value,
+    JWT_SECRET:$('JWT_SECRET').value,AI_ENCRYPTION_KEY:$('AI_ENCRYPTION_KEY').value,
+  };
+  if(!body.DB_PASSWORD){alert('璇疯緭鍏ユ暟鎹簱瀵嗙爜');return;}
+  const r=await api('/api/save-config','POST',body);
+  if(r.success){
+    setStepStatus(1,'done','宸查厤缃?);
+    $('msg-1').innerHTML='<div class="info-box success">鉁?閰嶇疆宸蹭繚瀛樻垚鍔燂紒璇风户缁笅涓€姝ャ€?/div>';
+    // auto open next
+    $('card-1').classList.remove('open');$('card-2').classList.add('open');
+  }else{
+    $('msg-1').innerHTML='<div class="info-box error">鉂?'+r.error+'</div>';
+  }
+}
+
+async function testDb(){
+  setStepStatus(3,'running','娴嬭瘯涓?..');
+  $('msg-3').innerHTML='<div class="info-box">姝ｅ湪杩炴帴鏁版嵁搴?..</div>';
+  const r=await api('/api/test-db','POST');
+  if(r.success){
+    setStepStatus(3,'done','杩炴帴鎴愬姛');
+    $('msg-3').innerHTML='<div class="info-box success">鉁?'+r.message+'</div>';
+    $('card-3').classList.remove('open');$('card-4').classList.add('open');
+  }else{
+    setStepStatus(3,'error','杩炴帴澶辫触');
+    $('msg-3').innerHTML='<div class="info-box error">鉂?'+r.error+'</div>';
+  }
+}
+
+let pollTimer=null;
+async function runStep(action,stepNum){
+  const urlMap={'install-deps':'/api/install-deps','init-db':'/api/init-db','build':'/api/build'};
+  setStepStatus(stepNum,'running','杩涜涓?..');
+  const con=$('console-'+stepNum);
+  con.textContent='姝ｅ湪鍚姩...\n';
+  const r=await api(urlMap[action],'POST');
+  if(!r.success){
+    setStepStatus(stepNum,'error','澶辫触');
+    con.textContent='閿欒: '+(r.error||'鏈煡閿欒');
+    return;
+  }
+  // poll task
+  const taskId=r.taskId;
+  if(pollTimer)clearInterval(pollTimer);
+  pollTimer=setInterval(async()=>{
+    const tr=await api('/api/task/'+taskId);
+    if(!tr.success)return;
+    con.textContent=tr.data.output;
+    con.scrollTop=con.scrollHeight;
+    if(tr.data.status!=='running'){
+      clearInterval(pollTimer);pollTimer=null;
+      if(tr.data.status==='done'){
+        setStepStatus(stepNum,'done','宸插畬鎴?);
+        // auto open next
+        $('card-'+stepNum).classList.remove('open');
+        if($('card-'+(stepNum+1)))$('card-'+(stepNum+1)).classList.add('open');
+      }else{
+        setStepStatus(stepNum,'error','澶辫触');
+      }
+    }
+  },1000);
+}
+
+function showServerRunning(port){
+  const url='http://localhost:'+port;
+  $('server-link').href=url;$('server-link').textContent=url;
+  $('server-info').style.display='';
+  $('btn-start').style.display='none';$('btn-stop').style.display='';
+  setStepStatus(6,'done','杩愯涓?);
+}
+
+async function startServer(){
+  setStepStatus(6,'running','鍚姩涓?..');
+  const con=$('console-6');
+  con.textContent='姝ｅ湪鍚姩...\n';
+  const r=await api('/api/start-server','POST');
+  if(!r.success){
+    setStepStatus(6,'error','澶辫触');
+    con.textContent='閿欒: '+r.error;
+    return;
+  }
+  const taskId=r.taskId;
+  const port=$('PORT').value||'3000';
+  // poll for startup
+  let checks=0;
+  const timer=setInterval(async()=>{
+    const tr=await api('/api/task/'+taskId);
+    if(tr.success){con.textContent=tr.data.output;con.scrollTop=con.scrollHeight;}
+    checks++;
+    if(tr.success&&tr.data.status==='done'){
+      clearInterval(timer);
+      showServerRunning(port);
+    }
+    if(checks>30||(tr.success&&tr.data.status==='error')){
+      clearInterval(timer);
+      setStepStatus(6,'error','鍚姩澶辫触');
+    }
+  },1000);
+}
+
+async function stopServer(){
+  const r=await api('/api/stop-server','POST');
+  $('btn-start').style.display='';$('btn-stop').style.display='none';
+  $('server-info').style.display='none';
+  setStepStatus(6,'pending');
+  $('console-6').textContent='鏈嶅姟鍣ㄥ凡鍋滄';
+}
+
+loadStatus();
+</script>
+</body>
+</html>
+

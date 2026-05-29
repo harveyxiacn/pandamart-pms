@@ -1,0 +1,24 @@
+{
+  "name": "pandamart-pms",
+  "version": "1.0.0",
+  "description": "熊猫超市智能库存管理系统",
+  "private": true,
+  "scripts": {
+    "install:all": "cd server && npm install && cd ../client && npm install",
+    "build:client": "cd client && npm run build",
+    "build:server": "cd server && npm run build",
+    "build": "npm run build:client && npm run build:server",
+    "start": "cd server && node dist/index.js",
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "migrate": "cd server && npm run migrate",
+    "seed": "cd server && npm run seed",
+    "migrate:rollback": "cd server && npm run migrate:rollback",
+    "lint": "cd server && npm run lint && cd ../client && npm run lint",
+    "format": "prettier --write \"{client,server}/src/**/*.{ts,tsx}\"",
+    "format:check": "prettier --check \"{client,server}/src/**/*.{ts,tsx}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.8.3"
+  }
+}

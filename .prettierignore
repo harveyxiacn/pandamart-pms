@@ -1,0 +1,15 @@
+node_modules
+dist
+build
+coverage
+*.log
+.run-logs
+launcher
+toPandaMart
+toPandaMart.zip
+sampleinvoice
+client/dist
+server/dist
+server/uploads
+**/*.min.js
+package-lock.json

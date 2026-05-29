@@ -1,0 +1,29 @@
+node_modules/
+dist/
+server/public/
+
+# Environment files must stay local. Keep checked-in examples only.
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+
+# Runtime/generated data
+*.log
+logs/
+server/logs/
+uploads/
+server/uploads/
+client/dist/
+server/dist/
+
+# Local automation/session artifacts
+.claude/
+.run-logs/
+toPandaMart/
+*.zip
+
+.DS_Store
+Thumbs.db

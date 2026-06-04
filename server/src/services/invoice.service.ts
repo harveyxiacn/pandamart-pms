@@ -14,6 +14,8 @@ import { AppError } from '../middleware/errorHandler';
 import { buildPagination } from '../utils/helpers';
 import { ConfirmInvoiceBody, UpdateInvoiceBody } from '../types';
 import db from '../config/database';
+import { adjustStockTx } from './inventory.service';
+import { DEFAULT_STORE_ID } from '../config/store';
 
 function parseOcrRaw(raw: any): any {
   if (!raw) return null;
@@ -247,34 +249,16 @@ export const invoiceService = {
         const delta = -Number(item.quantity || 0);
         if (!Number.isFinite(delta) || delta === 0) continue;
 
-        const inventory = await trx('inventory').where('product_id', productId).first();
-        const before = Number(inventory?.quantity || 0);
-        const after = before + delta;
-
-        if (inventory) {
-          await trx('inventory')
-            .where('product_id', productId)
-            .update({ quantity: after, updated_at: trx.fn.now() });
-        } else {
-          await trx('inventory').insert({
-            product_id: productId,
-            quantity: after,
-            unit: item.unit || 'EA',
-            created_at: trx.fn.now(),
-            updated_at: trx.fn.now(),
-          });
-        }
-
-        await trx('inventory_logs').insert({
-          product_id: productId,
+        // 统一走带行锁、按门店范围的库存原语（消除并发丢更新、补齐 store_id）
+        await adjustStockTx(trx, {
+          productId,
+          storeId: DEFAULT_STORE_ID,
+          delta,
           type: 'adjust',
-          quantity: delta,
-          quantity_before: before,
-          quantity_after: after,
-          invoice_id: id,
           reason: `rollback_confirm: ${rollbackReason}`,
-          operated_by: userId,
-          created_at: trx.fn.now(),
+          invoiceId: id,
+          userId,
+          unit: item.unit || 'EA',
         });
       }
 
@@ -319,6 +303,24 @@ export const invoiceService = {
       throw new AppError(422, 'BUSINESS_ERROR', '该发票已被处理');
     }
 
+    // 防重复入库：同一供应商 + 发票号若已有其它已确认发票，则拦截。
+    // PRD 将"重复发票"列为驳回原因；重复确认会虚增库存与应付，必须在入库前阻断。
+    if (body.supplierId && body.invoiceNumber) {
+      const dup = await db('invoices')
+        .where('supplier_id', body.supplierId)
+        .where('invoice_number', body.invoiceNumber)
+        .where('status', 'confirmed')
+        .whereNot('id', id)
+        .first();
+      if (dup) {
+        throw new AppError(
+          409,
+          'DUPLICATE_INVOICE',
+          `该供应商已存在相同发票号(${body.invoiceNumber})的已确认发票(#${dup.id})，疑似重复入库`
+        );
+      }
+    }
+
     let newProductsCreated = 0;
     let inventoryUpdated = 0;
     const priceAlerts: any[] = [];
@@ -348,7 +350,7 @@ export const invoiceService = {
           if (existingInv) {
             await trx('inventory').where('product_id', productId).update({ unit: item.unit, updated_at: trx.fn.now() });
           } else {
-            await trx('inventory').insert({ product_id: productId, quantity: 0, unit: item.unit });
+            await trx('inventory').insert({ product_id: productId, store_id: DEFAULT_STORE_ID, quantity: 0, unit: item.unit });
           }
 
           newProductsCreated++;
@@ -370,34 +372,26 @@ export const invoiceService = {
           line_total: item.lineTotal,
         });
 
-        // 更新库存
+        // 更新库存（统一走带行锁、按门店范围的库存原语，消除与销售并发的丢更新、补齐 store_id）
         if (productId) {
-          const inv = await trx('inventory').where('product_id', productId).first();
-          const before = Number(inv?.quantity || 0);
-          const after = before + item.quantity;
-
-          if (inv) {
-            await trx('inventory').where('product_id', productId).update({ quantity: after, updated_at: trx.fn.now() });
-          } else {
-            await trx('inventory').insert({ product_id: productId, quantity: after });
-          }
-
-          await trx('inventory_logs').insert({
-            product_id: productId,
+          await adjustStockTx(trx, {
+            productId,
+            storeId: DEFAULT_STORE_ID,
+            delta: item.quantity,
             type: 'in',
-            quantity: item.quantity,
-            quantity_before: before,
-            quantity_after: after,
-            invoice_id: id,
-            operated_by: userId,
-            created_at: trx.fn.now(),
+            invoiceId: id,
+            userId,
+            unit: item.unit,
           });
 
-          await trx('inventory').where('product_id', productId).update({
-            last_restock_date: body.invoiceDate,
-            last_restock_quantity: item.quantity,
-            updated_at: trx.fn.now(),
-          });
+          await trx('inventory')
+            .where('product_id', productId)
+            .where('store_id', DEFAULT_STORE_ID)
+            .update({
+              last_restock_date: body.invoiceDate,
+              last_restock_quantity: item.quantity,
+              updated_at: trx.fn.now(),
+            });
 
           inventoryUpdated++;
 

@@ -16,8 +16,30 @@ function generateOrderNo(): string {
   return `SO-${stamp}-${now.getTime().toString().slice(-6)}${rand}`;
 }
 
+/**
+ * 格式化销售单明细。成本价（cost_price，等于产品进价快照）属财务数据，
+ * 仅 admin 可见；staff（收银员）响应中不包含 costPrice 字段。见 PRD §2.6 财务隔离。
+ */
+export function formatSaleItem(it: any, viewerRole: 'admin' | 'staff') {
+  const base: Record<string, any> = {
+    id: it.id,
+    productId: it.product_id,
+    nameEn: it.product_name_en,
+    nameZh: it.product_name_zh,
+    sku: it.product_sku,
+    quantity: Number(it.quantity),
+    unit: it.unit,
+    unitPrice: Number(it.unit_price),
+    lineTotal: Number(it.line_total),
+  };
+  if (viewerRole === 'admin') {
+    base.costPrice = it.cost_price != null ? Number(it.cost_price) : null;
+  }
+  return base;
+}
+
 export const salesService = {
-  async create(body: CreateSaleBody, userId: number) {
+  async create(body: CreateSaleBody, userId: number, viewerRole: 'admin' | 'staff' = 'admin') {
     if (!body.items || body.items.length === 0) {
       throw new AppError(400, 'VALIDATION_ERROR', '销售单至少需要一项商品');
     }
@@ -52,6 +74,12 @@ export const salesService = {
         }
 
         const unitPrice = Number(item.unitPrice);
+        if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+          throw new AppError(400, 'VALIDATION_ERROR', '单价无效');
+        }
+        if (!Number.isFinite(item.quantity) || item.quantity <= 0) {
+          throw new AppError(400, 'VALIDATION_ERROR', '数量无效');
+        }
         const lineTotal = Math.round(unitPrice * item.quantity * 100) / 100;
         total += lineTotal;
 
@@ -121,7 +149,7 @@ export const salesService = {
       await inventoryService.checkStockAlert(p.productId, p.after);
     }
 
-    return this.getById(result.orderId);
+    return this.getById(result.orderId, viewerRole);
   },
 
   async list(filters: any) {
@@ -142,7 +170,7 @@ export const salesService = {
     };
   },
 
-  async getById(id: number) {
+  async getById(id: number, viewerRole: 'admin' | 'staff' = 'admin') {
     const order = await SalesOrderModel.findById(id);
     if (!order) {
       throw new AppError(404, 'NOT_FOUND', '销售单不存在');
@@ -157,18 +185,7 @@ export const salesService = {
       soldBy: order.sold_by_name,
       voidedAt: order.voided_at,
       createdAt: order.created_at,
-      items: items.map((it: any) => ({
-        id: it.id,
-        productId: it.product_id,
-        nameEn: it.product_name_en,
-        nameZh: it.product_name_zh,
-        sku: it.product_sku,
-        quantity: Number(it.quantity),
-        unit: it.unit,
-        unitPrice: Number(it.unit_price),
-        costPrice: it.cost_price != null ? Number(it.cost_price) : null,
-        lineTotal: Number(it.line_total),
-      })),
+      items: items.map((it: any) => formatSaleItem(it, viewerRole)),
     };
   },
 

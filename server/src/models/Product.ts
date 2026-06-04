@@ -96,6 +96,16 @@ export const ProductModel = {
     return db(TABLE).where({ sku }).whereNull('deleted_at').first();
   },
 
+  async findByBarcode(barcode: string): Promise<any | undefined> {
+    return db(TABLE)
+      .select('products.*', 'categories.name as category_name', 'suppliers.name as supplier_name')
+      .leftJoin('categories', 'products.category_id', 'categories.id')
+      .leftJoin('suppliers', 'products.default_supplier_id', 'suppliers.id')
+      .where('products.barcode', barcode)
+      .whereNull('products.deleted_at')
+      .first();
+  },
+
   async findBySupplier(supplierId: number): Promise<ProductRow[]> {
     return db(TABLE)
       .where('default_supplier_id', supplierId)

@@ -8,6 +8,7 @@ import {
   getProducts,
   importProducts,
   updateProduct,
+  uploadProductImage,
 } from "../api/products";
 import { getSuppliers } from "../api/suppliers";
 import type { Category, Product, Supplier } from "../types";
@@ -29,6 +30,7 @@ import { useDebounce } from "../hooks/useDebounce";
 type ProductForm = {
   id?: number;
   sku: string;
+  barcode: string;
   nameEn: string;
   nameZh: string;
   categoryId: string;
@@ -44,6 +46,7 @@ type ProductForm = {
 
 const initialForm: ProductForm = {
   sku: "",
+  barcode: "",
   nameEn: "",
   nameZh: "",
   categoryId: "",
@@ -109,6 +112,11 @@ export default function ProductsPage() {
           <h2 className="mb-3 text-lg font-bold">{editing ? "编辑产品" : "新增产品"}</h2>
           <div className="grid gap-2 md:grid-cols-3">
             <Input placeholder="SKU" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} />
+            <Input
+              placeholder="条码 (Barcode)"
+              value={form.barcode}
+              onChange={(e) => setForm({ ...form, barcode: e.target.value })}
+            />
             <Input
               placeholder="英文名"
               value={form.nameEn}
@@ -185,6 +193,7 @@ export default function ProductsPage() {
                 }
                 const payload = {
                   sku: form.sku || null,
+                  barcode: form.barcode || null,
                   nameEn: form.nameEn,
                   nameZh: form.nameZh || null,
                   categoryId: form.categoryId ? Number(form.categoryId) : null,
@@ -224,6 +233,29 @@ export default function ProductsPage() {
             >
               重置
             </Button>
+            {editing && form.id ? (
+              <label className="inline-flex cursor-pointer items-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold">
+                <Upload size={15} className="mr-1" />
+                上传图片
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png"
+                  className="hidden"
+                  onChange={async (event) => {
+                    const file = event.target.files?.[0];
+                    if (!file || !form.id) return;
+                    try {
+                      await uploadProductImage(form.id, file);
+                      toast.success("产品图片已上传");
+                    } catch (err: unknown) {
+                      toast.error(err instanceof Error ? err.message : "图片上传失败");
+                    } finally {
+                      event.target.value = "";
+                    }
+                  }}
+                />
+              </label>
+            ) : null}
             <label className="inline-flex cursor-pointer items-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold">
               <Upload size={15} className="mr-1" />
               导入 Excel
@@ -325,6 +357,7 @@ export default function ProductsPage() {
                             setForm({
                               id: item.id,
                               sku: item.sku || "",
+                              barcode: item.barcode || "",
                               nameEn: item.name_en,
                               nameZh: item.name_zh || "",
                               categoryId: item.category_id ? String(item.category_id) : "",

@@ -35,7 +35,7 @@ if (env.nodeEnv === 'production') {
 }
 
 // 安全响应头（X-Frame-Options / X-Content-Type-Options / HSTS 等）。
-// crossOriginResourcePolicy 放宽到 cross-origin，使前端在不同源时仍能加载 /uploads 发票图片。
+// crossOriginResourcePolicy 放宽到 cross-origin，使前端在不同源时仍能加载受控的图片资源。
 // CSP 暂时关闭：前端为构建后的 SPA，启用默认 CSP 会拦截其内联脚本/样式，
 // 需专门配置 directives 后再开启。
 app.use(
@@ -49,7 +49,8 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-app.use('/uploads', express.static(path.resolve(__dirname, '../uploads')));
+// 注意：不再以静态目录公开挂载 /uploads。发票/产品文件均含财务信息，
+// 一律通过带鉴权与防目录穿越的路由提供（/invoices/:id/file、/products/:id/image）。
 app.use('/api', apiLimiter);
 
 app.get('/api/v1/health', (_req, res) => {

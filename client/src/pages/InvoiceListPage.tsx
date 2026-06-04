@@ -121,7 +121,7 @@ function guessSupplierByOcrName(ocrSupplierName: string, suppliers: Supplier[]):
   if (!raw) return null;
 
   const pieces = raw
-    .split(/[\/|]/)
+    .split(/[/|]/)
     .flatMap((part) => part.split(/[()]/))
     .map((part) => part.trim())
     .filter(Boolean);
@@ -159,12 +159,12 @@ export default function InvoiceListPage() {
 
   const debouncedKeyword = useDebounce(keyword, 400);
 
-  const load = async () => {
+  const load = async (kw: string = keyword) => {
     setLoading(true);
     setError(null);
     try {
       const statusFilter = isAdmin ? status || undefined : "pending";
-      const data = await getInvoices({ pageSize: 100, status: statusFilter, keyword: keyword || undefined });
+      const data = await getInvoices({ pageSize: 100, status: statusFilter, keyword: kw || undefined });
       setItems(data.items);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "加载失败");
@@ -174,7 +174,8 @@ export default function InvoiceListPage() {
   };
 
   useEffect(() => {
-    void load();
+    // 用防抖后的关键字触发搜索；手动「查询/回车」仍走 load() 使用即时关键字
+    void load(debouncedKeyword);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedKeyword, status]);
 

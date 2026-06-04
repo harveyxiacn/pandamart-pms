@@ -1,4 +1,6 @@
 import { Router, Response } from 'express';
+import path from 'path';
+import fs from 'fs';
 import { authenticate } from '../middleware/auth';
 import { adminOnly } from '../middleware/permission';
 import { uploadProduct, uploadExcel } from '../middleware/upload';
@@ -78,6 +80,17 @@ router.get('/export', authenticate, adminOnly, async (_req: AuthRequest, res: Re
   }
 });
 
+// GET /api/v1/products/by-barcode/:code —— 条码查产品（一线扫码/快速操作用，staff 脱敏进价）
+router.get('/by-barcode/:code', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const isStaff = req.user!.role === 'staff';
+    const product = await productService.getByBarcode(req.params.code as string);
+    sendSuccess(res, isStaff ? redactProductPrice(product as any) : product);
+  } catch (err: any) {
+    sendError(res, err.statusCode || 500, err.code || 'INTERNAL_ERROR', err.message);
+  }
+});
+
 // GET /api/v1/products/:id
 router.get('/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
@@ -89,6 +102,54 @@ router.get('/:id', authenticate, async (req: AuthRequest, res: Response) => {
     sendError(res, err.statusCode || 500, err.code || 'INTERNAL_ERROR', err.message);
   }
 });
+
+// GET /api/v1/products/:id/image —— 鉴权读取产品图片（不再公开静态目录）
+router.get('/:id/image', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = parseInt(req.params.id as string);
+    const product: any = await productService.getById(id);
+    if (!product.image_url) {
+      sendError(res, 404, 'NOT_FOUND', '该产品暂无图片');
+      return;
+    }
+    const basePath = path.resolve(__dirname, '../../uploads');
+    const filePath = path.normalize(path.resolve(__dirname, '../../', product.image_url));
+    const inside = filePath === basePath || filePath.startsWith(basePath + path.sep);
+    if (!inside || !fs.existsSync(filePath)) {
+      sendError(res, 404, 'NOT_FOUND', '文件不存在');
+      return;
+    }
+    res.sendFile(filePath);
+  } catch (err: any) {
+    sendError(res, err.statusCode || 500, err.code || 'INTERNAL_ERROR', err.message);
+  }
+});
+
+// POST /api/v1/products/:id/image —— 上传产品图片（仅管理员）
+router.post(
+  '/:id/image',
+  authenticate,
+  adminOnly,
+  uploadProduct.single('file'),
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string);
+      if (!req.file) {
+        sendError(res, 400, 'BAD_REQUEST', '请上传图片文件');
+        return;
+      }
+      // 存相对 server/ 根的路径（与发票一致，统一正斜杠），读取走鉴权路由
+      const relPath = path
+        .relative(path.resolve(__dirname, '../../'), req.file.path)
+        .split(path.sep)
+        .join('/');
+      const imageUrl = await productService.setImage(id, relPath, req.user!.sub);
+      sendSuccess(res, { imageUrl }, '产品图片已上传');
+    } catch (err: any) {
+      sendError(res, err.statusCode || 500, err.code || 'INTERNAL_ERROR', err.message);
+    }
+  }
+);
 
 // POST /api/v1/products
 router.post(

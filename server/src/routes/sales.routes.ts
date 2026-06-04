@@ -29,7 +29,7 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
 router.get('/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const id = parseInt(req.params.id as string);
-    const result = await salesService.getById(id);
+    const result = await salesService.getById(id, req.user!.role);
     sendSuccess(res, result);
   } catch (err: any) {
     sendError(res, err.statusCode || 500, err.code || 'INTERNAL_ERROR', err.message);
@@ -45,7 +45,8 @@ router.post(
     try {
       const result = await salesService.create(
         { items: req.body.items, note: req.body.note },
-        req.user!.sub
+        req.user!.sub,
+        req.user!.role
       );
       sendSuccess(res, result, '销售出库成功');
     } catch (err: any) {

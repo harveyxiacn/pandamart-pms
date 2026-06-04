@@ -127,6 +127,13 @@ export const authService = {
     ensureStrongPassword(newPassword);
     const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
     await UserModel.update(userId, { password_hash: passwordHash } as any);
+
+    await AuditLogModel.create({
+      user_id: userId,
+      action: 'change_password',
+      entity_type: 'user',
+      entity_id: userId,
+    });
   },
 
   async getProfile(userId: number): Promise<any> {

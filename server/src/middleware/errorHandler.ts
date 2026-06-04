@@ -63,6 +63,17 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
     return;
   }
 
+  // MySQL 唯一约束冲突（如软删除后复用 SKU/供应商编号、并发重复插入）→ 409，
+  // 避免把原始 ER_DUP_ENTRY 文本作为 500 泄露给客户端。
+  const dbErr = err as { code?: string; errno?: number };
+  if (dbErr.code === 'ER_DUP_ENTRY' || dbErr.errno === 1062) {
+    res.status(409).json({
+      success: false,
+      error: { code: 'CONFLICT', message: '记录已存在（唯一约束冲突）' },
+    });
+    return;
+  }
+
   logger.error('未处理的错误:', err);
 
   res.status(500).json({

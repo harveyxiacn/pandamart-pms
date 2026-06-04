@@ -47,6 +47,9 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem(STORAGE_KEYS.token);
       localStorage.removeItem(STORAGE_KEYS.user);
+      // 同时清除 zustand persist 的鉴权快照，避免下次挂载从 'pandamart-auth'
+      // 重新水合出失效的 token/user，导致"看似已登录却每次 401"的循环。
+      localStorage.removeItem("pandamart-auth");
       if (!window.location.pathname.includes("/login")) {
         window.location.href = "/login";
       }

@@ -34,3 +34,13 @@ export async function importProducts(file: File): Promise<{ created: number; ski
   formData.append("file", file);
   return unwrap(apiClient.post("/products/import", formData));
 }
+
+export function getProductByBarcode(code: string): Promise<Product> {
+  return unwrap(apiClient.get(`/products/by-barcode/${encodeURIComponent(code)}`));
+}
+
+export async function uploadProductImage(id: number, file: File): Promise<{ imageUrl: string }> {
+  const formData = new FormData();
+  formData.append("file", file);
+  return unwrap(apiClient.post(`/products/${id}/image`, formData));
+}

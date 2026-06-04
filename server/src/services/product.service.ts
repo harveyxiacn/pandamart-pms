@@ -23,6 +23,34 @@ export const productService = {
     return product;
   },
 
+  async getByBarcode(barcode: string) {
+    const code = (barcode || '').trim();
+    if (!code) {
+      throw new AppError(400, 'BAD_REQUEST', '条码不能为空');
+    }
+    const product = await ProductModel.findByBarcode(code);
+    if (!product) {
+      throw new AppError(404, 'NOT_FOUND', '未找到该条码对应的产品');
+    }
+    return product;
+  },
+
+  async setImage(id: number, imageUrl: string, userId: number) {
+    const product = await ProductModel.findById(id);
+    if (!product) {
+      throw new AppError(404, 'NOT_FOUND', '产品不存在');
+    }
+    await ProductModel.update(id, { image_url: imageUrl } as any);
+    await AuditLogModel.create({
+      user_id: userId,
+      action: 'update_product_image',
+      entity_type: 'product',
+      entity_id: id,
+      details: JSON.stringify({ imageUrl }),
+    });
+    return imageUrl;
+  },
+
   async create(data: any, userId: number) {
     if (data.sku) {
       const existing = await ProductModel.findBySku(data.sku);

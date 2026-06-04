@@ -25,8 +25,38 @@ export interface AdjustStockOptions {
 }
 
 /**
+ * 纯函数：根据当前库存 before 与增量 delta 计算结果库存与应记录的数量。
+ * 抽出以便单元测试三条分支（preventNegative 抛错 / clampToZero 扣到 0 / 正常增减），
+ * 不依赖数据库。loggedQty 为记入 inventory_logs 的数量幅度（始终非负）。
+ */
+export function resolveStockChange(
+  before: number,
+  delta: number,
+  opts: { preventNegative?: boolean; clampToZero?: boolean; label?: string } = {}
+): { after: number; loggedQty: number } {
+  let after = before + delta;
+  let loggedQty = Math.abs(delta);
+
+  if (after < 0) {
+    if (opts.preventNegative) {
+      throw new AppError(
+        400,
+        'INSUFFICIENT_STOCK',
+        `${opts.label || '商品'} 库存不足（现有 ${before}，需出 ${Math.abs(delta)}）`
+      );
+    }
+    if (opts.clampToZero) {
+      loggedQty = before; // 实际只能扣这么多
+      after = 0;
+    }
+  }
+
+  return { after, loggedQty };
+}
+
+/**
  * 事务内统一的库存读-改-写 + 写 inventory_logs。
- * 用 forUpdate() 行锁消除并发超卖/少扣（销售、批次入库、报损、作废回补共用）。
+ * 用 forUpdate() 行锁消除并发超卖/少扣（销售、批次入库、报损、作废回补、发票入库/回滚共用）。
  */
 export async function adjustStockTx(
   trx: Knex.Transaction,
@@ -39,22 +69,11 @@ export async function adjustStockTx(
     .first();
 
   const before = Number(inv?.quantity || 0);
-  let after = before + opts.delta;
-  let loggedQty = Math.abs(opts.delta);
-
-  if (after < 0) {
-    if (opts.preventNegative) {
-      throw new AppError(
-        400,
-        'INSUFFICIENT_STOCK',
-        `${opts.label || '商品'} 库存不足（现有 ${before}，需出 ${Math.abs(opts.delta)}）`
-      );
-    }
-    if (opts.clampToZero) {
-      loggedQty = before; // 实际只能扣这么多
-      after = 0;
-    }
-  }
+  const { after, loggedQty } = resolveStockChange(before, opts.delta, {
+    preventNegative: opts.preventNegative,
+    clampToZero: opts.clampToZero,
+    label: opts.label,
+  });
 
   if (inv) {
     await trx('inventory')

@@ -179,4 +179,35 @@ router.get('/search', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// GET /api/v1/analytics/sales-trend
+router.get('/sales-trend', async (req: AuthRequest, res: Response) => {
+  try {
+    const data = await cached(q(req, 'sales-trend'), TTL, () =>
+      analyticsService.getSalesTrend({
+        period: req.query.period as string,
+        dateFrom: req.query.dateFrom as string,
+        dateTo: req.query.dateTo as string,
+      })
+    );
+    sendSuccess(res, data);
+  } catch (err: any) {
+    sendRouteError(res, err, '获取销售趋势失败');
+  }
+});
+
+// GET /api/v1/analytics/profit-by-category
+router.get('/profit-by-category', async (req: AuthRequest, res: Response) => {
+  try {
+    const data = await cached(q(req, 'profit-by-category'), TTL, () =>
+      analyticsService.getProfitByCategory({
+        dateFrom: req.query.dateFrom as string,
+        dateTo: req.query.dateTo as string,
+      })
+    );
+    sendSuccess(res, data);
+  } catch (err: any) {
+    sendRouteError(res, err, '获取分类毛利失败');
+  }
+});
+
 export default router;

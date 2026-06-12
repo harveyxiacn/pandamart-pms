@@ -786,4 +786,63 @@ export const analyticsService = {
       })),
     };
   },
+
+  // 销售趋势
+  async getSalesTrend(filters: { period?: string; dateFrom?: string; dateTo?: string }) {
+    const period = filters.period || 'week';
+    let groupExpr: string;
+    switch (period) {
+      case 'day':
+        groupExpr = 'DATE(sales_orders.created_at)';
+        break;
+      case 'month':
+        groupExpr = "DATE_FORMAT(sales_orders.created_at, '%Y-%m-01')";
+        break;
+      default: // week
+        groupExpr = 'DATE(DATE_SUB(sales_orders.created_at, INTERVAL WEEKDAY(sales_orders.created_at) DAY))';
+        break;
+    }
+    const query = db('sales_items')
+      .join('sales_orders', 'sales_items.sales_order_id', 'sales_orders.id')
+      .where('sales_orders.status', 'completed')
+      .select(
+        db.raw(`${groupExpr} as date`),
+        db.raw('COALESCE(SUM(sales_items.line_total), 0) as amount'),
+        db.raw('COUNT(DISTINCT sales_orders.id) as orderCount')
+      )
+      .groupByRaw(groupExpr)
+      .orderByRaw(`${groupExpr} ASC`);
+    if (filters.dateFrom) query.where('sales_orders.created_at', '>=', filters.dateFrom);
+    if (filters.dateTo) query.where('sales_orders.created_at', '<=', `${filters.dateTo} 23:59:59`);
+    const data = await query;
+    return data.map((row: any) => ({
+      date: row.date,
+      amount: Number(row.amount),
+      orderCount: Number(row.orderCount),
+    }));
+  },
+  // 毛利按分类汇总
+  async getProfitByCategory(filters: { dateFrom?: string; dateTo?: string }) {
+    const base = db('sales_items')
+      .join('sales_orders', 'sales_items.sales_order_id', 'sales_orders.id')
+      .join('products', 'sales_items.product_id', 'products.id')
+      .leftJoin('categories', 'products.category_id', 'categories.id')
+      .where('sales_orders.status', 'completed');
+    if (filters.dateFrom) base.where('sales_orders.created_at', '>=', filters.dateFrom);
+    if (filters.dateTo) base.where('sales_orders.created_at', '<=', `${filters.dateTo} 23:59:59`);
+    const rows = await base
+      .select(
+        db.raw("COALESCE(categories.name, '未分类') as category"),
+        db.raw('COALESCE(SUM(sales_items.line_total), 0) as revenue'),
+        db.raw('COALESCE(SUM(COALESCE(sales_items.cost_price, 0) * sales_items.quantity), 0) as cost')
+      )
+      .groupBy('categories.id')
+      .orderByRaw('revenue DESC');
+    return rows.map((r: any) => ({
+      category: r.category,
+      revenue: Math.round(Number(r.revenue) * 100) / 100,
+      cost: Math.round(Number(r.cost) * 100) / 100,
+      profit: Math.round((Number(r.revenue) - Number(r.cost)) * 100) / 100,
+    }));
+  },
 };

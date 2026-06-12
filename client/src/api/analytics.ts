@@ -62,6 +62,23 @@ export function getAlerts(): Promise<DashboardAlert[]> {
   return unwrap(apiClient.get("/analytics/alerts"));
 }
 
+export function getSalesTrend(params?: Record<string, string | number | boolean | undefined>) {
+  return unwrap<Array<{ date: string; amount: number; orderCount: number }>>(
+    apiClient.get("/analytics/sales-trend", { params })
+  );
+}
+
+export interface ProfitByCategory {
+  category: string;
+  revenue: number;
+  cost: number;
+  profit: number;
+}
+
+export function getProfitByCategory(params?: Record<string, string | number | boolean | undefined>) {
+  return unwrap<ProfitByCategory[]>(apiClient.get("/analytics/profit-by-category", { params }));
+}
+
 export function globalSearch(query: string): Promise<GlobalSearchResult> {
   return unwrap(apiClient.get("/analytics/search", { params: { q: query } }));
 }

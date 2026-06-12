@@ -505,7 +505,7 @@ export default function InvoiceListPage() {
           />
         ) : null}
         {!loading && !error && items.length === 0 ? (
-          <EmptyState icon={FileText} title="暂无发票" description="没有符合条件的发票记录" />
+          <EmptyState icon={FileText} title="暂无发票" description="没有符合条件的发票记录。可尝试清除筛选条件，或前往「发票识别」上传第一张发票。" />
         ) : null}
         {!loading && !error && items.length > 0 ? (
           <Table>

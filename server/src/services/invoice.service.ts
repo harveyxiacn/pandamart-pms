@@ -2,10 +2,6 @@ import fs from 'fs';
 import path from 'path';
 import { InvoiceModel } from '../models/Invoice';
 import { InvoiceItemModel } from '../models/InvoiceItem';
-import { ProductModel } from '../models/Product';
-import { InventoryModel } from '../models/Inventory';
-import { InventoryLogModel } from '../models/InventoryLog';
-import { SupplierModel } from '../models/Supplier';
 import { SupplierTemplateModel } from '../models/SupplierTemplate';
 import { AuditLogModel } from '../models/AuditLog';
 import { NotificationModel } from '../models/Notification';
@@ -16,6 +12,7 @@ import { ConfirmInvoiceBody, UpdateInvoiceBody } from '../types';
 import db from '../config/database';
 import { adjustStockTx } from './inventory.service';
 import { DEFAULT_STORE_ID } from '../config/store';
+import { invalidateAnalyticsCache } from '../utils/cache';
 
 function parseOcrRaw(raw: any): any {
   if (!raw) return null;
@@ -32,11 +29,7 @@ function parseOcrRaw(raw: any): any {
 export const invoiceService = {
   async getAll(filters: any) {
     const { items, total } = await InvoiceModel.findAll(filters);
-    const pagination = buildPagination(
-      filters.page || 1,
-      filters.pageSize || 20,
-      total
-    );
+    const pagination = buildPagination(filters.page || 1, filters.pageSize || 20, total);
 
     // 批量获取 item counts，消除 N+1 查询
     const invoiceIds = items.map((inv: any) => inv.id);
@@ -267,15 +260,13 @@ export const invoiceService = {
         ? `${invoice.notes}\n[${rollbackStamp}] ${rollbackReason}`
         : `[${rollbackStamp}] ${rollbackReason}`;
 
-      await trx('invoices')
-        .where({ id })
-        .update({
-          status: 'pending',
-          confirmed_by: null,
-          confirmed_at: null,
-          notes: nextNotes,
-          updated_at: trx.fn.now(),
-        });
+      await trx('invoices').where({ id }).update({
+        status: 'pending',
+        confirmed_by: null,
+        confirmed_at: null,
+        notes: nextNotes,
+        updated_at: trx.fn.now(),
+      });
 
       await trx('audit_logs').insert({
         user_id: userId,
@@ -291,10 +282,17 @@ export const invoiceService = {
       });
     });
 
+    invalidateAnalyticsCache();
+
     return this.getById(id);
   },
 
-  async confirm(id: number, body: ConfirmInvoiceBody, userId: number, viewerRole: 'admin' | 'staff' = 'admin') {
+  async confirm(
+    id: number,
+    body: ConfirmInvoiceBody,
+    userId: number,
+    viewerRole: 'admin' | 'staff' = 'admin'
+  ) {
     const invoice = await InvoiceModel.findById(id);
     if (!invoice) {
       throw new AppError(404, 'NOT_FOUND', '发票不存在');
@@ -325,7 +323,7 @@ export const invoiceService = {
     let inventoryUpdated = 0;
     const priceAlerts: any[] = [];
 
-    const priceThreshold = Number(await SettingModel.get('price_alert_threshold') || '0.1');
+    const priceThreshold = Number((await SettingModel.get('price_alert_threshold')) || '0.1');
 
     await db.transaction(async (trx) => {
       // 清除旧的 invoice_items
@@ -348,9 +346,16 @@ export const invoiceService = {
 
           const existingInv = await trx('inventory').where('product_id', productId).first();
           if (existingInv) {
-            await trx('inventory').where('product_id', productId).update({ unit: item.unit, updated_at: trx.fn.now() });
+            await trx('inventory')
+              .where('product_id', productId)
+              .update({ unit: item.unit, updated_at: trx.fn.now() });
           } else {
-            await trx('inventory').insert({ product_id: productId, store_id: DEFAULT_STORE_ID, quantity: 0, unit: item.unit });
+            await trx('inventory').insert({
+              product_id: productId,
+              store_id: DEFAULT_STORE_ID,
+              quantity: 0,
+              unit: item.unit,
+            });
           }
 
           newProductsCreated++;
@@ -423,27 +428,31 @@ export const invoiceService = {
           }
 
           // 更新产品默认价格
-          await trx('products').where('id', productId).whereNull('deleted_at')
+          await trx('products')
+            .where('id', productId)
+            .whereNull('deleted_at')
             .update({ default_price: item.unitPrice, updated_at: trx.fn.now() });
         }
       }
 
       // 更新发票状态
-      await trx('invoices').where({ id }).update({
-        supplier_id: body.supplierId,
-        invoice_number: body.invoiceNumber,
-        invoice_date: new Date(body.invoiceDate),
-        customer_code: body.customerCode,
-        subtotal: body.subtotal,
-        has_tax: !!body.hasTax,
-        tax_amount: body.taxAmount,
-        grand_total: body.grandTotal,
-        status: 'confirmed',
-        confirmed_by: userId,
-        confirmed_at: new Date(),
-        notes: body.notes,
-        updated_at: trx.fn.now(),
-      });
+      await trx('invoices')
+        .where({ id })
+        .update({
+          supplier_id: body.supplierId,
+          invoice_number: body.invoiceNumber,
+          invoice_date: new Date(body.invoiceDate),
+          customer_code: body.customerCode,
+          subtotal: body.subtotal,
+          has_tax: !!body.hasTax,
+          tax_amount: body.taxAmount,
+          grand_total: body.grandTotal,
+          status: 'confirmed',
+          confirmed_by: userId,
+          confirmed_at: new Date(),
+          notes: body.notes,
+          updated_at: trx.fn.now(),
+        });
 
       await trx('audit_logs').insert({
         user_id: userId,
@@ -460,6 +469,8 @@ export const invoiceService = {
       });
     });
 
+    invalidateAnalyticsCache();
+
     // 事务外：发送通知（非关键操作）
     for (const alert of priceAlerts) {
       try {
@@ -469,14 +480,18 @@ export const invoiceService = {
           message: `${alert.productName} 价格从 $${alert.previousPrice} 变为 $${alert.currentPrice}（${alert.changePercent > 0 ? '+' : ''}${alert.changePercent}%）`,
           link: `/products/${alert.productId}/price-history`,
         });
-      } catch { /* ignore notification errors */ }
+      } catch {
+        /* ignore notification errors */
+      }
     }
 
     // 更新供应商模板
     if (body.supplierId && invoice.ocr_raw_result) {
       try {
         await SupplierTemplateModel.incrementSuccess(body.supplierId);
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     }
 
     return {

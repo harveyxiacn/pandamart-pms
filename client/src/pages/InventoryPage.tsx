@@ -102,7 +102,7 @@ export default function InventoryPage() {
           />
         ) : null}
         {!loading && !error && items.length === 0 ? (
-          <EmptyState icon={Boxes} title="暂无库存" description="没有符合条件的库存记录" />
+          <EmptyState icon={Boxes} title="暂无库存" description="没有符合条件的库存记录。可尝试清除筛选条件，或确认入库发票后库存会自动更新。" />
         ) : null}
 
         {!loading && !error && items.length > 0 ? (

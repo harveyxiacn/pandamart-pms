@@ -52,7 +52,7 @@ export default function NotificationsPage() {
         {!loading ? (
           <div className="space-y-2">
             {items.length === 0 ? (
-              <p className="text-sm text-slate-500">暂无通知</p>
+              <><p className="text-sm text-slate-500">暂无通知</p><p className="text-xs text-slate-400 mt-1">系统会在库存不足、发票待处理等情况下自动发送通知。</p></>
             ) : (
               items.map((item) => (
                 <div key={item.id} className="rounded-lg border border-slate-200 bg-white p-3">

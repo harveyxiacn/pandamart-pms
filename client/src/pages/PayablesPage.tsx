@@ -109,7 +109,7 @@ export default function PayablesPage() {
             </Button>
           </div>
         ) : rows.length === 0 ? (
-          <EmptyState icon={Wallet} title="暂无应付账款" description="确认采购发票后会在此累计应付。" />
+          <EmptyState icon={Wallet} title="暂无应付账款" description="确认采购发票后会在此累计应付。前往「发票列表」确认待处理的发票即可开始记录。" />
         ) : (
           <Table>
             <thead>

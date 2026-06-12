@@ -17,7 +17,10 @@ export function deleteProduct(id: number): Promise<null> {
   return unwrap(apiClient.delete(`/products/${id}`));
 }
 
-export function getProductPriceHistory(id: number): Promise<
+export function getProductPriceHistory(
+  id: number,
+  params?: { months?: number; groupBy?: "invoice" | "month"; supplierId?: number; limit?: number }
+): Promise<
   Array<{
     date: string;
     unitPrice: number;
@@ -26,10 +29,12 @@ export function getProductPriceHistory(id: number): Promise<
     invoiceNumber: string | null;
   }>
 > {
-  return unwrap(apiClient.get(`/products/${id}/price-history`));
+  return unwrap(apiClient.get(`/products/${id}/price-history`, { params }));
 }
 
-export async function importProducts(file: File): Promise<{ created: number; skipped: number; total: number }> {
+export async function importProducts(
+  file: File
+): Promise<{ created: number; skipped: number; total: number }> {
   const formData = new FormData();
   formData.append("file", file);
   return unwrap(apiClient.post("/products/import", formData));

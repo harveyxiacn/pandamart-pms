@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { buildPagination, parsePagination, getClientIp, camelToSnake, snakeToCamel } from './helpers';
+import {
+  buildPagination,
+  parsePagination,
+  parseBoundedInt,
+  getClientIp,
+  camelToSnake,
+  snakeToCamel,
+} from './helpers';
 
 describe('helpers', () => {
   it('buildPagination 计算总页数', () => {
@@ -8,9 +15,21 @@ describe('helpers', () => {
   });
 
   it('parsePagination 钳制范围并算 offset', () => {
-    expect(parsePagination({ page: '2', pageSize: '10' })).toEqual({ page: 2, pageSize: 10, offset: 10 });
+    expect(parsePagination({ page: '2', pageSize: '10' })).toEqual({
+      page: 2,
+      pageSize: 10,
+      offset: 10,
+    });
     expect(parsePagination({ pageSize: '9999' }).pageSize).toBe(100); // 上限 100
     expect(parsePagination({ page: '0' }).page).toBe(1); // 下限 1
+  });
+
+  it('parseBoundedInt 过滤非法数字并钳制上下限', () => {
+    expect(parseBoundedInt('12', { defaultValue: 5, min: 1, max: 20 })).toBe(12);
+    expect(parseBoundedInt('-1', { defaultValue: 5, min: 1, max: 20 })).toBe(1);
+    expect(parseBoundedInt('999', { defaultValue: 5, min: 1, max: 20 })).toBe(20);
+    expect(parseBoundedInt('abc', { defaultValue: 5, min: 1, max: 20 })).toBe(5);
+    expect(parseBoundedInt(undefined, { defaultValue: 5, min: 1, max: 20 })).toBe(5);
   });
 
   it('getClientIp 优先取 X-Forwarded-For 首个', () => {

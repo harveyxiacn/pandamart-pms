@@ -70,6 +70,58 @@ export interface DashboardData {
     safeStock: number;
     unit: string;
   }>;
+  comparisons: {
+    yesterday: { totalAmount: number };
+    prevWeek: { totalAmount: number };
+    prevMonth: { totalAmount: number };
+  };
+  expiringBatches: Array<{
+    productId: number;
+    nameEn: string;
+    nameZh: string | null;
+    batchNo: string;
+    expiryDate: string;
+    quantity: number;
+    expired: boolean;
+  }>;
+}
+
+export type AlertType = "stockout_risk" | "price_spike" | "pending_invoice" | "expiring_batch" | "slow_mover" | "cost_increase";
+export type AlertSeverity = "high" | "medium" | "low";
+
+export interface DashboardAlert {
+  id: string;
+  type: AlertType;
+  severity: AlertSeverity;
+  title: string;
+  message: string;
+  link?: string;
+  count?: number;
+}
+
+export interface GlobalSearchResult {
+  products: Array<{
+    id: number;
+    nameEn: string;
+    nameZh: string | null;
+    sku: string | null;
+    barcode: string | null;
+  }>;
+  invoices: Array<{
+    id: number;
+    invoiceNumber: string;
+    grandTotal: number;
+    status: string;
+    invoiceDate: string;
+    supplierName: string | null;
+  }>;
+  suppliers: Array<{
+    id: number;
+    name: string;
+    code: string | null;
+    contactName: string | null;
+    phone: string | null;
+  }>;
 }
 
 export interface Category {

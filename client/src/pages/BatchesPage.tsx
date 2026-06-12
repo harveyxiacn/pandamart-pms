@@ -216,7 +216,7 @@ export default function BatchesPage() {
             </Button>
           </div>
         ) : batches.length === 0 ? (
-          <EmptyState icon={CalendarClock} title="暂无在库批次" description="收货时录入批次与保质期即可在此跟踪临期。" />
+          <EmptyState icon={CalendarClock} title="暂无在库批次" description="收货时录入批次与保质期即可在此跟踪临期。确认入库发票时填写批次信息，系统会自动提醒临期商品。" />
         ) : (
           <Table>
             <thead>

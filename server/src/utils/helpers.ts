@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { ApiResponse, PaginationQuery, PaginationInfo } from '../types';
+import { ApiResponse, PaginationInfo } from '../types';
 
 export function sendSuccess<T>(res: Response, data: T, message?: string, statusCode = 200): void {
   const response: ApiResponse<T> = { success: true, data };
@@ -26,6 +26,17 @@ export function parsePagination(query: any): { page: number; pageSize: number; o
   const pageSize = Math.min(100, Math.max(1, parseInt(query.pageSize || '20', 10)));
   const offset = (page - 1) * pageSize;
   return { page, pageSize, offset };
+}
+
+export function parseBoundedInt(
+  value: unknown,
+  options: { defaultValue: number; min: number; max: number }
+): number {
+  const parsed = typeof value === 'number' ? value : parseInt(String(value ?? ''), 10);
+  if (!Number.isFinite(parsed) || Number.isNaN(parsed)) {
+    return options.defaultValue;
+  }
+  return Math.min(options.max, Math.max(options.min, Math.trunc(parsed)));
 }
 
 export function buildPagination(page: number, pageSize: number, total: number): PaginationInfo {

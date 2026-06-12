@@ -6,6 +6,7 @@ import { buildPagination } from '../utils/helpers';
 import { adjustStockTx } from './inventory.service';
 import { DEFAULT_STORE_ID } from '../config/store';
 import { CreateBatchBody } from '../types';
+import { invalidateAnalyticsCache } from '../utils/cache';
 
 function formatBatch(b: any) {
   return {
@@ -33,14 +34,19 @@ export const batchService = {
     const storeId = DEFAULT_STORE_ID;
 
     const batchId = await db.transaction(async (trx) => {
-      const product = await trx('products').where('id', body.productId).whereNull('deleted_at').first();
+      const product = await trx('products')
+        .where('id', body.productId)
+        .whereNull('deleted_at')
+        .first();
       if (!product) throw new AppError(404, 'NOT_FOUND', '商品不存在');
 
       // 未显式给保质期但商品配置了货架期时，按收货日 + 货架期推算
       let expiry = body.expiryDate || null;
       if (!expiry && product.shelf_life_days) {
         const base = body.receivedDate ? new Date(body.receivedDate) : new Date();
-        expiry = new Date(base.getTime() + product.shelf_life_days * 86400000).toISOString().slice(0, 10);
+        expiry = new Date(base.getTime() + product.shelf_life_days * 86400000)
+          .toISOString()
+          .slice(0, 10);
       }
 
       const [id] = await trx('inventory_batches').insert({
@@ -73,28 +79,44 @@ export const batchService = {
       action: 'create_batch',
       entity_type: 'inventory_batch',
       entity_id: batchId,
-      details: JSON.stringify({ productId: body.productId, quantity: body.quantity, expiry: body.expiryDate }),
+      details: JSON.stringify({
+        productId: body.productId,
+        quantity: body.quantity,
+        expiry: body.expiryDate,
+      }),
     });
+
+    invalidateAnalyticsCache();
 
     return { id: batchId };
   },
 
   // 过期/损耗报损：减少批次数量并同步减库存
-  async dispose(id: number, quantity: number | undefined, reason: string | undefined, userId: number) {
+  async dispose(
+    id: number,
+    quantity: number | undefined,
+    reason: string | undefined,
+    userId: number
+  ) {
     const storeId = DEFAULT_STORE_ID;
     await db.transaction(async (trx) => {
       const batch = await trx('inventory_batches').where('id', id).first();
       if (!batch) throw new AppError(404, 'NOT_FOUND', '批次不存在');
       if (batch.status === 'disposed') throw new AppError(400, 'ALREADY_DISPOSED', '批次已报损');
 
-      const disposeQty = quantity && quantity > 0 ? Math.min(quantity, Number(batch.quantity)) : Number(batch.quantity);
+      const disposeQty =
+        quantity && quantity > 0
+          ? Math.min(quantity, Number(batch.quantity))
+          : Number(batch.quantity);
       const remaining = Number(batch.quantity) - disposeQty;
 
-      await trx('inventory_batches').where('id', id).update({
-        quantity: remaining,
-        status: remaining <= 0 ? 'disposed' : 'active',
-        updated_at: trx.fn.now(),
-      });
+      await trx('inventory_batches')
+        .where('id', id)
+        .update({
+          quantity: remaining,
+          status: remaining <= 0 ? 'disposed' : 'active',
+          updated_at: trx.fn.now(),
+        });
 
       // 带行锁扣减库存；库存不足时按实际可扣量记录，不为负
       await adjustStockTx(trx, {
@@ -115,6 +137,8 @@ export const batchService = {
       entity_id: id,
       details: JSON.stringify({ quantity, reason }),
     });
+
+    invalidateAnalyticsCache();
 
     return { id };
   },
@@ -145,8 +169,12 @@ export const batchService = {
       )
       .orderBy('inventory_batches.expiry_date', 'asc');
 
-    const expired = rows.filter((r: any) => r.expiry_date && r.expiry_date.toISOString().slice(0, 10) < today);
-    const expiring = rows.filter((r: any) => !(r.expiry_date && r.expiry_date.toISOString().slice(0, 10) < today));
+    const expired = rows.filter(
+      (r: any) => r.expiry_date && r.expiry_date.toISOString().slice(0, 10) < today
+    );
+    const expiring = rows.filter(
+      (r: any) => !(r.expiry_date && r.expiry_date.toISOString().slice(0, 10) < today)
+    );
 
     return {
       days,

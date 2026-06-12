@@ -172,7 +172,7 @@ export default function SuppliersPage() {
           />
         ) : null}
         {!loading && !error && items.length === 0 ? (
-          <EmptyState icon={Building2} title="暂无供应商" description="没有符合条件的供应商" />
+          <EmptyState icon={Building2} title="暂无供应商" description="没有符合条件的供应商。可尝试清除搜索条件，或点击「新增供应商」开始记录。" />
         ) : null}
 
         {!loading && !error && items.length > 0 ? (

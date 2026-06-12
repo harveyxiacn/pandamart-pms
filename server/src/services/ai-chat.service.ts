@@ -6,17 +6,34 @@ import { v4 as uuidv4 } from 'uuid';
 
 // 内存中缓存对话上下文（生产环境可改用 Redis）。仅保存干净的文本轮次（system + user/assistant），
 // 工具调用的中间消息只在单次请求内编排，不入库，避免跨轮 tool_call/tool 配对问题。
-const conversations = new Map<string, { messages: any[]; createdAt: number }>();
+const conversations = new Map<string, { messages: any[]; lastAccessedAt: number }>();
+const CONVERSATION_TTL_MS = 30 * 60 * 1000;
+const MAX_CONVERSATIONS = 500; // 低内存 VPS 上限制内存占用
 
+// 按"最后活跃时间"淘汰，避免把仍在进行的长对话在创建 30 分钟后误删
 const conversationCleanupTimer = setInterval(() => {
   const now = Date.now();
   for (const [id, conv] of conversations) {
-    if (now - conv.createdAt > 30 * 60 * 1000) {
+    if (now - conv.lastAccessedAt > CONVERSATION_TTL_MS) {
       conversations.delete(id);
     }
   }
 }, 5 * 60 * 1000);
 conversationCleanupTimer.unref();
+
+// 容量兜底：新会话写入前若超上限，淘汰最久未活跃的一条
+function evictIfNeeded(incomingId: string): void {
+  if (conversations.size < MAX_CONVERSATIONS || conversations.has(incomingId)) return;
+  let oldestId: string | null = null;
+  let oldest = Infinity;
+  for (const [id, conv] of conversations) {
+    if (conv.lastAccessedAt < oldest) {
+      oldest = conv.lastAccessedAt;
+      oldestId = id;
+    }
+  }
+  if (oldestId) conversations.delete(oldestId);
+}
 
 const SYSTEM_PROMPT = `你是熊猫超市的智能经营助手，帮助店主分析库存、采购、销售与保质期数据。
 你可以调用提供的工具实时查询数据库，再基于真实结果作答——不要编造数据。
@@ -275,7 +292,8 @@ export const aiChatService = {
     if (history.length > 21) {
       history = [history[0], ...history.slice(-20)];
     }
-    conversations.set(convId, { messages: history, createdAt: Date.now() });
+    evictIfNeeded(convId);
+    conversations.set(convId, { messages: history, lastAccessedAt: Date.now() });
 
     return {
       conversationId: convId,

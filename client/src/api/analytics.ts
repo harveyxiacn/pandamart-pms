@@ -1,4 +1,4 @@
-import type { DashboardData } from "../types";
+import type { DashboardAlert, DashboardData, GlobalSearchResult } from "../types";
 import { apiClient, unwrap } from "./client";
 
 export function getDashboard(): Promise<DashboardData> {
@@ -57,4 +57,11 @@ export interface SlowMovers {
 
 export function getSlowMovers(params?: Record<string, string | number | boolean | undefined>) {
   return unwrap<SlowMovers>(apiClient.get("/analytics/slow-movers", { params }));
+}
+export function getAlerts(): Promise<DashboardAlert[]> {
+  return unwrap(apiClient.get("/analytics/alerts"));
+}
+
+export function globalSearch(query: string): Promise<GlobalSearchResult> {
+  return unwrap(apiClient.get("/analytics/search", { params: { q: query } }));
 }

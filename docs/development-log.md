@@ -3,6 +3,7 @@
 ## 2026-03-05
 
 ### 1. 后端集成测试能力完善
+
 - 新增数据库真实链路 E2E 脚本：`server/src/scripts/e2e-db-test.ts`
 - 新增脚本命令：`npm run test:e2e`
 - 支持配置项：
@@ -18,6 +19,7 @@
 - 修复测试进程无法退出问题：`ai-chat.service.ts` 的定时器增加 `unref()`
 
 ### 2. 前端项目实现（按文档落地）
+
 - 新建完整前端目录：`client/`
 - 技术栈落地：
   - React 18 + TypeScript + Vite
@@ -50,6 +52,7 @@
   - 路由级懒加载（按页面拆包）
 
 ### 3. 前端测试补齐
+
 - 新增 Vitest 测试体系：
   - `client/vitest.config.ts`
   - `client/src/test/setup.ts`
@@ -62,6 +65,7 @@
   - `npm run test:watch`
 
 ### 4. 文档更新
+
 - `README.md`
   - 增加前端启动/构建说明
   - 增加前端测试命令说明
@@ -72,6 +76,7 @@
   - 增加上线后 `npm run test:e2e` 检查项
 
 ### 5. 测试记录
+
 - 前端：
   - `cd client && npm run test` ✅ 通过
   - `cd client && npm run build` ✅ 通过
@@ -83,6 +88,7 @@
   - 测试完成后容器已清理
 
 ### 6. 问题修复与联调（本轮）
+
 - 修复侧边栏路由高亮冲突：
   - `发票识别(/invoices/scan)` 与 `发票列表(/invoices)` 不再同时高亮
   - 方案：`NavLink` 增加 `end` 精确匹配
@@ -104,6 +110,7 @@
   - 允许 `application/octet-stream`（在扩展名合法时）通过发票文件上传过滤器
 
 ### 7. 全量测试与对接验证（本轮）
+
 - 前端：
   - `cd client && npm run test` ✅ 通过（4 个测试文件，7 个用例）
   - `cd client && npm run build` ✅ 通过
@@ -118,6 +125,7 @@
   - AI 功能：`/ai/chat`、`/ai/insights` ✅
 
 ### 8. 发票识别字段增强与对照统计（本轮新增）
+
 - 后端 OCR 能力增强：
   - 识别并返回供应商地址与联系方式
   - 识别并返回产品 `Code`、`Number/Barcode`、`UN`、`Tax(E/H)`
@@ -148,6 +156,7 @@
     - 合计：`Sales=2207.00`、`Tax=40.30`、`Total=2247.30`
 
 ### 9. 发票管理功能与交互优化（本轮新增）
+
 - 新增发票管理 API：
   - `PUT /api/v1/invoices/:id`：修改待处理发票（头信息 + 明细）
   - `DELETE /api/v1/invoices/:id`：删除待处理/已驳回发票（管理员）
@@ -170,6 +179,7 @@
   - `DELETE /invoices/:id` 删除成功
 
 ### 10. 已确认回滚未确认（管理员）
+
 - 新增能力：
   - `POST /api/v1/invoices/:id/rollback-confirm`（管理员）
   - 仅 `confirmed` 发票可回滚
@@ -186,6 +196,7 @@
   - 发票状态为 `pending` ✅
 
 ### 11. 发票详情弹窗可编辑与重算优化（本轮新增）
+
 - 修复“供应商下拉不可选”：
   - 待处理发票状态下，供应商下拉不再依赖“编辑模式”，可直接选择并用于确认入库
   - OCR 供应商名新增自动建议匹配（规范化比对中英文与符号）
@@ -207,6 +218,7 @@
   - 发票链路冒烟（真实运行中服务）：`upload -> get detail -> update -> confirm -> rollback-confirm -> delete` ✅
 
 ### 12. 发票上传页 UI/UX 与 PNG 超时修复（本轮新增）
+
 - 上传页 UI/UX 优化（`client/src/pages/InvoiceScanPage.tsx`）：
   - 新增“上传进度条 + 动画 + 阶段描述（上传/识别/整理）”
   - 新增“变动信息”时间线（最近 6 条状态日志）
@@ -230,6 +242,7 @@
 ### 13. 安全加固与性能优化（2026-03-05 下午）
 
 #### 安全加固
+
 - **生产环境密钥强制校验**（`server/src/config/env.ts`）
   - 生产环境下若 `JWT_SECRET` 或 `AI_ENCRYPTION_KEY` 未设置，启动时直接抛出异常
   - 防止使用硬编码默认密钥上线
@@ -245,6 +258,7 @@
   - 通知发送移到事务外（非关键操作，失败不影响主流程）
 
 #### 性能优化
+
 - **N+1 查询消除**（`server/src/services/invoice.service.ts`）
   - `getAll` 方法原先逐条查询每张发票的 item count
   - 改为一次 `GROUP BY` 批量查询，减少数据库往返
@@ -273,6 +287,7 @@
 ### 15. 全系统功能验证（2026-03-05 下午）
 
 #### 后端 API 验证（全部通过）
+
 - `/analytics/dashboard` — 今日/本周/本月统计、低库存预警 14 个产品
 - `/analytics/purchase-trend` — 13 周采购趋势数据（$3,616 ~ $18,293）
 - `/analytics/product-ranking` — 42 个产品排名（大白菜第一，$5,094）
@@ -282,6 +297,7 @@
 - `/analytics/price-changes` — 价格波动检测（豆芽 +28.2%，荔枝 +22.6%）
 
 #### 前端 Playwright 自动化测试（8 页面全部通过）
+
 - 登录页 ✅ — 默认凭据自动填充，点击登录跳转仪表盘
 - 仪表盘 ✅ — 统计卡片（5 待处理、14 低库存）、金额趋势柱状图、低库存饼图
 - 数据分析 ✅ — 采购趋势面积图、供应商饼图、畅销 Top10、价格波动、分类分布、订货建议
@@ -291,3 +307,52 @@
 - 发票列表 ✅ — 68 张发票、状态筛选
 - 通知中心 ✅ — 14 条通知、已读/未读标记
 - **零控制台错误**
+
+## 2026-06-08
+
+### 1. 项目审计与现有优化核验
+
+- 复核当前未提交改动，确认已覆盖多项 2026-06 优化报告中的高优先级风险：
+  - `/uploads` 不再公开静态挂载，发票/产品文件改走鉴权路由。
+  - 销售单成本价 `costPrice` 已按 `admin/staff` 角色脱敏。
+  - 发票确认与回滚已复用 `adjustStockTx`，库存写入具备行锁与 `store_id`。
+  - 服务启动已限制 `sharp` 并发/缓存，并补充 SIGTERM/SIGINT 优雅停机与进程级异常守卫。
+
+### 2. 分析接口缓存加固
+
+- `server/src/utils/cache.ts`
+  - 进程内 TTL 缓存新增同 key 在途 Promise 合并，避免仪表盘/分析页并发请求同时穿透到底层聚合查询。
+  - `invalidateCache(prefix)` 同时清理在途请求标记，防止写操作失效缓存后，旧查询完成又回填过期数据。
+  - 新增 `invalidateAnalyticsCache()` 统一封装分析缓存失效前缀。
+- 写链路接入缓存失效：
+  - 发票确认/回滚：`server/src/services/invoice.service.ts`
+  - 销售创建/作废：`server/src/services/sales.service.ts`
+  - 批次入库/报损：`server/src/services/batch.service.ts`
+  - 库存调整/安全库存/盘点：`server/src/services/inventory.service.ts`
+  - 应付款记录：`server/src/services/payables.service.ts`
+
+### 3. 参数边界与价格趋势稳定性
+
+- 新增 `parseBoundedInt` 工具函数，统一处理 query 数字参数：
+  - 非法值回退默认值。
+  - 负数/超大值按上下限钳制。
+- 接入范围：
+  - `server/src/routes/product.routes.ts`：价格历史 `limit/months/supplierId`
+  - `server/src/routes/analytics.routes.ts`：分析接口 `limit/days/categoryId`
+  - `server/src/models/InvoiceItem.ts`：模型层再次钳制价格历史查询限制
+  - `server/src/services/analytics.service.ts`：分析服务层对默认值与边界做防御
+- 前端产品价格历史从表格升级为价格趋势图后，补充测试确认：
+  - staff 不显示进价与价格趋势入口。
+  - admin 点击价格趋势时默认请求近 6 个月、按发票粒度。
+
+### 4. 回归测试与验证记录
+
+- 后端 targeted：
+  - `cd server && npm run test -- src/utils/cache.test.ts src/utils/helpers.test.ts src/services/sales.service.test.ts src/services/inventory.service.test.ts` ✅
+  - `cd server && npm run build` ✅
+- 前端 targeted：
+  - `cd client && npm run test -- src/__tests__/Products.financialVisibility.test.tsx` ✅
+  - `cd client && npm run build` ✅
+- 说明：
+  - `npm run lint` 当前为 0 error，但仍有大量既有 warning（主要为 `any` 与少量未用变量），本轮未做全仓类型债重构。
+  - `npm run format:check` 仍因历史 97 个文件格式状态失败；未执行全仓格式化，避免产生大规模无关 diff。

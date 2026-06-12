@@ -1,138 +1,90 @@
-# PandaMart PMS — 熊猫超市智能库存管理系统
+# PandaMart PMS — AI-Powered Supermarket Inventory & Procurement System
 
-> 基于 AI 的超市库存管理系统，支持发票 OCR 识别、智能库存管理、数据分析和 AI 对话。
+> 熊猫超市智能库存管理系统 · A full-stack inventory/procurement platform where an LLM agent and an OCR pipeline do the busywork — turning supplier invoices into structured stock data and answering operational questions in natural language.
 
-## 技术栈
+<!-- TODO(before publishing): add a hero screenshot/GIF of the dashboard + AI chat here. -->
 
-- **前端**: React 18 + TypeScript + Vite + TailwindCSS + shadcn/ui + Recharts
-- **后端**: Node.js + Express.js + TypeScript
-- **数据库**: MariaDB 10.x (Knex.js)
-- **AI**: OpenAI 兼容接口（支持多提供商）
+## Why this is interesting (engineering)
 
-## 项目结构
+The two hard parts of this system are both about **making LLM output trustworthy in a real business workflow**:
+
+### 1. A hybrid invoice OCR pipeline that doesn't trust the model blindly
+`server/src/services/ocr.service.ts` (~780 lines) routes each upload to the right extractor and then **validates the model's output deterministically**:
+
+- **Routing:** PDF → text-extraction first; Excel → direct structured parse; image → Vision.
+- **Graceful fallback:** a text-PDF is parsed by template, then by LLM; if that fails it **degrades to rendering the page and using Vision** — so scanned and digital invoices both work.
+- **Deterministic post-processing of LLM output:** supplier address/contact extraction, **CAD total reconciliation** (the line items must add up), barcode-line hints, and **fuzzy product matching with a confidence score** per item. The model proposes; regex/heuristics verify.
+
+### 2. A real tool-calling agent, not a chat wrapper
+`server/src/services/ai-chat.service.ts` implements a proper **function-calling loop** over **8 database-backed tools** (`get_low_stock`, `search_inventory`, `get_price_changes`, `get_purchase_ranking`, `get_supplier_summary`, `get_sales_summary`, `get_reorder_suggestions`, `get_expiring_batches`):
+
+- Bounded loop (`MAX_ROUNDS = 5`) with a **forced final no-tool round** so the agent always returns an answer instead of looping.
+- Tool-call/tool messages are orchestrated **per request and not persisted**, avoiding cross-round `tool_call`/`tool` pairing bugs.
+- The response reports exactly **which tools were used** for transparency.
+
+Ask *"what should I reorder this week?"* and the agent calls `get_reorder_suggestions` + `get_low_stock` against live data and explains the answer.
+
+## Tech stack
+
+- **Frontend:** React 18 + TypeScript + Vite + TailwindCSS + shadcn/ui + Recharts
+- **Backend:** Node.js + Express + TypeScript
+- **Database:** MariaDB/MySQL 10.x via Knex.js (migrations + seeds)
+- **AI:** OpenAI-compatible API (multi-provider), Vision for scanned invoices
+
+## Features
+
+1. **Smart invoice OCR** — PDF text extraction / AI Vision / direct Excel parsing, with deterministic validation.
+2. **Inventory management** — inbound / outbound / stock-take / low-stock alerts.
+3. **Analytics** — dashboards for purchasing trends, fast/slow movers, price movement.
+4. **AI chat** — natural-language Q&A over inventory and procurement (the agent loop above).
+5. **AI business insights** — anomaly detection, periodic reports, reorder suggestions.
+6. **Supplier management** — CRUD + per-supplier invoice-template memory.
+7. **Roles** — Admin / Staff permission tiers.
+
+## Project structure
 
 ```
 PandaMartPMS/
-├── docs/                   # 项目文档
-├── sampleinvoice/          # 样本发票（测试用）
-├── client/                 # 前端项目 (React)
-├── server/                 # 后端项目 (Express)
-│   ├── src/
-│   │   ├── config/         # 配置文件
-│   │   ├── middleware/     # 中间件
-│   │   ├── models/         # 数据模型
-│   │   ├── routes/         # 路由
-│   │   ├── services/       # 业务逻辑
-│   │   ├── database/       # 迁移和种子
-│   │   ├── types/          # 类型定义
-│   │   └── utils/          # 工具函数
-│   └── uploads/            # 上传文件
-└── .gitignore
+├── client/    React 18 + Vite admin UI
+├── server/    Express + TypeScript API
+│   └── src/{config,middleware,models,routes,services,database,types,utils}
+├── docs/      api-design.md and design notes
+└── sampleinvoice/   fictional sample invoices for testing
 ```
 
-## 快速开始
+## Quick start
 
-### 前端
-
+**Frontend**
 ```bash
 cd client
-cp .env.example .env          # 配置 VITE_API_BASE_URL
+cp .env.example .env       # set VITE_API_BASE_URL
 npm install
-npm run dev                   # 默认 http://localhost:5173
+npm run dev                # http://localhost:5173
+npm run build              # production bundle
 ```
 
-前端构建：
-
-```bash
-cd client
-npm run build
-```
-
-前端单元测试：
-
-```bash
-cd client
-npm run test
-```
-
-### 后端
-
+**Backend**
 ```bash
 cd server
-cp .env.example .env          # 复制并修改环境变量
-npm install                    # 安装依赖
-npm run migrate                # 运行数据库迁移
-npm run seed                   # 插入种子数据
-npm run dev                    # 启动开发服务器
+cp .env.example .env       # set DB_*, JWT_SECRET, AI_ENCRYPTION_KEY, SEED_ADMIN_PASSWORD
+npm install
+npm run migrate            # database schema
+npm run seed               # demo data (admin password from SEED_ADMIN_PASSWORD)
+npm run dev
+npm run test:e2e           # E2E (MySQL)
 ```
 
-### 后端集成测试（E2E + MySQL）
+> **Secrets:** no credentials are committed — only `.env.example` templates are tracked; `JWT_SECRET`, `AI_ENCRYPTION_KEY` and the admin password are supplied via `server/.env`. The seed data is **fictional**.
 
-```bash
-cd server
-npm run build
-npm run test:e2e
-```
+## Notes
 
-开启写链路验证（供应商 create/list/delete）：
+- API base path: `/api/v1` (see `docs/api-design.md`).
+- All demo/seed data is fictional; safe to run and showcase.
 
-```bash
-# Linux / macOS
-E2E_WRITE_TEST=true npm run test:e2e
+## License
 
-# PowerShell
-$env:E2E_WRITE_TEST='true'; npm run test:e2e
-```
+Private — All Rights Reserved.
 
-如果要直连 Namecheap MySQL（不走本地数据库），执行前覆盖数据库环境变量：
+---
 
-```bash
-# PowerShell 示例
-$env:DB_HOST='localhost'
-$env:DB_PORT='3306'
-$env:DB_NAME='{cpanel_user}_pandapms'
-$env:DB_USER='{cpanel_user}_pmsuser'
-$env:DB_PASSWORD='your_db_password'
-npm run test:e2e
-```
-
-### 管理员初始化
-
-- 默认管理员用户名仍为 `admin`
-- 管理员密码不再写死在仓库中，需通过 `server/.env` 中的 `SEED_ADMIN_PASSWORD` 提供
-- 完成 `npm run seed` 前，请先配置 `JWT_SECRET`、`AI_ENCRYPTION_KEY` 和 `SEED_ADMIN_PASSWORD`
-
-## 代码质量工具
-
-项目已接入 ESLint（client/server 各自 flat config）与 Prettier（根配置，client 覆盖为双引号风格）。
-
-```bash
-# 在根目录
-npm run lint           # 依次 lint server 和 client
-npm run format         # Prettier 格式化 client/server 的 src
-npm run format:check   # 仅检查格式，不修改
-
-# 或单独在 client / server 目录
-npm run lint
-npm run lint:fix
-```
-
-> 现有代码中的 `any` 等暂以 warning 形式提示，不阻塞构建，可逐步收敛。
-
-## 核心功能
-
-1. **智能发票 OCR** — PDF 文本提取 / AI Vision 识别 / Excel 直接解析
-2. **库存管理** — 入库/出库/盘点/预警
-3. **数据分析** — 仪表盘/采购趋势/畅销滞销/价格波动
-4. **AI 智能对话** — 自然语言问答库存和采购问题
-5. **AI 经营洞察** — 异常检测/周期报告/智能订货建议
-6. **供应商管理** — CRUD + 发票模板记忆
-7. **用户权限** — Admin/Staff 两级权限
-
-## API 文档
-
-详见 `docs/api-design.md`，API 基础路径: `/api/v1`
-
-## 许可证
-
-Private — All Rights Reserved
+*中文说明：基于 AI 的超市库存管理系统，支持发票 OCR 识别、智能库存管理、数据分析与 AI 对话。前端 React 18，后端 Express + TypeScript，数据库 MariaDB。核心亮点是混合 OCR 流水线（PDF 文本/Vision/Excel 分流 + 确定性校验）与 8 工具的 function-calling agent loop。*

@@ -1,5 +1,14 @@
 import { useEffect, useState } from "react";
 import { Download, Package, Upload } from "lucide-react";
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip as RTooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { getCategoryFlat } from "../api/categories";
 import {
   createProduct,
@@ -60,6 +69,48 @@ const initialForm: ProductForm = {
   isActive: true,
 };
 
+// 折线图数据点：环比异常（红色放大）用于价格突变可视化
+function PriceDot(props: {
+  cx?: number;
+  cy?: number;
+  index?: number;
+  payload?: { isAnomaly?: boolean };
+}) {
+  const { cx, cy, payload, index } = props;
+  if (cx == null || cy == null) return <g key={index} />;
+  const anomaly = payload?.isAnomaly;
+  return (
+    <circle
+      key={index}
+      cx={cx}
+      cy={cy}
+      r={anomaly ? 5 : 3}
+      fill={anomaly ? "#e11d48" : "#0ea5e9"}
+      stroke="#fff"
+      strokeWidth={1}
+    />
+  );
+}
+
+function PriceTooltip({
+  active,
+  label,
+  payload,
+}: {
+  active?: boolean;
+  label?: string | number;
+  payload?: Array<{ value?: number | string | null }>;
+}) {
+  if (!active || !payload?.length) return null;
+  const value = payload[0]?.value;
+  return (
+    <div className="rounded border border-slate-200 bg-white px-2 py-1 text-xs shadow">
+      <div className="text-slate-500">日期: {label}</div>
+      <div className="font-semibold text-slate-800">单价: {formatCurrency(Number(value || 0))}</div>
+    </div>
+  );
+}
+
 export default function ProductsPage() {
   const { canEditCatalog } = usePermission();
   const canViewFinancials = canEditCatalog;
@@ -74,10 +125,51 @@ export default function ProductsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [priceHistory, setPriceHistory] = useState<
-    Array<{ date: string; unitPrice: number; quantity: number; supplierName: string | null; invoiceNumber: string | null }>
+    Array<{
+      date: string;
+      unitPrice: number;
+      quantity: number;
+      supplierName: string | null;
+      invoiceNumber: string | null;
+    }>
   >([]);
   const [priceHistoryOpen, setPriceHistoryOpen] = useState(false);
   const [priceHistoryTitle, setPriceHistoryTitle] = useState("");
+  const [priceHistoryProductId, setPriceHistoryProductId] = useState<number | null>(null);
+  const [priceHistoryMonths, setPriceHistoryMonths] = useState("6");
+  const [priceHistoryGroupBy, setPriceHistoryGroupBy] = useState<"invoice" | "month">("invoice");
+  const [priceHistoryLoading, setPriceHistoryLoading] = useState(false);
+
+  const loadPriceHistory = async (
+    productId: number,
+    months: string,
+    groupBy: "invoice" | "month"
+  ) => {
+    setPriceHistoryLoading(true);
+    try {
+      const history = await getProductPriceHistory(productId, {
+        months: Number(months),
+        groupBy,
+      });
+      setPriceHistory(history);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "加载价格历史失败");
+    } finally {
+      setPriceHistoryLoading(false);
+    }
+  };
+
+  // 折线图数据：标注相邻两点环比涨跌超过 ±15% 的异常点
+  const priceChartData = priceHistory.map((p, i) => {
+    const prev = i > 0 ? priceHistory[i - 1].unitPrice : null;
+    const changePercent = prev && prev > 0 ? ((p.unitPrice - prev) / prev) * 100 : 0;
+    return {
+      ...p,
+      label: priceHistoryGroupBy === "month" ? p.date.slice(0, 7) : p.date.slice(5, 10),
+      changePercent: Math.round(changePercent * 10) / 10,
+      isAnomaly: Math.abs(changePercent) >= 15,
+    };
+  });
 
   const load = async () => {
     setLoading(true);
@@ -111,7 +203,11 @@ export default function ProductsPage() {
         <Card>
           <h2 className="mb-3 text-lg font-bold">{editing ? "编辑产品" : "新增产品"}</h2>
           <div className="grid gap-2 md:grid-cols-3">
-            <Input placeholder="SKU" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} />
+            <Input
+              placeholder="SKU"
+              value={form.sku}
+              onChange={(e) => setForm({ ...form, sku: e.target.value })}
+            />
             <Input
               placeholder="条码 (Barcode)"
               value={form.barcode}
@@ -127,7 +223,10 @@ export default function ProductsPage() {
               value={form.nameZh}
               onChange={(e) => setForm({ ...form, nameZh: e.target.value })}
             />
-            <Select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })}>
+            <Select
+              value={form.categoryId}
+              onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
+            >
               <option value="">分类</option>
               {categories.map((category) => (
                 <option key={category.id} value={category.id}>
@@ -320,7 +419,7 @@ export default function ProductsPage() {
           />
         ) : null}
         {!loading && !error && items.length === 0 ? (
-          <EmptyState icon={Package} title="暂无产品" description="没有符合条件的产品" />
+          <EmptyState icon={Package} title="暂无产品" description="没有符合条件的产品。可尝试清除搜索条件，或点击右上角「新增产品」添加第一个商品。" />
         ) : null}
         {!loading && !error && items.length > 0 ? (
           <Table>
@@ -345,8 +444,12 @@ export default function ProductsPage() {
                   </td>
                   <td className="px-3 py-2">{item.category_name || "-"}</td>
                   <td className="px-3 py-2">{item.supplier_name || "-"}</td>
-                  {canViewFinancials ? <td className="px-3 py-2">{formatCurrency(item.default_price)}</td> : null}
-                  <td className="px-3 py-2">{item.selling_price != null ? formatCurrency(item.selling_price) : "-"}</td>
+                  {canViewFinancials ? (
+                    <td className="px-3 py-2">{formatCurrency(item.default_price)}</td>
+                  ) : null}
+                  <td className="px-3 py-2">
+                    {item.selling_price != null ? formatCurrency(item.selling_price) : "-"}
+                  </td>
                   <td className="px-3 py-2">
                     <div className="flex flex-wrap gap-1">
                       {canEditCatalog ? (
@@ -361,12 +464,16 @@ export default function ProductsPage() {
                               nameEn: item.name_en,
                               nameZh: item.name_zh || "",
                               categoryId: item.category_id ? String(item.category_id) : "",
-                              defaultSupplierId: item.default_supplier_id ? String(item.default_supplier_id) : "",
+                              defaultSupplierId: item.default_supplier_id
+                                ? String(item.default_supplier_id)
+                                : "",
                               defaultUnit: item.default_unit,
                               defaultPrice: item.default_price ? String(item.default_price) : "",
-                              sellingPrice: item.selling_price != null ? String(item.selling_price) : "",
+                              sellingPrice:
+                                item.selling_price != null ? String(item.selling_price) : "",
                               isPerishable: item.is_perishable ?? false,
-                              shelfLifeDays: item.shelf_life_days != null ? String(item.shelf_life_days) : "",
+                              shelfLifeDays:
+                                item.shelf_life_days != null ? String(item.shelf_life_days) : "",
                               notes: item.notes || "",
                               isActive: item.is_active,
                             });
@@ -378,14 +485,16 @@ export default function ProductsPage() {
                       {canViewFinancials ? (
                         <Button
                           variant="ghost"
-                          onClick={async () => {
-                            const history = await getProductPriceHistory(item.id);
-                            setPriceHistory(history);
+                          onClick={() => {
+                            setPriceHistoryProductId(item.id);
                             setPriceHistoryTitle(item.name_zh || item.name_en);
+                            setPriceHistoryMonths("6");
+                            setPriceHistoryGroupBy("invoice");
                             setPriceHistoryOpen(true);
+                            void loadPriceHistory(item.id, "6", "invoice");
                           }}
                         >
-                          价格历史
+                          价格趋势
                         </Button>
                       ) : null}
                       {canEditCatalog ? (
@@ -420,31 +529,108 @@ export default function ProductsPage() {
         ) : null}
       </Card>
 
-      <Modal open={priceHistoryOpen} title={`价格历史 - ${priceHistoryTitle}`} onClose={() => setPriceHistoryOpen(false)}>
-        <div className="max-h-72 overflow-y-auto">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="text-left text-slate-500">
-                <th className="border-b p-2">日期</th>
-                <th className="border-b p-2">单价</th>
-                <th className="border-b p-2">数量</th>
-                <th className="border-b p-2">供应商</th>
-                <th className="border-b p-2">发票号</th>
-              </tr>
-            </thead>
-            <tbody>
-              {priceHistory.map((row, index) => (
-                <tr key={index}>
-                  <td className="border-b p-2">{formatDate(row.date)}</td>
-                  <td className="border-b p-2">{formatCurrency(row.unitPrice)}</td>
-                  <td className="border-b p-2">{row.quantity}</td>
-                  <td className="border-b p-2">{row.supplierName || "-"}</td>
-                  <td className="border-b p-2">{row.invoiceNumber || "-"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <Modal
+        open={priceHistoryOpen}
+        title={`价格趋势 - ${priceHistoryTitle}`}
+        onClose={() => setPriceHistoryOpen(false)}
+      >
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <Select
+            value={priceHistoryMonths}
+            onChange={(e) => {
+              setPriceHistoryMonths(e.target.value);
+              if (priceHistoryProductId)
+                void loadPriceHistory(priceHistoryProductId, e.target.value, priceHistoryGroupBy);
+            }}
+            className="w-28"
+          >
+            <option value="3">近3个月</option>
+            <option value="6">近6个月</option>
+            <option value="12">近12个月</option>
+            <option value="24">近24个月</option>
+          </Select>
+          <Select
+            value={priceHistoryGroupBy}
+            onChange={(e) => {
+              const gb = e.target.value as "invoice" | "month";
+              setPriceHistoryGroupBy(gb);
+              if (priceHistoryProductId)
+                void loadPriceHistory(priceHistoryProductId, priceHistoryMonths, gb);
+            }}
+            className="w-32"
+          >
+            <option value="invoice">按发票</option>
+            <option value="month">按月均价</option>
+          </Select>
+          <span className="text-xs text-slate-500">红点 = 环比涨跌超 15%</span>
         </div>
+
+        {priceHistoryLoading ? (
+          <div className="py-10 text-center text-sm text-slate-500">加载中…</div>
+        ) : priceChartData.length === 0 ? (
+          <EmptyState
+            icon={Package}
+            title="暂无价格记录"
+            description="该产品在所选区间内无已确认采购"
+          />
+        ) : (
+          <>
+            <div className="h-56 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart
+                  data={priceChartData}
+                  margin={{ top: 10, right: 12, left: 0, bottom: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" />
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} width={48} />
+                  <RTooltip content={<PriceTooltip />} />
+                  <Line
+                    type="monotone"
+                    dataKey="unitPrice"
+                    stroke="#0ea5e9"
+                    strokeWidth={2}
+                    dot={<PriceDot />}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="mt-3 max-h-56 overflow-y-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="text-left text-slate-500">
+                    <th className="border-b p-2">日期</th>
+                    <th className="border-b p-2">单价</th>
+                    <th className="border-b p-2">环比</th>
+                    <th className="border-b p-2">数量</th>
+                    <th className="border-b p-2">供应商</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {priceChartData.map((row, index) => (
+                    <tr key={index} className={row.isAnomaly ? "bg-rose-50" : ""}>
+                      <td className="border-b p-2">
+                        {priceHistoryGroupBy === "month"
+                          ? row.date.slice(0, 7)
+                          : formatDate(row.date)}
+                      </td>
+                      <td className="border-b p-2">{formatCurrency(row.unitPrice)}</td>
+                      <td
+                        className={`border-b p-2 ${row.changePercent > 0 ? "text-rose-600" : row.changePercent < 0 ? "text-emerald-600" : "text-slate-400"}`}
+                      >
+                        {index === 0
+                          ? "-"
+                          : `${row.changePercent > 0 ? "+" : ""}${row.changePercent}%`}
+                      </td>
+                      <td className="border-b p-2">{row.quantity}</td>
+                      <td className="border-b p-2">{row.supplierName || "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </Modal>
     </div>
   );

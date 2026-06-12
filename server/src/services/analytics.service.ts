@@ -1,11 +1,14 @@
 import db from '../config/database';
-import { InventoryModel } from '../models/Inventory';
 import { SettingModel } from '../models/Setting';
+import { parseBoundedInt } from '../utils/helpers';
+import { batchService } from './batch.service';
 
 export const analyticsService = {
   async getDashboard() {
     const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString().split('T')[0];
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      .toISOString()
+      .split('T')[0];
 
     // 计算本周起始（周一）
     const dayOfWeek = now.getDay();
@@ -62,22 +65,85 @@ export const analyticsService = {
 
     // 最近发票
     const recentInvoices = await db('invoices')
-      .select('invoices.id', 'suppliers.name as supplierName', 'invoices.invoice_number as invoiceNumber',
-        'invoices.grand_total as grandTotal', 'invoices.status', 'invoices.created_at as createdAt')
+      .select(
+        'invoices.id',
+        'suppliers.name as supplierName',
+        'invoices.invoice_number as invoiceNumber',
+        'invoices.grand_total as grandTotal',
+        'invoices.status',
+        'invoices.created_at as createdAt'
+      )
       .leftJoin('suppliers', 'invoices.supplier_id', 'suppliers.id')
       .orderBy('invoices.created_at', 'desc')
       .limit(5);
 
     // 低库存产品
     const lowStockProducts = await db('inventory')
-      .select('inventory.product_id as productId', 'products.name_en as nameEn',
-        'products.name_zh as nameZh', 'inventory.quantity', 'inventory.safe_stock as safeStock', 'inventory.unit')
+      .select(
+        'inventory.product_id as productId',
+        'products.name_en as nameEn',
+        'products.name_zh as nameZh',
+        'inventory.quantity',
+        'inventory.safe_stock as safeStock',
+        'inventory.unit'
+      )
       .join('products', 'inventory.product_id', 'products.id')
       .whereNull('products.deleted_at')
       .whereNotNull('inventory.safe_stock')
       .whereRaw('inventory.quantity < inventory.safe_stock')
       .orderByRaw('(inventory.safe_stock - inventory.quantity) DESC')
       .limit(10);
+
+    // 上期对比数据（用于趋势百分比）
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStart = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate())
+      .toISOString().split('T')[0];
+    const yesterdayStats = await db('invoices')
+      .where('invoice_date', '>=', yesterdayStart)
+      .where('invoice_date', '<', todayStart)
+      .where('status', 'confirmed')
+      .select(
+        db.raw('COALESCE(SUM(grand_total), 0) as totalAmount'),
+        db.raw('COUNT(*) as invoiceCount')
+      ).first();
+
+    const prevWeekStart = new Date(weekStart);
+    prevWeekStart.setDate(prevWeekStart.getDate() - 7);
+    const prevWeekStartStr = prevWeekStart.toISOString().split('T')[0];
+    const prevWeekStats = await db('invoices')
+      .where('invoice_date', '>=', prevWeekStartStr)
+      .where('invoice_date', '<', weekStartStr)
+      .where('status', 'confirmed')
+      .select(
+        db.raw('COALESCE(SUM(grand_total), 0) as totalAmount')
+      ).first();
+
+    const prevMonth = new Date(now);
+    prevMonth.setMonth(prevMonth.getMonth() - 1);
+    const prevMonthStart = `${prevMonth.getFullYear()}-${String(prevMonth.getMonth() + 1).padStart(2, '0')}-01`;
+    const prevMonthStats = await db('invoices')
+      .where('invoice_date', '>=', prevMonthStart)
+      .where('invoice_date', '<', monthStart)
+      .where('status', 'confirmed')
+      .select(
+        db.raw('COALESCE(SUM(grand_total), 0) as totalAmount')
+      ).first();
+
+    // 临期批次摘要
+    let expiringBatches: any[] = [];
+    try {
+      const expSummary = await batchService.getExpiringSummary(7);
+      expiringBatches = (expSummary.items || []).slice(0, 5).map((item: any) => ({
+        productId: item.productId,
+        nameEn: item.nameEn,
+        nameZh: item.nameZh,
+        batchNo: item.batchNo,
+        expiryDate: item.expiryDate,
+        quantity: item.quantity,
+        expired: item.expired,
+      }));
+    } catch { /* 表可能不存在 */ }
 
     return {
       today: {
@@ -96,26 +162,208 @@ export const analyticsService = {
       },
       recentInvoices,
       lowStockProducts,
+      comparisons: {
+        yesterday: { totalAmount: Number(yesterdayStats?.totalAmount || 0) },
+        prevWeek: { totalAmount: Number(prevWeekStats?.totalAmount || 0) },
+        prevMonth: { totalAmount: Number(prevMonthStats?.totalAmount || 0) },
+      },
+      expiringBatches,
     };
+  },
+
+  // 规则引擎：无需 LLM 的智能告警
+  async getDashboardAlerts() {
+    const alerts: Array<{
+      id: string;
+      type: 'stockout_risk' | 'price_spike' | 'pending_invoice' | 'expiring_batch' | 'slow_mover' | 'cost_increase';
+      severity: 'high' | 'medium' | 'low';
+      title: string;
+      message: string;
+      link?: string;
+      count?: number;
+    }> = [];
+
+    // 1. 低库存告警
+    const lowStockCount = await db('inventory')
+      .join('products', 'inventory.product_id', 'products.id')
+      .whereNull('products.deleted_at')
+      .whereNotNull('inventory.safe_stock')
+      .whereRaw('inventory.quantity < inventory.safe_stock')
+      .count('inventory.id as count')
+      .first();
+    const lowCount = Number(lowStockCount?.count || 0);
+    if (lowCount > 0) {
+      const zeroStock = await db('inventory')
+        .join('products', 'inventory.product_id', 'products.id')
+        .whereNull('products.deleted_at')
+        .whereNotNull('inventory.safe_stock')
+        .where('inventory.quantity', '<=', 0)
+        .count('inventory.id as count')
+        .first();
+      const zeroCount = Number(zeroStock?.count || 0);
+      alerts.push({
+        id: 'low-stock',
+        type: 'stockout_risk',
+        severity: zeroCount > 0 ? 'high' : 'medium',
+        title: '库存不足',
+        message: zeroCount > 0
+          ? `${lowCount} 个产品库存低于安全线，其中 ${zeroCount} 个已缺货`
+          : `${lowCount} 个产品库存低于安全线，请及时补货`,
+        link: '/inventory',
+        count: lowCount,
+      });
+    }
+
+    // 2. 待处理发票
+    const pendingInvoices = await db('invoices')
+      .where('status', 'pending')
+      .count('id as count')
+      .first();
+    const pendingCount = Number(pendingInvoices?.count || 0);
+    if (pendingCount > 0) {
+      const oldPending = await db('invoices')
+        .where('status', 'pending')
+        .where('created_at', '<', db.raw('DATE_SUB(NOW(), INTERVAL 3 DAY)'))
+        .count('id as count')
+        .first();
+      const oldCount = Number(oldPending?.count || 0);
+      alerts.push({
+        id: 'pending-invoices',
+        type: 'pending_invoice',
+        severity: oldCount > 0 ? 'high' : 'medium',
+        title: '待处理发票',
+        message: oldCount > 0
+          ? `${pendingCount} 张发票待处理，其中 ${oldCount} 张已超过 3 天`
+          : `${pendingCount} 张发票等待确认入库`,
+        link: '/invoices',
+        count: pendingCount,
+      });
+    }
+
+    // 3. 临期/过期批次
+    try {
+      const expSummary = await batchService.getExpiringSummary(7);
+      if (expSummary.expiredCount > 0) {
+        alerts.push({
+          id: 'expired-batches',
+          type: 'expiring_batch',
+          severity: 'high',
+          title: '过期批次',
+          message: `${expSummary.expiredCount} 个批次已过期，请尽快报损处理`,
+          link: '/batches',
+          count: expSummary.expiredCount,
+        });
+      }
+      if (expSummary.expiringCount > 0) {
+        alerts.push({
+          id: 'expiring-batches',
+          type: 'expiring_batch',
+          severity: expSummary.expiringCount > 3 ? 'medium' : 'low',
+          title: '临期批次',
+          message: `${expSummary.expiringCount} 个批次将在 7 天内到期`,
+          link: '/batches',
+          count: expSummary.expiringCount,
+        });
+      }
+    } catch { /* 表可能不存在 */ }
+
+    // 4. 价格大幅波动
+    const priceChanges = await this.getPriceChanges({ threshold: 15, limit: 5 });
+    if (priceChanges.length > 0) {
+      const increases = priceChanges.filter((p: any) => p.changePercent > 0);
+      if (increases.length > 0) {
+        alerts.push({
+          id: 'price-increase',
+          type: 'price_spike',
+          severity: 'medium',
+          title: '采购价格上涨',
+          message: `${increases.length} 个产品近期采购价上涨超过 15%，最高涨幅 +${Math.max(...increases.map((p: any) => p.changePercent))}%`,
+          link: '/analytics',
+          count: increases.length,
+        });
+      }
+    }
+
+    // 5. 滞销商品预警
+    const slowMovers = await this.getSalesSlowMovers({ days: 30, limit: 5 });
+    if (slowMovers.items.length > 0) {
+      const zeroSales = slowMovers.items.filter((i: any) => i.soldQty === 0);
+      if (zeroSales.length > 0) {
+        alerts.push({
+          id: 'slow-movers',
+          type: 'slow_mover',
+          severity: 'low',
+          title: '滞销商品',
+          message: `${zeroSales.length} 个商品近 30 天零销量，占用库存资金`,
+          link: '/analytics',
+          count: zeroSales.length,
+        });
+      }
+    }
+
+    return alerts;
+  },
+
+  // 全局搜索：跨产品、发票、供应商的模糊搜索
+  async globalSearch(query: string, limit = 20) {
+    if (!query || query.trim().length < 1) return { products: [], invoices: [], suppliers: [] };
+    const q = `%${query.trim()}%`;
+    const searchLimit = Math.min(limit, 50);
+
+    const [products, invoices, suppliers] = await Promise.all([
+      db('products')
+        .whereNull('deleted_at')
+        .where(function () {
+          this.where('name_en', 'like', q)
+            .orWhere('name_zh', 'like', q)
+            .orWhere('sku', 'like', q)
+            .orWhere('barcode', 'like', q);
+        })
+        .select('id', 'name_en as nameEn', 'name_zh as nameZh', 'sku', 'barcode')
+        .limit(searchLimit),
+      db('invoices')
+        .where(function () {
+          this.where('invoice_number', 'like', q)
+            .orWhere('notes', 'like', q);
+        })
+        .select(
+          'invoices.id',
+          'invoices.invoice_number as invoiceNumber',
+          'invoices.grand_total as grandTotal',
+          'invoices.status',
+          'invoices.invoice_date as invoiceDate',
+          'suppliers.name as supplierName'
+        )
+        .leftJoin('suppliers', 'invoices.supplier_id', 'suppliers.id')
+        .orderBy('invoices.created_at', 'desc')
+        .limit(searchLimit),
+      db('suppliers')
+        .whereNull('deleted_at')
+        .where(function () {
+          this.where('name', 'like', q)
+            .orWhere('code', 'like', q)
+            .orWhere('contact_name', 'like', q)
+            .orWhere('phone', 'like', q);
+        })
+        .select('id', 'name', 'code', 'contact_name as contactName', 'phone')
+        .limit(searchLimit),
+    ]);
+
+    return { products, invoices, suppliers };
   },
 
   async getPurchaseTrend(filters: { period?: string; dateFrom?: string; dateTo?: string }) {
     const period = filters.period || 'week';
     let groupExpr: string;
-    let dateFormat: string;
-
     switch (period) {
       case 'day':
         groupExpr = 'DATE(invoice_date)';
-        dateFormat = '%Y-%m-%d';
         break;
       case 'month':
         groupExpr = "DATE_FORMAT(invoice_date, '%Y-%m-01')";
-        dateFormat = '%Y-%m';
         break;
       default: // week
-        groupExpr = "DATE(DATE_SUB(invoice_date, INTERVAL WEEKDAY(invoice_date) DAY))";
-        dateFormat = '%Y-%m-%d';
+        groupExpr = 'DATE(DATE_SUB(invoice_date, INTERVAL WEEKDAY(invoice_date) DAY))';
         break;
     }
 
@@ -147,7 +395,7 @@ export const analyticsService = {
     dateTo?: string;
     categoryId?: number;
   }) {
-    const limit = filters.limit || 20;
+    const limit = parseBoundedInt(filters.limit, { defaultValue: 20, min: 1, max: 100 });
     const type = filters.type || 'top_selling';
 
     if (type === 'top_selling') {
@@ -189,7 +437,7 @@ export const analyticsService = {
       }));
     } else {
       // slow_moving
-      const slowDays = Number(await SettingModel.get('slow_moving_days') || '30');
+      const slowDays = Number((await SettingModel.get('slow_moving_days')) || '30');
 
       const query = db('products')
         .select(
@@ -203,15 +451,21 @@ export const analyticsService = {
         )
         .leftJoin('invoice_items', 'products.id', 'invoice_items.product_id')
         .leftJoin('invoices', function () {
-          this.on('invoice_items.invoice_id', '=', 'invoices.id')
-            .andOn('invoices.status', '=', db.raw("'confirmed'"));
+          this.on('invoice_items.invoice_id', '=', 'invoices.id').andOn(
+            'invoices.status',
+            '=',
+            db.raw("'confirmed'")
+          );
         })
         .leftJoin('categories', 'products.category_id', 'categories.id')
         .leftJoin('inventory', 'products.id', 'inventory.product_id')
         .whereNull('products.deleted_at')
         .where('products.is_active', true)
         .groupBy('products.id')
-        .havingRaw('MAX(invoices.invoice_date) IS NULL OR DATEDIFF(NOW(), MAX(invoices.invoice_date)) > ?', [slowDays])
+        .havingRaw(
+          'MAX(invoices.invoice_date) IS NULL OR DATEDIFF(NOW(), MAX(invoices.invoice_date)) > ?',
+          [slowDays]
+        )
         .orderByRaw('lastPurchaseDate ASC')
         .limit(limit);
 
@@ -236,12 +490,28 @@ export const analyticsService = {
     dateTo?: string;
     limit?: number;
   }) {
-    const threshold = filters.threshold || 10;
-    const limit = filters.limit || 50;
+    const threshold =
+      Number.isFinite(filters.threshold) && filters.threshold! > 0 ? filters.threshold! : 10;
+    const limit = parseBoundedInt(filters.limit, { defaultValue: 50, min: 1, max: 100 });
 
-    // 获取每个产品最近两次采购价格
-    const data = await db.raw(`
-      SELECT 
+    // 可选日期窗口：约束内层 invoice_items 扫描范围（PERF-5）。
+    // 该子句在 curr/prev 两个子查询里各出现一次，绑定值需相应重复。
+    const innerClauses: string[] = [];
+    const innerBindings: any[] = [];
+    if (filters.dateFrom) {
+      innerClauses.push('inv.invoice_date >= ?');
+      innerBindings.push(filters.dateFrom);
+    }
+    if (filters.dateTo) {
+      innerClauses.push('inv.invoice_date <= ?');
+      innerBindings.push(filters.dateTo);
+    }
+    const dateSql = innerClauses.length ? ` AND ${innerClauses.join(' AND ')}` : '';
+
+    // 获取每个产品（窗口内）最近两次采购价格
+    const data = await db.raw(
+      `
+      SELECT
         p.id as productId,
         p.name_en as nameEn,
         p.name_zh as nameZh,
@@ -256,14 +526,14 @@ export const analyticsService = {
           ROW_NUMBER() OVER (PARTITION BY ii.product_id ORDER BY inv.invoice_date DESC) as rn
         FROM invoice_items ii
         JOIN invoices inv ON ii.invoice_id = inv.id AND inv.status = 'confirmed'
-        WHERE ii.product_id IS NOT NULL
+        WHERE ii.product_id IS NOT NULL${dateSql}
       ) curr ON p.id = curr.product_id AND curr.rn = 1
       INNER JOIN (
         SELECT ii.product_id, ii.unit_price,
           ROW_NUMBER() OVER (PARTITION BY ii.product_id ORDER BY inv.invoice_date DESC) as rn
         FROM invoice_items ii
         JOIN invoices inv ON ii.invoice_id = inv.id AND inv.status = 'confirmed'
-        WHERE ii.product_id IS NOT NULL
+        WHERE ii.product_id IS NOT NULL${dateSql}
       ) prev ON p.id = prev.product_id AND prev.rn = 2
       LEFT JOIN invoices curr_inv ON curr.invoice_id = curr_inv.id
       LEFT JOIN suppliers s ON curr_inv.supplier_id = s.id
@@ -272,7 +542,9 @@ export const analyticsService = {
         AND ABS((curr.unit_price - prev.unit_price) / prev.unit_price * 100) > ?
       ORDER BY ABS((curr.unit_price - prev.unit_price) / prev.unit_price) DESC
       LIMIT ?
-    `, [threshold, limit]);
+    `,
+      [...innerBindings, ...innerBindings, threshold, limit]
+    );
 
     return (data[0] || []).map((row: any) => ({
       productId: row.productId,
@@ -310,7 +582,8 @@ export const analyticsService = {
       supplierId: row.supplierId,
       supplierName: row.supplierName,
       totalAmount: Number(row.totalAmount),
-      percentage: grandTotal > 0 ? Math.round((Number(row.totalAmount) / grandTotal) * 1000) / 10 : 0,
+      percentage:
+        grandTotal > 0 ? Math.round((Number(row.totalAmount) / grandTotal) * 1000) / 10 : 0,
       invoiceCount: Number(row.invoiceCount),
     }));
   },
@@ -341,7 +614,8 @@ export const analyticsService = {
       categoryId: row.categoryId,
       categoryName: row.categoryName || '未分类',
       totalAmount: Number(row.totalAmount),
-      percentage: grandTotal > 0 ? Math.round((Number(row.totalAmount) / grandTotal) * 1000) / 10 : 0,
+      percentage:
+        grandTotal > 0 ? Math.round((Number(row.totalAmount) / grandTotal) * 1000) / 10 : 0,
       productCount: Number(row.productCount),
     }));
   },
@@ -426,7 +700,9 @@ export const analyticsService = {
     const totals = await base()
       .select(
         db.raw('COALESCE(SUM(sales_items.line_total), 0) as revenue'),
-        db.raw('COALESCE(SUM(COALESCE(sales_items.cost_price, 0) * sales_items.quantity), 0) as cost'),
+        db.raw(
+          'COALESCE(SUM(COALESCE(sales_items.cost_price, 0) * sales_items.quantity), 0) as cost'
+        ),
         db.raw('COUNT(DISTINCT sales_orders.id) as orderCount')
       )
       .first();
@@ -441,7 +717,9 @@ export const analyticsService = {
       .select('products.name_en as nameEn', 'products.name_zh as nameZh')
       .select(
         db.raw('SUM(sales_items.line_total) as revenue'),
-        db.raw('SUM(sales_items.line_total - COALESCE(sales_items.cost_price, 0) * sales_items.quantity) as profit'),
+        db.raw(
+          'SUM(sales_items.line_total - COALESCE(sales_items.cost_price, 0) * sales_items.quantity) as profit'
+        ),
         db.raw('SUM(sales_items.quantity) as qty')
       )
       .groupBy('sales_items.product_id', 'products.name_en', 'products.name_zh')
@@ -466,8 +744,8 @@ export const analyticsService = {
 
   // 滞销分析：有库存但近 N 天销量为 0 或很低的商品
   async getSalesSlowMovers(filters: { days?: number; limit?: number }) {
-    const days = filters.days || 30;
-    const limit = filters.limit || 20;
+    const days = parseBoundedInt(filters.days, { defaultValue: 30, min: 1, max: 365 });
+    const limit = parseBoundedInt(filters.limit, { defaultValue: 20, min: 1, max: 100 });
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
       .toISOString()
       .slice(0, 19)

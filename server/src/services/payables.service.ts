@@ -1,6 +1,7 @@
 import db from '../config/database';
 import { AuditLogModel } from '../models/AuditLog';
 import { AppError } from '../middleware/errorHandler';
+import { invalidateAnalyticsCache } from '../utils/cache';
 
 export const payablesService = {
   // 各供应商应付汇总：已确认发票总额 − 已付款，输出未结清的（含全部，前端可筛）
@@ -97,7 +98,14 @@ export const payablesService = {
   },
 
   async recordPayment(
-    body: { supplierId: number; amount: number; invoiceId?: number | null; method?: string; paidAt?: string; note?: string },
+    body: {
+      supplierId: number;
+      amount: number;
+      invoiceId?: number | null;
+      method?: string;
+      paidAt?: string;
+      note?: string;
+    },
     userId: number
   ) {
     if (!body.supplierId || !(body.amount > 0)) {
@@ -123,6 +131,8 @@ export const payablesService = {
       entity_id: id,
       details: JSON.stringify({ supplierId: body.supplierId, amount: body.amount }),
     });
+
+    invalidateAnalyticsCache();
 
     return { id };
   },

@@ -8,6 +8,7 @@ import { SettingModel } from '../models/Setting';
 import { InventoryLogType } from '../types';
 import { AppError } from '../middleware/errorHandler';
 import { buildPagination } from '../utils/helpers';
+import { invalidateAnalyticsCache } from '../utils/cache';
 
 export interface AdjustStockOptions {
   productId: number;
@@ -109,11 +110,7 @@ export async function adjustStockTx(
 export const inventoryService = {
   async getAll(filters: any) {
     const result = await InventoryModel.findAll(filters);
-    const pagination = buildPagination(
-      filters.page || 1,
-      filters.pageSize || 20,
-      result.total
-    );
+    const pagination = buildPagination(filters.page || 1, filters.pageSize || 20, result.total);
 
     const items = result.items.map((item: any) => ({
       id: item.id,
@@ -167,6 +164,8 @@ export const inventoryService = {
       details: JSON.stringify({ type, quantity, before, after, reason }),
     });
 
+    invalidateAnalyticsCache();
+
     // 检查库存预警
     await this.checkStockAlert(productId, after);
 
@@ -188,6 +187,8 @@ export const inventoryService = {
       entity_id: productId,
       details: JSON.stringify({ safeStock }),
     });
+
+    invalidateAnalyticsCache();
   },
 
   async getLogs(productId: number, filters: any) {
@@ -197,11 +198,7 @@ export const inventoryService = {
     }
 
     const { items, total } = await InventoryLogModel.findByProductId(productId, filters);
-    const pagination = buildPagination(
-      filters.page || 1,
-      filters.pageSize || 20,
-      total
-    );
+    const pagination = buildPagination(filters.page || 1, filters.pageSize || 20, total);
 
     const formattedItems = items.map((item: any) => ({
       id: item.id,
@@ -219,7 +216,12 @@ export const inventoryService = {
   },
 
   async stocktake(
-    items: Array<{ productId: number; actualQuantity: number; systemQuantity: number; notes: string }>,
+    items: Array<{
+      productId: number;
+      actualQuantity: number;
+      systemQuantity: number;
+      notes: string;
+    }>,
     notes: string,
     userId: number
   ) {
@@ -229,7 +231,10 @@ export const inventoryService = {
       const diff = item.actualQuantity - item.systemQuantity;
       if (diff === 0) continue;
 
-      const { before, after } = await InventoryModel.setQuantity(item.productId, item.actualQuantity);
+      const { before, after } = await InventoryModel.setQuantity(
+        item.productId,
+        item.actualQuantity
+      );
 
       await InventoryLogModel.create({
         product_id: item.productId,
@@ -250,6 +255,10 @@ export const inventoryService = {
       entity_type: 'inventory',
       details: JSON.stringify({ itemCount: items.length, notes, adjustments: results.length }),
     });
+
+    if (results.length > 0) {
+      invalidateAnalyticsCache();
+    }
 
     return { adjustedCount: results.length, results };
   },

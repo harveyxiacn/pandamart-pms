@@ -8,14 +8,15 @@ import { validate } from '../middleware/validator';
 import { productService } from '../services/product.service';
 import { InvoiceItemModel } from '../models/InvoiceItem';
 import { AuthRequest } from '../types';
-import { sendSuccess, sendError, parsePagination, buildPagination } from '../utils/helpers';
+import { sendSuccess, sendError, parsePagination, parseBoundedInt } from '../utils/helpers';
 import * as XLSX from 'xlsx';
-import { ProductModel } from '../models/Product';
 import db from '../config/database';
 
 const router = Router();
 
-function redactProductPrice<T extends Record<string, any>>(product: T): Omit<T, 'default_price' | 'defaultPrice'> {
+function redactProductPrice<T extends Record<string, any>>(
+  product: T
+): Omit<T, 'default_price' | 'defaultPrice'> {
   const clone: Record<string, any> = { ...product };
   delete clone.default_price;
   delete clone.defaultPrice;
@@ -58,13 +59,13 @@ router.get('/export', authenticate, adminOnly, async (_req: AuthRequest, res: Re
 
     const data = products.map((p: any) => ({
       SKU: p.sku || '',
-      '英文名': p.name_en,
-      '中文名': p.name_zh || '',
-      '分类': p.category_name || '',
-      '默认供应商': p.supplier_name || '',
-      '默认单位': p.default_unit,
-      '默认进价': p.default_price || '',
-      '状态': p.is_active ? '启用' : '停用',
+      英文名: p.name_en,
+      中文名: p.name_zh || '',
+      分类: p.category_name || '',
+      默认供应商: p.supplier_name || '',
+      默认单位: p.default_unit,
+      默认进价: p.default_price || '',
+      状态: p.is_active ? '启用' : '停用',
     }));
 
     const wb = XLSX.utils.book_new();
@@ -72,7 +73,10 @@ router.get('/export', authenticate, adminOnly, async (_req: AuthRequest, res: Re
     XLSX.utils.book_append_sheet(wb, ws, '产品列表');
     const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
 
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
     res.setHeader('Content-Disposition', 'attachment; filename=products.xlsx');
     res.send(buffer);
   } catch (err: any) {
@@ -211,23 +215,33 @@ router.post(
 
       for (const row of rows) {
         const nameEn = row['英文名'] || row['name_en'] || row['Name'] || '';
-        if (!nameEn) { skipped++; continue; }
+        if (!nameEn) {
+          skipped++;
+          continue;
+        }
 
         try {
-          await productService.create({
-            sku: row['SKU'] || row['sku'] || null,
-            nameEn,
-            nameZh: row['中文名'] || row['name_zh'] || null,
-            defaultUnit: row['单位'] || row['unit'] || 'Case',
-            defaultPrice: row['进价'] || row['price'] || null,
-          }, req.user!.sub);
+          await productService.create(
+            {
+              sku: row['SKU'] || row['sku'] || null,
+              nameEn,
+              nameZh: row['中文名'] || row['name_zh'] || null,
+              defaultUnit: row['单位'] || row['unit'] || 'Case',
+              defaultPrice: row['进价'] || row['price'] || null,
+            },
+            req.user!.sub
+          );
           created++;
         } catch {
           skipped++;
         }
       }
 
-      sendSuccess(res, { created, skipped, total: rows.length }, `导入完成：${created}个产品已创建，${skipped}个已跳过`);
+      sendSuccess(
+        res,
+        { created, skipped, total: rows.length },
+        `导入完成：${created}个产品已创建，${skipped}个已跳过`
+      );
     } catch (err: any) {
       sendError(res, 500, 'INTERNAL_ERROR', err.message);
     }
@@ -235,27 +249,44 @@ router.post(
 );
 
 // GET /api/v1/products/:id/price-history
-router.get('/:id/price-history', authenticate, adminOnly, async (req: AuthRequest, res: Response) => {
-  try {
-    const id = parseInt(req.params.id as string);
-    await productService.getById(id); // 验证存在
+router.get(
+  '/:id/price-history',
+  authenticate,
+  adminOnly,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string);
+      await productService.getById(id); // 验证存在
 
-    const history = await InvoiceItemModel.getPriceHistory(id, {
-      dateFrom: req.query.dateFrom as string,
-      dateTo: req.query.dateTo as string,
-      limit: req.query.limit ? parseInt(req.query.limit as string) : 50,
-    });
+      const history = await InvoiceItemModel.getPriceHistory(id, {
+        dateFrom: req.query.dateFrom as string,
+        dateTo: req.query.dateTo as string,
+        limit: parseBoundedInt(req.query.limit, { defaultValue: 50, min: 1, max: 100 }),
+        months: parseBoundedInt(req.query.months, { defaultValue: 6, min: 1, max: 36 }),
+        supplierId: req.query.supplierId
+          ? parseBoundedInt(req.query.supplierId, {
+              defaultValue: 0,
+              min: 1,
+              max: Number.MAX_SAFE_INTEGER,
+            })
+          : undefined,
+        groupBy: req.query.groupBy === 'month' ? 'month' : 'invoice',
+      });
 
-    sendSuccess(res, history.map((h: any) => ({
-      date: h.date,
-      unitPrice: Number(h.unit_price),
-      quantity: Number(h.quantity),
-      supplierName: h.supplier_name,
-      invoiceNumber: h.invoice_number,
-    })));
-  } catch (err: any) {
-    sendError(res, err.statusCode || 500, err.code || 'INTERNAL_ERROR', err.message);
+      sendSuccess(
+        res,
+        history.map((h: any) => ({
+          date: h.date,
+          unitPrice: Number(h.unit_price),
+          quantity: Number(h.quantity),
+          supplierName: h.supplier_name,
+          invoiceNumber: h.invoice_number,
+        }))
+      );
+    } catch (err: any) {
+      sendError(res, err.statusCode || 500, err.code || 'INTERNAL_ERROR', err.message);
+    }
   }
-});
+);
 
 export default router;

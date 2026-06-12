@@ -275,7 +275,7 @@ export default function SalesPage() {
             </Button>
           </div>
         ) : orders.length === 0 ? (
-          <EmptyState title="暂无销售记录" description="完成一笔销售后会显示在这里。" />
+          <EmptyState title="暂无销售记录" description="完成一笔销售后会显示在这里。点击「新增销售」开始第一笔出库。" />
         ) : (
           <>
             <Table>

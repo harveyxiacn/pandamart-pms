@@ -6,6 +6,7 @@ import { buildPagination } from '../utils/helpers';
 import { inventoryService, adjustStockTx } from './inventory.service';
 import { DEFAULT_STORE_ID } from '../config/store';
 import { CreateSaleBody } from '../types';
+import { invalidateAnalyticsCache } from '../utils/cache';
 
 function generateOrderNo(): string {
   const now = new Date();
@@ -144,6 +145,8 @@ export const salesService = {
       details: JSON.stringify({ total: result.total, itemCount: body.items.length }),
     });
 
+    invalidateAnalyticsCache();
+
     // 事务外检查库存预警（避免在事务里发通知）
     for (const p of affectedProducts) {
       await inventoryService.checkStockAlert(p.productId, p.after);
@@ -232,6 +235,8 @@ export const salesService = {
       entity_id: id,
       details: JSON.stringify({ restocked: restocked.length }),
     });
+
+    invalidateAnalyticsCache();
 
     return this.getById(id);
   },

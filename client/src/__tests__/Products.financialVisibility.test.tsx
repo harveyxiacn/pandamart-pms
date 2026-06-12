@@ -1,19 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import ProductsPage from "../pages/ProductsPage";
 import { useAuthStore } from "../store/authStore";
 
 const getProductsMock = vi.fn();
 const getCategoryFlatMock = vi.fn();
 const getSuppliersMock = vi.fn();
+const getProductPriceHistoryMock = vi.fn();
 
 vi.mock("../api/products", () => ({
   getProducts: (...args: unknown[]) => getProductsMock(...args),
   createProduct: vi.fn(),
   updateProduct: vi.fn(),
   deleteProduct: vi.fn(),
-  getProductPriceHistory: vi.fn(),
+  getProductPriceHistory: (...args: unknown[]) => getProductPriceHistoryMock(...args),
   importProducts: vi.fn(),
+  uploadProductImage: vi.fn(),
 }));
 
 vi.mock("../api/categories", () => ({
@@ -64,22 +67,50 @@ describe("Products financial visibility", () => {
       items: [],
       pagination: { page: 1, pageSize: 200, total: 0, totalPages: 0 },
     });
+    getProductPriceHistoryMock.mockResolvedValue([]);
   });
 
   afterEach(() => {
+    cleanup();
     useAuthStore.setState({ token: null, user: null });
     localStorage.clear();
     getProductsMock.mockReset();
     getCategoryFlatMock.mockReset();
     getSuppliersMock.mockReset();
+    getProductPriceHistoryMock.mockReset();
   });
 
-  it("hides default price and price-history UI for staff", async () => {
+  it("hides default price and price-trend UI for staff", async () => {
     render(<ProductsPage />);
 
     await screen.findByText("绍菜");
 
-    expect(screen.queryByText("默认价")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "价格历史" })).not.toBeInTheDocument();
+    expect(screen.queryByText("进价")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "价格趋势" })).not.toBeInTheDocument();
+  });
+
+  it("loads six-month invoice price trend by default for admins", async () => {
+    useAuthStore.setState({
+      token: "admin-token",
+      user: {
+        id: 1,
+        username: "admin",
+        displayName: "管理员",
+        role: "admin",
+        email: "admin@pandamart.com",
+      },
+    });
+
+    render(<ProductsPage />);
+
+    await screen.findByText("绍菜");
+    await userEvent.click(screen.getByRole("button", { name: "价格趋势" }));
+
+    await waitFor(() => {
+      expect(getProductPriceHistoryMock).toHaveBeenCalledWith(11, {
+        months: 6,
+        groupBy: "invoice",
+      });
+    });
   });
 });

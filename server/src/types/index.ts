@@ -5,6 +5,7 @@ export interface JwtPayload {
   sub: number;
   username: string;
   role: 'admin' | 'staff';
+  tv?: number; // token_version：与库中用户当前 token_version 比对，用于令牌失效
   iat?: number;
   exp?: number;
 }
@@ -24,6 +25,7 @@ export interface UserRow {
   last_login_at: Date | null;
   login_attempts: number;
   locked_until: Date | null;
+  token_version: number;
   created_at: Date;
   updated_at: Date;
 }
@@ -130,6 +132,7 @@ export type InventoryLogType = 'in' | 'out' | 'adjust' | 'stocktake';
 export interface InventoryRow {
   id: number;
   product_id: number;
+  store_id: number; // 多店预留（迁移 016）：库存唯一键为 (product_id, store_id)
   quantity: number;
   unit: string;
   safe_stock: number | null;

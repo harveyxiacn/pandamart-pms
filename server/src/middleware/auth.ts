@@ -45,6 +45,14 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
       return;
     }
 
+    // 令牌失效校验：token 的 tv 必须与库中当前 token_version 一致。
+    // 改密/管理员重置/改角色会递增 token_version，使此前签发的令牌立即失效。
+    // 旧令牌不含 tv（视为 0），与初始 token_version=0 相等，故升级当下不强制全员重登。
+    if (Number(decoded.tv ?? 0) !== Number(user.token_version ?? 0)) {
+      sendError(res, 401, 'TOKEN_REVOKED', '登录状态已失效，请重新登录');
+      return;
+    }
+
     req.user = {
       sub: user.id,
       username: user.username,

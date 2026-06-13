@@ -689,7 +689,9 @@ export const analyticsService = {
       .whereNull('products.deleted_at')
       .whereNotNull('inventory.safe_stock')
       .whereRaw('inventory.quantity < inventory.safe_stock')
-      .orderByRaw('(inventory.safe_stock - inventory.quantity) DESC');
+      .orderByRaw('(inventory.safe_stock - inventory.quantity) DESC')
+      // 结果上限：补货建议按缺口降序取最紧急的前 N 项，避免大目录下无界返回（PERF-N2）
+      .limit(200);
 
     // 一次性批量查询所有低库存产品近4周的出库消耗，避免在循环内逐个查询（N+1）
     const productIds = data.map((row: any) => row.productId);

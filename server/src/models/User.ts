@@ -49,4 +49,9 @@ export const UserModel = {
       updated_at: db.fn.now(),
     });
   },
+
+  // 递增 token_version：使该用户此前签发的所有 JWT 立即失效（改密/重置/改角色时调用）。
+  async bumpTokenVersion(id: number): Promise<void> {
+    await db(TABLE).where({ id }).increment('token_version', 1).update({ updated_at: db.fn.now() });
+  },
 };

@@ -98,6 +98,11 @@ router.put(
 
       await UserModel.update(id, updateData);
 
+      // 角色变更后使该用户旧令牌失效，强制以新角色重新登录（避免旧令牌携带过期角色）
+      if (req.body.role && req.body.role !== user.role) {
+        await UserModel.bumpTokenVersion(id);
+      }
+
       await AuditLogModel.create({
         user_id: req.user!.sub,
         action: 'update',
@@ -173,6 +178,8 @@ router.put(
 
       const passwordHash = await authService.hashPassword(req.body.newPassword);
       await UserModel.update(id, { password_hash: passwordHash } as any);
+      // 管理员重置密码后使该用户旧令牌全部失效
+      await UserModel.bumpTokenVersion(id);
 
       await AuditLogModel.create({
         user_id: req.user!.sub,

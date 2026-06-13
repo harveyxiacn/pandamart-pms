@@ -81,6 +81,7 @@ export const authService = {
       sub: user.id,
       username: user.username,
       role: user.role,
+      tv: user.token_version ?? 0,
     };
 
     const token = jwt.sign(payload, env.jwt.secret, {
@@ -127,6 +128,8 @@ export const authService = {
     ensureStrongPassword(newPassword);
     const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
     await UserModel.update(userId, { password_hash: passwordHash } as any);
+    // 改密后使旧令牌全部失效
+    await UserModel.bumpTokenVersion(userId);
 
     await AuditLogModel.create({
       user_id: userId,

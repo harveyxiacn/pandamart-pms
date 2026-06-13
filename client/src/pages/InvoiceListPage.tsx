@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { confirmInvoice, deleteInvoice, getInvoiceById, getInvoices, rollbackInvoiceConfirm, updateInvoice } from "../api/invoices";
 import { getSuppliers } from "../api/suppliers";
 import type { InvoiceDetail, InvoiceSummary, Supplier } from "../types";
@@ -156,6 +157,9 @@ export default function InvoiceListPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  // 记录已通过深链打开的发票 id，避免重复触发
+  const openedDeepLinkRef = useRef<number | null>(null);
 
   const debouncedKeyword = useDebounce(keyword, 400);
 
@@ -184,6 +188,24 @@ export default function InvoiceListPage() {
       .then((res) => setSuppliers(res.items))
       .catch(() => setSuppliers([]));
   }, []);
+
+  // 深链支持：/invoices?id=123（来自 Header 搜索结果与 Dashboard 近期发票卡片）
+  // 列表加载完成后自动打开对应发票详情，每个 id 仅触发一次
+  useEffect(() => {
+    if (loading) return;
+    const idParam = searchParams.get("id");
+    if (!idParam) return;
+    const id = Number(idParam);
+    if (!Number.isFinite(id) || id <= 0) return;
+    if (openedDeepLinkRef.current === id) return;
+    openedDeepLinkRef.current = id;
+    void openDetail(id);
+    // 打开后清除 URL 中的 ?id=，避免刷新或返回时重复打开
+    const next = new URLSearchParams(searchParams);
+    next.delete("id");
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, searchParams]);
 
   const openDetail = async (invoiceId: number) => {
     setActionMessage(null);

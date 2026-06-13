@@ -67,6 +67,10 @@ export const env = {
 // 收紧为硬失败前，请先确保生产 .env 满足以下条件。
 const isProd = env.nodeEnv === 'production';
 if (env.jwt.secret.length < 32) {
+  // 生产环境硬失败（与 AI_ENCRYPTION_KEY 一致），杜绝弱密钥被离线暴力破解伪造令牌；非生产仅告警，避免阻塞开发。
+  if (isProd) {
+    throw new Error('JWT_SECRET 长度不足 32 位，生产环境拒绝启动，请改用 ≥32 位高强度随机串。');
+  }
   console.warn('[env] 警告: JWT_SECRET 长度不足 32 位，存在被离线暴力破解伪造令牌的风险，建议改用 ≥32 位高强度随机串。');
 }
 if (isProd && !(process.env.DB_PASSWORD || '').trim()) {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -43,7 +43,7 @@ const SALES_COLOR = "#ec9f39";
 
 /** Truncate long product names for chart axes */
 function shortName(name: string, max = 8): string {
-  return name.length > max ? name.slice(0, max) + "\u2026" : name;
+  return name.length > max ? name.slice(0, max) + "…" : name;
 }
 
 /** Color for reorder urgency */
@@ -72,6 +72,11 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // 请求竞态守卫：每次 load 自增，setState 前比对，丢弃过期请求结果（FE-N3）
+  const reqIdRef = useRef(0);
+  // 日期区间是否反向（dateFrom > dateTo），用于行内提示（FE-N4）
+  const invalidRange = Boolean(dateFrom && dateTo && dateFrom > dateTo);
+
   const dateParams = useMemo(() => {
     const p: Record<string, string> = {};
     if (dateFrom) p.dateFrom = dateFrom;
@@ -80,6 +85,13 @@ export default function AnalyticsPage() {
   }, [dateFrom, dateTo]);
 
   const load = async () => {
+    // 反向日期区间守卫：dateFrom > dateTo 时（YYYY-MM-DD 字符串可直接比较）
+    // 直接终止，避免后端 WHERE 互斥导致静默空结果。必须先 setLoading(false) 否则 spinner 卡住（FE-N4）
+    if (dateFrom && dateTo && dateFrom > dateTo) {
+      setLoading(false);
+      return;
+    }
+    const myReq = ++reqIdRef.current;
     setLoading(true);
     setError(null);
     try {
@@ -96,6 +108,8 @@ export default function AnalyticsPage() {
           getProfitByCategory(dateParams),
           getSlowMovers({ days: 30, limit: 10 }),
         ]);
+      // 过期请求（更晚发起的请求已抢占 reqId）直接丢弃结果，避免覆盖新数据（FE-N3）
+      if (myReq !== reqIdRef.current) return;
       setPurchaseTrend(purchaseRes);
       setSalesTrend(salesRes);
       setSupplierDist(supplierRes);
@@ -107,9 +121,10 @@ export default function AnalyticsPage() {
       setProfitByCat(profitCatRes);
       setSlowMovers(slowRes);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "\u5206\u6790\u6570\u636e\u52a0\u8f7d\u5931\u8d25");
+      if (myReq !== reqIdRef.current) return;
+      setError(err instanceof Error ? err.message : "分析数据加载失败");
     } finally {
-      setLoading(false);
+      if (myReq === reqIdRef.current) setLoading(false);
     }
   };
 
@@ -161,31 +176,36 @@ export default function AnalyticsPage() {
       {/* ── Header: period + date range picker ──────────── */}
       <Card>
         <div className="flex flex-wrap items-center gap-3">
-          <h2 className="text-lg font-bold">\u6570\u636e\u5206\u6790\u4e2d\u5fc3</h2>
+          <h2 className="text-lg font-bold">数据分析中心</h2>
           <Select value={period} onChange={(e) => setPeriod(e.target.value)} className="w-32">
-            <option value="day">\u6309\u5929</option>
-            <option value="week">\u6309\u5468</option>
-            <option value="month">\u6309\u6708</option>
+            <option value="day">按天</option>
+            <option value="week">按周</option>
+            <option value="month">按月</option>
           </Select>
           <div className="flex items-center gap-2 text-sm">
-            <label className="text-slate-500">\u4ece</label>
+            <label className="text-slate-500">从</label>
             <input
               type="date"
               value={dateFrom}
+              max={dateTo || undefined}
               onChange={(e) => setDateFrom(e.target.value)}
               className="rounded border border-slate-300 px-2 py-1 text-sm"
             />
-            <label className="text-slate-500">\u81f3</label>
+            <label className="text-slate-500">至</label>
             <input
               type="date"
               value={dateTo}
+              min={dateFrom || undefined}
               onChange={(e) => setDateTo(e.target.value)}
               className="rounded border border-slate-300 px-2 py-1 text-sm"
             />
             {(dateFrom || dateTo) && (
               <button onClick={() => { setDateFrom(""); setDateTo(""); }} className="text-xs text-pine hover:underline">
-                \u6e05\u9664
+                清除
               </button>
+            )}
+            {invalidRange && (
+              <span className="text-xs text-rose-600">起始日期不能晚于结束日期</span>
             )}
           </div>
         </div>
@@ -194,19 +214,19 @@ export default function AnalyticsPage() {
       {/* ── Summary KPIs ─────────────────────────────────── */}
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Card>
-          <p className="text-xs text-slate-500">\u91c7\u8d2d\u603b\u989d</p>
+          <p className="text-xs text-slate-500">采购总额</p>
           <p className="text-2xl font-bold text-pine">{formatCurrency(summaryStats.totalPurchase)}</p>
         </Card>
         <Card>
-          <p className="text-xs text-slate-500">\u5e73\u5747\u5355\u636e\u91d1\u989d</p>
+          <p className="text-xs text-slate-500">平均单据金额</p>
           <p className="text-2xl font-bold text-slate-700">{formatCurrency(summaryStats.avgOrder)}</p>
         </Card>
         <Card>
-          <p className="text-xs text-slate-500">\u6d3b\u8dc3\u4f9b\u5e94\u5546</p>
+          <p className="text-xs text-slate-500">活跃供应商</p>
           <p className="text-2xl font-bold text-teal-700">{summaryStats.supplierCount}</p>
         </Card>
         <Card>
-          <p className="text-xs text-slate-500">\u9700\u8865\u8d27\u5546\u54c1</p>
+          <p className="text-xs text-slate-500">需补货商品</p>
           <p className={cn("text-2xl font-bold", summaryStats.reorderCount > 0 ? "text-rose-600" : "text-emerald-600")}>
             {summaryStats.reorderCount}
           </p>
@@ -216,20 +236,20 @@ export default function AnalyticsPage() {
       {/* ── Profit KPIs ──────────────────────────────────── */}
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Card>
-          <p className="text-xs text-slate-500">\u9500\u552e\u989d\uff08\u5df2\u5b8c\u6210\uff09</p>
+          <p className="text-xs text-slate-500">销售额（已完成）</p>
           <p className="text-2xl font-bold text-pine">{formatCurrency(profit?.revenue ?? 0)}</p>
-          <p className="text-xs text-slate-400">{profit?.orderCount ?? 0} \u7b14\u8ba2\u5355</p>
+          <p className="text-xs text-slate-400">{profit?.orderCount ?? 0} 笔订单</p>
         </Card>
         <Card>
-          <p className="text-xs text-slate-500">\u9500\u552e\u6210\u672c</p>
+          <p className="text-xs text-slate-500">销售成本</p>
           <p className="text-2xl font-bold text-slate-700">{formatCurrency(profit?.cost ?? 0)}</p>
         </Card>
         <Card>
-          <p className="text-xs text-slate-500">\u6bdb\u5229</p>
+          <p className="text-xs text-slate-500">毛利</p>
           <p className="text-2xl font-bold text-emerald-700">{formatCurrency(profit?.grossProfit ?? 0)}</p>
         </Card>
         <Card>
-          <p className="text-xs text-slate-500">\u6bdb\u5229\u7387</p>
+          <p className="text-xs text-slate-500">毛利率</p>
           <p className="text-2xl font-bold text-amber-600">{profit?.margin ?? 0}%</p>
         </Card>
       </section>
@@ -237,10 +257,10 @@ export default function AnalyticsPage() {
       {/* ── Dual trend + Supplier pie ───────────────────── */}
       <section className="grid gap-4 xl:grid-cols-5">
         <Card className="xl:col-span-3">
-          <h3 className="mb-2 font-bold">\u91c7\u8d2d & \u9500\u552e\u8d8b\u52bf</h3>
+          <h3 className="mb-2 font-bold">采购 & 销售趋势</h3>
           <div className="h-72">
             {mergedTrend.length === 0 ? (
-              <p className="pt-10 text-center text-sm text-slate-500">\u6682\u65e0\u6570\u636e</p>
+              <p className="pt-10 text-center text-sm text-slate-500">暂无数据</p>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={mergedTrend}>
@@ -259,8 +279,8 @@ export default function AnalyticsPage() {
                   <YAxis tick={{ fontSize: 11 }} />
                   <Tooltip formatter={(v) => formatCurrency(Number(v ?? 0))} />
                   <Legend />
-                  <Area type="monotone" dataKey="purchase" stroke={PURCHASE_COLOR} fill="url(#pFill)" name="\u91c7\u8d2d\u91d1\u989d" />
-                  <Area type="monotone" dataKey="sales" stroke={SALES_COLOR} fill="url(#sFill)" name="\u9500\u552e\u91d1\u989d" />
+                  <Area type="monotone" dataKey="purchase" stroke={PURCHASE_COLOR} fill="url(#pFill)" name="采购金额" />
+                  <Area type="monotone" dataKey="sales" stroke={SALES_COLOR} fill="url(#sFill)" name="销售金额" />
                 </AreaChart>
               </ResponsiveContainer>
             )}
@@ -268,10 +288,10 @@ export default function AnalyticsPage() {
         </Card>
 
         <Card className="xl:col-span-2">
-          <h3 className="mb-2 font-bold">\u4f9b\u5e94\u5546\u91c7\u8d2d\u5360\u6bd4</h3>
+          <h3 className="mb-2 font-bold">供应商采购占比</h3>
           <div className="h-72">
             {supplierDist.length === 0 ? (
-              <p className="pt-10 text-center text-sm text-slate-500">\u6682\u65e0\u6570\u636e</p>
+              <p className="pt-10 text-center text-sm text-slate-500">暂无数据</p>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -291,10 +311,10 @@ export default function AnalyticsPage() {
       {/* ── Category bar + Profit-by-category bar ────────── */}
       <section className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <h3 className="mb-2 font-bold">\u5206\u7c7b\u91c7\u8d2d\u5206\u5e03</h3>
+          <h3 className="mb-2 font-bold">分类采购分布</h3>
           <div className="h-72">
             {categoryDist.length === 0 ? (
-              <p className="text-center text-sm text-slate-500">\u6682\u65e0\u6570\u636e</p>
+              <p className="text-center text-sm text-slate-500">暂无数据</p>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart layout="vertical" data={categoryDist.slice(0, 8)} margin={{ left: 20 }}>
@@ -302,7 +322,7 @@ export default function AnalyticsPage() {
                   <XAxis type="number" tick={{ fontSize: 11 }} />
                   <YAxis type="category" dataKey="categoryName" width={80} tick={{ fontSize: 12 }} />
                   <Tooltip formatter={(v) => formatCurrency(Number(v ?? 0))} />
-                  <Bar dataKey="totalAmount" name="\u91c7\u8d2d\u91d1\u989d" radius={[0, 4, 4, 0]}>
+                  <Bar dataKey="totalAmount" name="采购金额" radius={[0, 4, 4, 0]}>
                     {categoryDist.slice(0, 8).map((_, i) => (
                       <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                     ))}
@@ -314,10 +334,10 @@ export default function AnalyticsPage() {
         </Card>
 
         <Card>
-          <h3 className="mb-2 font-bold">\u5206\u7c7b\u6bdb\u5229\u5206\u6790</h3>
+          <h3 className="mb-2 font-bold">分类毛利分析</h3>
           <div className="h-72">
             {profitByCat.length === 0 ? (
-              <p className="text-center text-sm text-slate-500">\u6682\u65e0\u9500\u552e\u6570\u636e</p>
+              <p className="text-center text-sm text-slate-500">暂无销售数据</p>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart layout="vertical" data={profitByCat.slice(0, 8)} margin={{ left: 20 }}>
@@ -326,8 +346,8 @@ export default function AnalyticsPage() {
                   <YAxis type="category" dataKey="category" width={80} tick={{ fontSize: 12 }} />
                   <Tooltip formatter={(v) => formatCurrency(Number(v ?? 0))} />
                   <Legend />
-                  <Bar dataKey="revenue" name="\u9500\u552e\u989d" fill={PURCHASE_COLOR} radius={[0, 4, 4, 0]} />
-                  <Bar dataKey="cost" name="\u6210\u672c" fill="#94a3b8" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="revenue" name="销售额" fill={PURCHASE_COLOR} radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="cost" name="成本" fill="#94a3b8" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -338,10 +358,10 @@ export default function AnalyticsPage() {
       {/* ── Product ranking bar + Price changes grouped bar */}
       <section className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <h3 className="mb-2 font-bold">\u7545\u9500\u4ea7\u54c1 Top 10</h3>
+          <h3 className="mb-2 font-bold">畅销产品 Top 10</h3>
           <div className="h-72">
             {ranking.length === 0 ? (
-              <p className="text-center text-sm text-slate-500">\u6682\u65e0\u6570\u636e</p>
+              <p className="text-center text-sm text-slate-500">暂无数据</p>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
@@ -356,7 +376,7 @@ export default function AnalyticsPage() {
                   <XAxis type="number" tick={{ fontSize: 11 }} />
                   <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 11 }} />
                   <Tooltip formatter={(v) => formatCurrency(Number(v ?? 0))} />
-                  <Bar dataKey="amount" name="\u91c7\u8d2d\u91d1\u989d" radius={[0, 4, 4, 0]}>
+                  <Bar dataKey="amount" name="采购金额" radius={[0, 4, 4, 0]}>
                     {ranking.map((_, i) => (
                       <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                     ))}
@@ -368,10 +388,10 @@ export default function AnalyticsPage() {
         </Card>
 
         <Card>
-          <h3 className="mb-2 font-bold">\u4ef7\u683c\u6ce2\u52a8\u5bf9\u6bd4</h3>
+          <h3 className="mb-2 font-bold">价格波动对比</h3>
           <div className="h-72">
             {priceChanges.length === 0 ? (
-              <p className="text-center text-sm text-slate-500">\u6682\u65e0\u4ef7\u683c\u5f02\u5e38</p>
+              <p className="text-center text-sm text-slate-500">暂无价格异常</p>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
@@ -388,8 +408,8 @@ export default function AnalyticsPage() {
                   <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 11 }} />
                   <Tooltip formatter={(v) => formatCurrency(Number(v ?? 0))} />
                   <Legend />
-                  <Bar dataKey="previous" name="\u539f\u4ef7" fill="#94a3b8" radius={[0, 4, 4, 0]} />
-                  <Bar dataKey="current" name="\u73b0\u4ef7" fill={SALES_COLOR} radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="previous" name="原价" fill="#94a3b8" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="current" name="现价" fill={SALES_COLOR} radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -400,10 +420,10 @@ export default function AnalyticsPage() {
       {/* ── Reorder urgency + Profit top products ────────── */}
       <section className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <h3 className="mb-2 font-bold">\u8865\u8d27\u9700\u6c42\u4e00\u89c8</h3>
+          <h3 className="mb-2 font-bold">补货需求一览</h3>
           <div className="h-80">
             {reorders.length === 0 ? (
-              <p className="text-center text-sm text-slate-500">\u6682\u65e0\u7f3a\u8d27\u98ce\u9669</p>
+              <p className="text-center text-sm text-slate-500">暂无缺货风险</p>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
@@ -421,12 +441,12 @@ export default function AnalyticsPage() {
                   <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 11 }} />
                   <Tooltip />
                   <Legend />
-                  <Bar dataKey="current" name="\u5f53\u524d\u5e93\u5b58" radius={[0, 4, 4, 0]}>
+                  <Bar dataKey="current" name="当前库存" radius={[0, 4, 4, 0]}>
                     {reorders.slice(0, 12).map((r, i) => (
                       <Cell key={i} fill={urgencyColor(String(r.urgency || "low"))} />
                     ))}
                   </Bar>
-                  <Bar dataKey="safe" name="\u5b89\u5168\u5e93\u5b58" fill="#94a3b8" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="safe" name="安全库存" fill="#94a3b8" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -434,10 +454,10 @@ export default function AnalyticsPage() {
         </Card>
 
         <Card>
-          <h3 className="mb-2 font-bold">\u6bdb\u5229\u8d21\u732e Top 10</h3>
+          <h3 className="mb-2 font-bold">毛利贡献 Top 10</h3>
           <div className="h-80">
             {!profit || profit.topProducts.length === 0 ? (
-              <p className="text-center text-sm text-slate-500">\u6682\u65e0\u9500\u552e\u6570\u636e</p>
+              <p className="text-center text-sm text-slate-500">暂无销售数据</p>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
@@ -454,8 +474,8 @@ export default function AnalyticsPage() {
                   <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 11 }} />
                   <Tooltip formatter={(v) => formatCurrency(Number(v ?? 0))} />
                   <Legend />
-                  <Bar dataKey="revenue" name="\u9500\u552e\u989d" fill={PURCHASE_COLOR} radius={[0, 4, 4, 0]} />
-                  <Bar dataKey="profit" name="\u6bdb\u5229" fill="#1e7d9b" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="revenue" name="销售额" fill={PURCHASE_COLOR} radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="profit" name="毛利" fill="#1e7d9b" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -465,10 +485,10 @@ export default function AnalyticsPage() {
 
       {/* ── Slow movers ─────────────────────────────────── */}
       <Card>
-        <h3 className="mb-2 font-bold">{`\u6ede\u9500\u9884\u8b66\uff08\u8fd1 ${slowMovers?.days ?? 30} \u5929\uff09`}</h3>
+        <h3 className="mb-2 font-bold">{`滞销预警（近 ${slowMovers?.days ?? 30} 天）`}</h3>
         <div className="h-64">
           {!slowMovers || slowMovers.items.length === 0 ? (
-            <p className="text-center text-sm text-slate-500">\u6682\u65e0\u6ede\u9500\u5546\u54c1</p>
+            <p className="text-center text-sm text-slate-500">暂无滞销商品</p>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
@@ -485,8 +505,8 @@ export default function AnalyticsPage() {
                 <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 11 }} />
                 <Tooltip />
                 <Legend />
-                <Bar dataKey="stock" name="\u5f53\u524d\u5e93\u5b58" fill="#475569" radius={[0, 4, 4, 0]} />
-                <Bar dataKey="sold" name="\u8fd130\u5929\u552e\u51fa" fill={SALES_COLOR} radius={[0, 4, 4, 0]} />
+                <Bar dataKey="stock" name="当前库存" fill="#475569" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="sold" name="近30天售出" fill={SALES_COLOR} radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}

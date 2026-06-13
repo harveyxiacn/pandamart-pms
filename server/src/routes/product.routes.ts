@@ -9,6 +9,7 @@ import { productService } from '../services/product.service';
 import { InvoiceItemModel } from '../models/InvoiceItem';
 import { AuthRequest } from '../types';
 import { sendSuccess, sendError, parsePagination, parseBoundedInt } from '../utils/helpers';
+import { sendRouteError } from '../utils/routeError';
 import * as XLSX from 'xlsx';
 import db from '../config/database';
 
@@ -43,7 +44,7 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
     }
     sendSuccess(res, result);
   } catch (err: any) {
-    sendError(res, 500, 'INTERNAL_ERROR', err.message);
+    sendRouteError(res, err);
   }
 });
 
@@ -80,7 +81,7 @@ router.get('/export', authenticate, adminOnly, async (_req: AuthRequest, res: Re
     res.setHeader('Content-Disposition', 'attachment; filename=products.xlsx');
     res.send(buffer);
   } catch (err: any) {
-    sendError(res, 500, 'INTERNAL_ERROR', err.message);
+    sendRouteError(res, err);
   }
 });
 
@@ -91,7 +92,7 @@ router.get('/by-barcode/:code', authenticate, async (req: AuthRequest, res: Resp
     const product = await productService.getByBarcode(req.params.code as string);
     sendSuccess(res, isStaff ? redactProductPrice(product as any) : product);
   } catch (err: any) {
-    sendError(res, err.statusCode || 500, err.code || 'INTERNAL_ERROR', err.message);
+    sendRouteError(res, err);
   }
 });
 
@@ -103,7 +104,7 @@ router.get('/:id', authenticate, async (req: AuthRequest, res: Response) => {
     const product = await productService.getById(id);
     sendSuccess(res, isStaff ? redactProductPrice(product as any) : product);
   } catch (err: any) {
-    sendError(res, err.statusCode || 500, err.code || 'INTERNAL_ERROR', err.message);
+    sendRouteError(res, err);
   }
 });
 
@@ -125,7 +126,7 @@ router.get('/:id/image', authenticate, async (req: AuthRequest, res: Response) =
     }
     res.sendFile(filePath);
   } catch (err: any) {
-    sendError(res, err.statusCode || 500, err.code || 'INTERNAL_ERROR', err.message);
+    sendRouteError(res, err);
   }
 });
 
@@ -150,7 +151,7 @@ router.post(
       const imageUrl = await productService.setImage(id, relPath, req.user!.sub);
       sendSuccess(res, { imageUrl }, '产品图片已上传');
     } catch (err: any) {
-      sendError(res, err.statusCode || 500, err.code || 'INTERNAL_ERROR', err.message);
+      sendRouteError(res, err);
     }
   }
 );
@@ -166,7 +167,7 @@ router.post(
       const productId = await productService.create(req.body, req.user!.sub);
       sendSuccess(res, { id: productId }, '产品创建成功', 201);
     } catch (err: any) {
-      sendError(res, err.statusCode || 500, err.code || 'INTERNAL_ERROR', err.message);
+      sendRouteError(res, err);
     }
   }
 );
@@ -178,7 +179,7 @@ router.put('/:id', authenticate, adminOnly, async (req: AuthRequest, res: Respon
     await productService.update(id, req.body, req.user!.sub);
     sendSuccess(res, null, '产品更新成功');
   } catch (err: any) {
-    sendError(res, err.statusCode || 500, err.code || 'INTERNAL_ERROR', err.message);
+    sendRouteError(res, err);
   }
 });
 
@@ -189,7 +190,7 @@ router.delete('/:id', authenticate, adminOnly, async (req: AuthRequest, res: Res
     await productService.delete(id, req.user!.sub);
     sendSuccess(res, null, '产品已删除');
   } catch (err: any) {
-    sendError(res, err.statusCode || 500, err.code || 'INTERNAL_ERROR', err.message);
+    sendRouteError(res, err);
   }
 });
 
@@ -243,7 +244,7 @@ router.post(
         `导入完成：${created}个产品已创建，${skipped}个已跳过`
       );
     } catch (err: any) {
-      sendError(res, 500, 'INTERNAL_ERROR', err.message);
+      sendRouteError(res, err);
     }
   }
 );
@@ -284,7 +285,7 @@ router.get(
         }))
       );
     } catch (err: any) {
-      sendError(res, err.statusCode || 500, err.code || 'INTERNAL_ERROR', err.message);
+      sendRouteError(res, err);
     }
   }
 );

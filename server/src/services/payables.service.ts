@@ -71,8 +71,20 @@ export const payablesService = {
         'users.display_name as created_by_name'
       );
 
-    const billed = invoices.reduce((s: number, i: any) => s + Number(i.grand_total), 0);
-    const paid = payments.reduce((s: number, p: any) => s + Number(p.amount), 0);
+    // billed/paid 必须用未截断的聚合查询计算，否则供应商发票或付款超过 100 条时
+    // 显示数组被 .limit(100) 截断会导致总额少算、与 listPayables 的 SUM 不一致（DATA-N1）。
+    const billedRow = await db('invoices')
+      .where('supplier_id', supplierId)
+      .where('status', 'confirmed')
+      .sum('grand_total as billed')
+      .first();
+    const paidRow = await db('supplier_payments')
+      .where('supplier_id', supplierId)
+      .sum('amount as paid')
+      .first();
+    // 零行时 SUM 返回 NULL，统一回退为 0。
+    const billed = Number(billedRow?.billed || 0);
+    const paid = Number(paidRow?.paid || 0);
 
     return {
       supplier: { id: supplier.id, name: supplier.name },

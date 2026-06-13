@@ -5,6 +5,8 @@ import { batchService } from './batch.service';
 
 export const analyticsService = {
   async getDashboard() {
+    // 所有日期边界都是纯 JS 计算、查询间无数据依赖，先一次性算好再并发发起
+    // 全部查询，把约 11 次串行往返压缩为约 3 个连接池批次（PERF-N1）。
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
       .toISOString()
@@ -19,131 +21,150 @@ export const analyticsService = {
     // 本月起始
     const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
 
-    // 今日统计
-    const todayStats = await db('invoices')
-      .where('invoice_date', '>=', todayStart)
-      .where('status', 'confirmed')
-      .select(
-        db.raw('COUNT(*) as invoiceCount'),
-        db.raw('COALESCE(SUM(grand_total), 0) as totalAmount')
-      )
-      .first();
-
-    const pendingCount = await db('invoices')
-      .where('status', 'pending')
-      .count('id as count')
-      .first();
-
-    // 低库存预警数
-    const lowStockResult = await db('inventory')
-      .join('products', 'inventory.product_id', 'products.id')
-      .whereNull('products.deleted_at')
-      .whereNotNull('inventory.safe_stock')
-      .whereRaw('inventory.quantity < inventory.safe_stock')
-      .count('inventory.id as count')
-      .first();
-
-    // 本周统计
-    const weekStats = await db('invoices')
-      .where('invoice_date', '>=', weekStartStr)
-      .where('status', 'confirmed')
-      .select(
-        db.raw('COUNT(*) as invoiceCount'),
-        db.raw('COALESCE(SUM(grand_total), 0) as totalAmount')
-      )
-      .first();
-
-    // 本月统计
-    const monthStats = await db('invoices')
-      .where('invoice_date', '>=', monthStart)
-      .where('status', 'confirmed')
-      .select(
-        db.raw('COUNT(*) as invoiceCount'),
-        db.raw('COALESCE(SUM(grand_total), 0) as totalAmount')
-      )
-      .first();
-
-    // 最近发票
-    const recentInvoices = await db('invoices')
-      .select(
-        'invoices.id',
-        'suppliers.name as supplierName',
-        'invoices.invoice_number as invoiceNumber',
-        'invoices.grand_total as grandTotal',
-        'invoices.status',
-        'invoices.created_at as createdAt'
-      )
-      .leftJoin('suppliers', 'invoices.supplier_id', 'suppliers.id')
-      .orderBy('invoices.created_at', 'desc')
-      .limit(5);
-
-    // 低库存产品
-    const lowStockProducts = await db('inventory')
-      .select(
-        'inventory.product_id as productId',
-        'products.name_en as nameEn',
-        'products.name_zh as nameZh',
-        'inventory.quantity',
-        'inventory.safe_stock as safeStock',
-        'inventory.unit'
-      )
-      .join('products', 'inventory.product_id', 'products.id')
-      .whereNull('products.deleted_at')
-      .whereNotNull('inventory.safe_stock')
-      .whereRaw('inventory.quantity < inventory.safe_stock')
-      .orderByRaw('(inventory.safe_stock - inventory.quantity) DESC')
-      .limit(10);
-
-    // 上期对比数据（用于趋势百分比）
+    // 昨日起始（今日同比）
     const yesterday = new Date(now);
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayStart = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate())
       .toISOString().split('T')[0];
-    const yesterdayStats = await db('invoices')
-      .where('invoice_date', '>=', yesterdayStart)
-      .where('invoice_date', '<', todayStart)
-      .where('status', 'confirmed')
-      .select(
-        db.raw('COALESCE(SUM(grand_total), 0) as totalAmount'),
-        db.raw('COUNT(*) as invoiceCount')
-      ).first();
 
+    // 上周起始（本周同比）
     const prevWeekStart = new Date(weekStart);
     prevWeekStart.setDate(prevWeekStart.getDate() - 7);
     const prevWeekStartStr = prevWeekStart.toISOString().split('T')[0];
-    const prevWeekStats = await db('invoices')
-      .where('invoice_date', '>=', prevWeekStartStr)
-      .where('invoice_date', '<', weekStartStr)
-      .where('status', 'confirmed')
-      .select(
-        db.raw('COALESCE(SUM(grand_total), 0) as totalAmount')
-      ).first();
 
+    // 上月起始（本月同比）
     const prevMonth = new Date(now);
     prevMonth.setMonth(prevMonth.getMonth() - 1);
     const prevMonthStart = `${prevMonth.getFullYear()}-${String(prevMonth.getMonth() + 1).padStart(2, '0')}-01`;
-    const prevMonthStats = await db('invoices')
-      .where('invoice_date', '>=', prevMonthStart)
-      .where('invoice_date', '<', monthStart)
-      .where('status', 'confirmed')
-      .select(
-        db.raw('COALESCE(SUM(grand_total), 0) as totalAmount')
-      ).first();
 
-    // 临期批次摘要
-    let expiringBatches: any[] = [];
-    try {
-      const expSummary = await batchService.getExpiringSummary(7);
-      expiringBatches = (expSummary.items || []).slice(0, 5).map((item: any) => ({
-        productId: item.productId,
-        nameEn: item.nameEn,
-        nameZh: item.nameZh,
-        batchNo: item.batchNo,
-        expiryDate: item.expiryDate,
-        quantity: item.quantity,
-        expired: item.expired,
-      }));
-    } catch { /* 表可能不存在 */ }
+    const [
+      todayStats,
+      pendingCount,
+      lowStockResult,
+      weekStats,
+      monthStats,
+      recentInvoices,
+      lowStockProducts,
+      yesterdayStats,
+      prevWeekStats,
+      prevMonthStats,
+      expSummary,
+    ] = await Promise.all([
+      // 今日统计
+      db('invoices')
+        .where('invoice_date', '>=', todayStart)
+        .where('status', 'confirmed')
+        .select(
+          db.raw('COUNT(*) as invoiceCount'),
+          db.raw('COALESCE(SUM(grand_total), 0) as totalAmount')
+        )
+        .first(),
+
+      db('invoices')
+        .where('status', 'pending')
+        .count('id as count')
+        .first(),
+
+      // 低库存预警数
+      db('inventory')
+        .join('products', 'inventory.product_id', 'products.id')
+        .whereNull('products.deleted_at')
+        .whereNotNull('inventory.safe_stock')
+        .whereRaw('inventory.quantity < inventory.safe_stock')
+        .count('inventory.id as count')
+        .first(),
+
+      // 本周统计
+      db('invoices')
+        .where('invoice_date', '>=', weekStartStr)
+        .where('status', 'confirmed')
+        .select(
+          db.raw('COUNT(*) as invoiceCount'),
+          db.raw('COALESCE(SUM(grand_total), 0) as totalAmount')
+        )
+        .first(),
+
+      // 本月统计
+      db('invoices')
+        .where('invoice_date', '>=', monthStart)
+        .where('status', 'confirmed')
+        .select(
+          db.raw('COUNT(*) as invoiceCount'),
+          db.raw('COALESCE(SUM(grand_total), 0) as totalAmount')
+        )
+        .first(),
+
+      // 最近发票
+      db('invoices')
+        .select(
+          'invoices.id',
+          'suppliers.name as supplierName',
+          'invoices.invoice_number as invoiceNumber',
+          'invoices.grand_total as grandTotal',
+          'invoices.status',
+          'invoices.created_at as createdAt'
+        )
+        .leftJoin('suppliers', 'invoices.supplier_id', 'suppliers.id')
+        .orderBy('invoices.created_at', 'desc')
+        .limit(5),
+
+      // 低库存产品
+      db('inventory')
+        .select(
+          'inventory.product_id as productId',
+          'products.name_en as nameEn',
+          'products.name_zh as nameZh',
+          'inventory.quantity',
+          'inventory.safe_stock as safeStock',
+          'inventory.unit'
+        )
+        .join('products', 'inventory.product_id', 'products.id')
+        .whereNull('products.deleted_at')
+        .whereNotNull('inventory.safe_stock')
+        .whereRaw('inventory.quantity < inventory.safe_stock')
+        .orderByRaw('(inventory.safe_stock - inventory.quantity) DESC')
+        .limit(10),
+
+      // 上期对比数据（用于趋势百分比）
+      db('invoices')
+        .where('invoice_date', '>=', yesterdayStart)
+        .where('invoice_date', '<', todayStart)
+        .where('status', 'confirmed')
+        .select(
+          db.raw('COALESCE(SUM(grand_total), 0) as totalAmount'),
+          db.raw('COUNT(*) as invoiceCount')
+        ).first(),
+
+      db('invoices')
+        .where('invoice_date', '>=', prevWeekStartStr)
+        .where('invoice_date', '<', weekStartStr)
+        .where('status', 'confirmed')
+        .select(
+          db.raw('COALESCE(SUM(grand_total), 0) as totalAmount')
+        ).first(),
+
+      db('invoices')
+        .where('invoice_date', '>=', prevMonthStart)
+        .where('invoice_date', '<', monthStart)
+        .where('status', 'confirmed')
+        .select(
+          db.raw('COALESCE(SUM(grand_total), 0) as totalAmount')
+        ).first(),
+
+      // 临期批次摘要：表可能不存在，用 .catch 回退空形状以保留原 try/catch 弹性
+      batchService.getExpiringSummary(7).catch(() => ({ items: [] as any[] })),
+    ]);
+
+    // 临期批次摘要整形
+    const expiringBatches = (expSummary.items || []).slice(0, 5).map((item: any) => ({
+      productId: item.productId,
+      nameEn: item.nameEn,
+      nameZh: item.nameZh,
+      batchNo: item.batchNo,
+      expiryDate: item.expiryDate,
+      quantity: item.quantity,
+      expired: item.expired,
+    }));
 
     return {
       today: {
@@ -183,24 +204,67 @@ export const analyticsService = {
       count?: number;
     }> = [];
 
+    // 各探测组之间互不依赖，先并发计算各组结果（含组内条件子查询），
+    // 再按原有固定顺序 push 告警，保证输出与串行版本完全一致（PERF-N3）。
+    const [lowStockGroup, pendingGroup, expSummary, priceChanges, slowMovers] = await Promise.all([
+      // 组 1：低库存（仅当 low>0 时才发起 zero-stock 子查询）
+      (async () => {
+        const lowStockCount = await db('inventory')
+          .join('products', 'inventory.product_id', 'products.id')
+          .whereNull('products.deleted_at')
+          .whereNotNull('inventory.safe_stock')
+          .whereRaw('inventory.quantity < inventory.safe_stock')
+          .count('inventory.id as count')
+          .first();
+        const lowCount = Number(lowStockCount?.count || 0);
+        let zeroCount = 0;
+        if (lowCount > 0) {
+          const zeroStock = await db('inventory')
+            .join('products', 'inventory.product_id', 'products.id')
+            .whereNull('products.deleted_at')
+            .whereNotNull('inventory.safe_stock')
+            .where('inventory.quantity', '<=', 0)
+            .count('inventory.id as count')
+            .first();
+          zeroCount = Number(zeroStock?.count || 0);
+        }
+        return { lowCount, zeroCount };
+      })(),
+
+      // 组 2：待处理发票（仅当 pending>0 时才发起 old-pending 子查询）
+      (async () => {
+        const pendingInvoices = await db('invoices')
+          .where('status', 'pending')
+          .count('id as count')
+          .first();
+        const pendingCount = Number(pendingInvoices?.count || 0);
+        let oldCount = 0;
+        if (pendingCount > 0) {
+          const oldPending = await db('invoices')
+            .where('status', 'pending')
+            .where('created_at', '<', db.raw('DATE_SUB(NOW(), INTERVAL 3 DAY)'))
+            .count('id as count')
+            .first();
+          oldCount = Number(oldPending?.count || 0);
+        }
+        return { pendingCount, oldCount };
+      })(),
+
+      // 组 3：临期/过期批次（表可能不存在，回退空形状）
+      batchService
+        .getExpiringSummary(7)
+        .catch(() => ({ expiredCount: 0, expiringCount: 0 })),
+
+      // 组 4：价格大幅波动
+      this.getPriceChanges({ threshold: 15, limit: 5 }),
+
+      // 组 5：滞销商品
+      this.getSalesSlowMovers({ days: 30, limit: 5 }),
+    ]);
+
     // 1. 低库存告警
-    const lowStockCount = await db('inventory')
-      .join('products', 'inventory.product_id', 'products.id')
-      .whereNull('products.deleted_at')
-      .whereNotNull('inventory.safe_stock')
-      .whereRaw('inventory.quantity < inventory.safe_stock')
-      .count('inventory.id as count')
-      .first();
-    const lowCount = Number(lowStockCount?.count || 0);
+    const { lowCount, zeroCount } = lowStockGroup;
     if (lowCount > 0) {
-      const zeroStock = await db('inventory')
-        .join('products', 'inventory.product_id', 'products.id')
-        .whereNull('products.deleted_at')
-        .whereNotNull('inventory.safe_stock')
-        .where('inventory.quantity', '<=', 0)
-        .count('inventory.id as count')
-        .first();
-      const zeroCount = Number(zeroStock?.count || 0);
       alerts.push({
         id: 'low-stock',
         type: 'stockout_risk',
@@ -215,18 +279,8 @@ export const analyticsService = {
     }
 
     // 2. 待处理发票
-    const pendingInvoices = await db('invoices')
-      .where('status', 'pending')
-      .count('id as count')
-      .first();
-    const pendingCount = Number(pendingInvoices?.count || 0);
+    const { pendingCount, oldCount } = pendingGroup;
     if (pendingCount > 0) {
-      const oldPending = await db('invoices')
-        .where('status', 'pending')
-        .where('created_at', '<', db.raw('DATE_SUB(NOW(), INTERVAL 3 DAY)'))
-        .count('id as count')
-        .first();
-      const oldCount = Number(oldPending?.count || 0);
       alerts.push({
         id: 'pending-invoices',
         type: 'pending_invoice',
@@ -241,8 +295,7 @@ export const analyticsService = {
     }
 
     // 3. 临期/过期批次
-    try {
-      const expSummary = await batchService.getExpiringSummary(7);
+    {
       if (expSummary.expiredCount > 0) {
         alerts.push({
           id: 'expired-batches',
@@ -265,10 +318,9 @@ export const analyticsService = {
           count: expSummary.expiringCount,
         });
       }
-    } catch { /* 表可能不存在 */ }
+    }
 
     // 4. 价格大幅波动
-    const priceChanges = await this.getPriceChanges({ threshold: 15, limit: 5 });
     if (priceChanges.length > 0) {
       const increases = priceChanges.filter((p: any) => p.changePercent > 0);
       if (increases.length > 0) {
@@ -285,7 +337,6 @@ export const analyticsService = {
     }
 
     // 5. 滞销商品预警
-    const slowMovers = await this.getSalesSlowMovers({ days: 30, limit: 5 });
     if (slowMovers.items.length > 0) {
       const zeroSales = slowMovers.items.filter((i: any) => i.soldQty === 0);
       if (zeroSales.length > 0) {

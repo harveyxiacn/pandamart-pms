@@ -1,14 +1,16 @@
 import { Knex } from 'knex';
+import db from '../config/database';
 import { InventoryModel } from '../models/Inventory';
 import { InventoryLogModel } from '../models/InventoryLog';
 import { ProductModel } from '../models/Product';
 import { AuditLogModel } from '../models/AuditLog';
-import { NotificationModel } from '../models/Notification';
 import { SettingModel } from '../models/Setting';
 import { InventoryLogType } from '../types';
 import { AppError } from '../middleware/errorHandler';
 import { buildPagination } from '../utils/helpers';
 import { invalidateAnalyticsCache } from '../utils/cache';
+import { DEFAULT_STORE_ID } from '../config/store';
+import { notificationService } from './notification.service';
 
 export interface AdjustStockOptions {
   productId: number;
@@ -53,6 +55,31 @@ export function resolveStockChange(
   }
 
   return { after, loggedQty };
+}
+
+/**
+ * 纯函数：把手动库存调整请求映射为带符号的库存增量 delta（供 adjustStockTx 使用）。
+ * 抽出以便单元测试三条分支，不依赖数据库。
+ * - 'out'   出库：delta = -|quantity|，且 quantity<=0 直接拒绝（出库必须为正数量）。
+ * - 'adjust' 手工调整：原样使用带符号的 quantity（允许正负，UI 可发负数表示减少）。
+ * - 'stocktake' 盘点：delta = 目标库存 - 当前库存（currentBefore 为加锁读到的现值）。
+ */
+export function resolveAdjustDelta(
+  type: 'adjust' | 'out' | 'stocktake',
+  quantity: number,
+  currentBefore: number
+): number {
+  if (type === 'out') {
+    if (!(quantity > 0)) {
+      throw new AppError(400, 'VALIDATION_ERROR', '出库数量必须大于 0');
+    }
+    return -Math.abs(quantity);
+  }
+  if (type === 'stocktake') {
+    return quantity - currentBefore;
+  }
+  // 'adjust'：原样使用带符号数量
+  return quantity;
 }
 
 /**
@@ -144,16 +171,32 @@ export const inventoryService = {
       throw new AppError(404, 'NOT_FOUND', '产品不存在');
     }
 
-    const { before, after } = await InventoryModel.adjustQuantity(productId, quantity);
+    const label = `${product.name_en}${product.name_zh ? ` (${product.name_zh})` : ''}`;
 
-    await InventoryLogModel.create({
-      product_id: productId,
-      type,
-      quantity,
-      quantity_before: before,
-      quantity_after: after,
-      reason,
-      operated_by: userId,
+    // 统一走带行锁的 adjustStockTx：消除非事务读-改-写竞态、补齐 store_id、修正 'out' 符号。
+    const { before, after } = await db.transaction(async (trx) => {
+      // 盘点需要拿当前（加锁）库存来算差值；出库/调整的 delta 与 before 无关。
+      let currentBefore = 0;
+      if (type === 'stocktake') {
+        const locked = await trx('inventory')
+          .where('product_id', productId)
+          .where('store_id', DEFAULT_STORE_ID)
+          .forUpdate()
+          .first();
+        currentBefore = Number(locked?.quantity || 0);
+      }
+
+      const delta = resolveAdjustDelta(type, quantity, currentBefore);
+
+      return adjustStockTx(trx, {
+        productId,
+        storeId: DEFAULT_STORE_ID,
+        delta,
+        type,
+        reason,
+        userId,
+        label,
+      });
     });
 
     await AuditLogModel.create({
@@ -166,8 +209,8 @@ export const inventoryService = {
 
     invalidateAnalyticsCache();
 
-    // 检查库存预警
-    await this.checkStockAlert(productId, after);
+    // 检查库存预警（仅在跨越安全库存阈值时通知）
+    await this.checkStockAlert(productId, after, before);
 
     return { before, after };
   },
@@ -225,29 +268,33 @@ export const inventoryService = {
     notes: string,
     userId: number
   ) {
-    const results = [];
+    const results: Array<{ productId: number; before: number; after: number; diff: number }> = [];
 
-    for (const item of items) {
-      const diff = item.actualQuantity - item.systemQuantity;
-      if (diff === 0) continue;
+    // 整批盘点放在同一事务内逐项 adjustStockTx（带行锁），保证跨项原子性。
+    await db.transaction(async (trx) => {
+      for (const item of items) {
+        // 加锁读当前库存作为基准，按绝对值盘点：delta = 实盘 - 当前库存。
+        const locked = await trx('inventory')
+          .where('product_id', item.productId)
+          .where('store_id', DEFAULT_STORE_ID)
+          .forUpdate()
+          .first();
+        const currentBefore = Number(locked?.quantity || 0);
+        const delta = item.actualQuantity - currentBefore;
+        if (delta === 0) continue;
 
-      const { before, after } = await InventoryModel.setQuantity(
-        item.productId,
-        item.actualQuantity
-      );
+        const { before, after } = await adjustStockTx(trx, {
+          productId: item.productId,
+          storeId: DEFAULT_STORE_ID,
+          delta,
+          type: 'stocktake',
+          reason: item.notes || notes || '盘点调整',
+          userId,
+        });
 
-      await InventoryLogModel.create({
-        product_id: item.productId,
-        type: 'stocktake',
-        quantity: diff,
-        quantity_before: before,
-        quantity_after: after,
-        reason: item.notes || notes || '盘点调整',
-        operated_by: userId,
-      });
-
-      results.push({ productId: item.productId, before, after, diff });
-    }
+        results.push({ productId: item.productId, before, after, diff: after - before });
+      }
+    });
 
     await AuditLogModel.create({
       user_id: userId,
@@ -260,26 +307,35 @@ export const inventoryService = {
       invalidateAnalyticsCache();
     }
 
+    // 事务外检查库存预警（仅在跨越安全库存阈值时通知）
+    for (const r of results) {
+      await this.checkStockAlert(r.productId, r.after, r.before);
+    }
+
     return { adjustedCount: results.length, results };
   },
 
-  async checkStockAlert(productId: number, currentQuantity: number) {
+  async checkStockAlert(productId: number, currentQuantity: number, previousQuantity?: number) {
     const inv = await InventoryModel.findByProductId(productId);
     if (!inv || !inv.safe_stock) return;
 
     const alertEnabled = await SettingModel.get('stock_alert_enabled');
     if (alertEnabled !== 'true') return;
 
-    if (currentQuantity < Number(inv.safe_stock)) {
-      const product = await ProductModel.findById(productId);
-      if (!product) return;
+    const safeStock = Number(inv.safe_stock);
+    if (currentQuantity >= safeStock) return;
 
-      await NotificationModel.createForAllAdmins({
-        type: 'stock_alert',
-        title: '库存预警',
-        message: `${product.name_en}${product.name_zh ? ` (${product.name_zh})` : ''} 库存仅剩 ${currentQuantity}，低于安全库存 ${inv.safe_stock}`,
-        link: `/inventory?productId=${productId}`,
-      });
-    }
+    // 去重：仅在“跨越安全库存阈值”的那一次通知（上一次还在阈值之上、本次跌破），
+    // 避免持续低于阈值时每笔出库都发一封邮件。previousQuantity 缺省时回退为旧行为（每次都通知）。
+    if (previousQuantity !== undefined && previousQuantity < safeStock) return;
+
+    const product = await ProductModel.findById(productId);
+    if (!product) return;
+
+    const message = `${product.name_en}${product.name_zh ? ` (${product.name_zh})` : ''} 库存仅剩 ${currentQuantity}，低于安全库存 ${inv.safe_stock}`;
+    const link = `/inventory?productId=${productId}`;
+
+    // 走 notificationService（启用时会发送邮件），而非仅落库的原始模型。
+    await notificationService.createForAllAdmins('stock_alert', '库存预警', message, link);
   },
 };

@@ -3,6 +3,21 @@ import { InventoryRow } from '../types';
 
 const TABLE = 'inventory';
 
+// 排序字段白名单（JOIN 查询，使用限定列名避免 id/updated_at 歧义）；非法值回退默认值，不报错。
+const ALLOWED_SORT_FIELDS: Record<string, string> = {
+  'products.name_en': 'products.name_en',
+  name_en: 'products.name_en',
+  'products.name_zh': 'products.name_zh',
+  name_zh: 'products.name_zh',
+  'products.sku': 'products.sku',
+  sku: 'products.sku',
+  quantity: 'inventory.quantity',
+  'inventory.quantity': 'inventory.quantity',
+  updated_at: 'inventory.updated_at',
+  'inventory.updated_at': 'inventory.updated_at',
+};
+const DEFAULT_SORT_FIELD = 'products.name_en';
+
 export const InventoryModel = {
   async findByProductId(productId: number): Promise<InventoryRow | undefined> {
     return db(TABLE).where('product_id', productId).first();
@@ -48,7 +63,8 @@ export const InventoryModel = {
     if (filters?.keyword) {
       countQuery.where(function () {
         this.where('products.name_en', 'like', `%${filters.keyword}%`)
-          .orWhere('products.name_zh', 'like', `%${filters.keyword}%`);
+          .orWhere('products.name_zh', 'like', `%${filters.keyword}%`)
+          .orWhere('products.sku', 'like', `%${filters.keyword}%`);
       });
     }
     if (filters?.categoryId) countQuery.where('products.category_id', filters.categoryId);
@@ -68,8 +84,8 @@ export const InventoryModel = {
       )
       .first();
 
-    const sortBy = filters?.sortBy || 'products.name_en';
-    const sortOrder = filters?.sortOrder || 'asc';
+    const sortBy = ALLOWED_SORT_FIELDS[filters?.sortBy ?? ''] || DEFAULT_SORT_FIELD;
+    const sortOrder = filters?.sortOrder === 'desc' ? 'desc' : 'asc';
     const page = filters?.page || 1;
     const pageSize = filters?.pageSize || 20;
 

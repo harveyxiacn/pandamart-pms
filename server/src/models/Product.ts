@@ -3,6 +3,18 @@ import { ProductRow } from '../types';
 
 const TABLE = 'products';
 
+// 排序字段白名单（裸列名，orderBy 时再加 products. 前缀），防止把任意 sortBy 拼进 SQL 标识符触发未知列报错/信息泄露
+const ALLOWED_SORT_FIELDS = [
+  'id',
+  'name_en',
+  'name_zh',
+  'sku',
+  'created_at',
+  'updated_at',
+  'default_price',
+];
+const DEFAULT_SORT_FIELD = 'name_en';
+
 export const ProductModel = {
   async findById(id: number): Promise<ProductRow | undefined> {
     return db(TABLE).where({ id }).whereNull('deleted_at').first();
@@ -54,7 +66,8 @@ export const ProductModel = {
     const countResult = await countQuery.count('id as total').first();
     const total = Number(countResult?.total || 0);
 
-    const sortBy = filters?.sortBy || 'created_at';
+    const requestedSort = filters?.sortBy || '';
+    const sortBy = ALLOWED_SORT_FIELDS.includes(requestedSort) ? requestedSort : DEFAULT_SORT_FIELD;
     const sortOrder = filters?.sortOrder || 'desc';
     const page = filters?.page || 1;
     const pageSize = filters?.pageSize || 20;

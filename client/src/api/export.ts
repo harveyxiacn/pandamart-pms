@@ -40,6 +40,10 @@ export function exportPurchases(params: { dateFrom: string; dateTo: string; supp
   return downloadFile("/export/purchases", "purchases.xlsx", params);
 }
 
+export function exportReorderSuggestions() {
+  return downloadFile("/export/reorder-suggestions", "reorder-suggestions.xlsx");
+}
+
 export function exportFullBackup() {
   return downloadFile("/export/full-backup", "pandamart-backup.json");
 }

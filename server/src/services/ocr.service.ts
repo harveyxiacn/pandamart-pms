@@ -10,7 +10,47 @@ import { SupplierModel } from '../models/Supplier';
 import { InvoiceModel } from '../models/Invoice';
 import { InvoiceItemModel } from '../models/InvoiceItem';
 import { OcrRecognizedResult, OcrRecognizedItem, OcrMethod, FileType } from '../types';
+import { AppError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
+
+// 魔数（文件签名）校验：仅凭扩展名/MIME 不可信，磁盘落地后读取首字节核对真实类型，
+// 阻止伪造扩展名的恶意字节流到达 pdf-parse / sharp / xlsx 解析器。
+function readFileHeader(filePath: string, length: number): Buffer {
+  const fd = fs.openSync(filePath, 'r');
+  try {
+    const buffer = Buffer.alloc(length);
+    const bytesRead = fs.readSync(fd, buffer, 0, length, 0);
+    return buffer.subarray(0, bytesRead);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+// 各扩展名允许的文件签名（首字节十六进制序列）
+const FILE_SIGNATURES: Record<string, number[][]> = {
+  '.pdf': [[0x25, 0x50, 0x44, 0x46]], // %PDF
+  '.jpg': [[0xff, 0xd8, 0xff]], // JPEG
+  '.jpeg': [[0xff, 0xd8, 0xff]],
+  '.png': [[0x89, 0x50, 0x4e, 0x47]], // PNG
+  '.xlsx': [[0x50, 0x4b, 0x03, 0x04]], // ZIP(OOXML)
+  '.xls': [[0xd0, 0xcf, 0x11, 0xe0]], // OLE/CFBF
+};
+
+function assertMagicBytes(filePath: string): void {
+  const ext = path.extname(filePath).toLowerCase();
+  const signatures = FILE_SIGNATURES[ext];
+  if (!signatures) {
+    throw new AppError(400, 'INVALID_FILE', `不支持的文件类型: ${ext}`);
+  }
+  const maxLen = Math.max(...signatures.map((sig) => sig.length));
+  const header = readFileHeader(filePath, maxLen);
+  const matched = signatures.some(
+    (sig) => header.length >= sig.length && sig.every((byte, i) => header[i] === byte)
+  );
+  if (!matched) {
+    throw new AppError(400, 'INVALID_FILE', '文件内容与扩展名不符，疑似伪造文件类型');
+  }
+}
 
 const INVOICE_OCR_PROMPT = `你是一个专业的发票数据提取助手。请分析这张发票图片，提取以下信息并以JSON格式返回：
 
@@ -95,6 +135,8 @@ const TEXT_PARSE_PROMPT = `你是一个专业的发票文本解析助手。以�
 export const ocrService = {
   detectFileType(filePath: string): FileType {
     const ext = path.extname(filePath).toLowerCase();
+    // 真正的类型闸门：先按魔数核对真实类型，再按扩展名分发（upload.ts 的 octet-stream 容错仍保留但不再是唯一防线）
+    assertMagicBytes(filePath);
     if (ext === '.pdf') return 'pdf';
     if (['.jpg', '.jpeg', '.png'].includes(ext)) return 'image';
     if (['.xlsx', '.xls'].includes(ext)) return 'excel';

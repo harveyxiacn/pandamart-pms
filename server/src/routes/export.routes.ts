@@ -5,6 +5,7 @@ import { adminOnly } from '../middleware/permission';
 import { exportLimiter } from '../middleware/rateLimit';
 import { AuthRequest } from '../types';
 import { sendSuccess, sendError } from '../utils/helpers';
+import { analyticsService } from '../services/analytics.service';
 import db from '../config/database';
 
 const router = Router();
@@ -197,19 +198,80 @@ router.get('/purchases', authenticate, adminOnly, exportLimiter, async (req: Aut
 // GET /api/v1/export/full-backup
 router.get('/full-backup', authenticate, adminOnly, exportLimiter, async (_req: AuthRequest, res: Response) => {
   try {
-    const [products, suppliers, categories, inventory, invoices, invoiceItems, settings] = await Promise.all([
+    // 大表统一硬上限，避免在 400M 内存的 VPS 上把整个备份一次性构建成超大 JSON 字符串
+    const CAP = 50000;
+    // 记录每张大表是否触达上限（命中说明数据被截断，恢复时需注意）
+    const truncated: Record<string, boolean> = {};
+
+    // ai_providers 排除密钥列（api_key_encrypted，IV 已内嵌其中）；users 排除 password_hash
+    // 用 columnInfo 动态推导可导出列，避免后续迁移新增列时此处漂移
+    const [aiProviderCols, userCols] = await Promise.all([
+      db('ai_providers').columnInfo(),
+      db('users').columnInfo(),
+    ]);
+    const aiProviderColumns = Object.keys(aiProviderCols).filter((c) => c !== 'api_key_encrypted');
+    const userColumns = Object.keys(userCols).filter((c) => c !== 'password_hash');
+
+    const [
+      products,
+      suppliers,
+      categories,
+      inventory,
+      invoices,
+      invoiceItems,
+      settings,
+      salesOrders,
+      salesItems,
+      supplierPayments,
+      inventoryBatches,
+      inventoryLogs,
+      auditLogs,
+      notifications,
+      aiProviders,
+      users,
+    ] = await Promise.all([
       db('products').whereNull('deleted_at'),
       db('suppliers').whereNull('deleted_at'),
       db('categories'),
       db('inventory').join('products', 'inventory.product_id', 'products.id').whereNull('products.deleted_at').select('inventory.*'),
-      db('invoices').orderBy('created_at', 'desc').limit(1000),
-      db('invoice_items').orderBy('id', 'desc').limit(5000),
+      db('invoices').orderBy('created_at', 'desc').limit(CAP),
+      db('invoice_items').orderBy('id', 'desc').limit(CAP),
       db('settings'),
+      db('sales_orders').orderBy('id', 'desc').limit(CAP),
+      db('sales_items').orderBy('id', 'desc').limit(CAP),
+      db('supplier_payments').orderBy('id', 'desc').limit(CAP),
+      db('inventory_batches').orderBy('id', 'desc').limit(CAP),
+      db('inventory_logs').orderBy('id', 'desc').limit(CAP),
+      db('audit_logs').orderBy('id', 'desc').limit(CAP),
+      db('notifications').orderBy('id', 'desc').limit(CAP),
+      // ai_providers：排除加密密钥列
+      db('ai_providers').select(aiProviderColumns).orderBy('id', 'desc').limit(CAP),
+      // users：排除 password_hash 列
+      db('users').select(userColumns).orderBy('id', 'desc').limit(CAP),
     ]);
+
+    // 标记触达上限（== CAP 即可能被截断）的表
+    for (const [name, rows] of Object.entries({
+      invoices,
+      invoiceItems,
+      salesOrders,
+      salesItems,
+      supplierPayments,
+      inventoryBatches,
+      inventoryLogs,
+      auditLogs,
+      notifications,
+      aiProviders,
+      users,
+    })) {
+      if ((rows as any[]).length >= CAP) truncated[name] = true;
+    }
 
     const backup = {
       exportedAt: new Date().toISOString(),
-      version: '1.0.0',
+      version: '1.1.0',
+      limit: CAP,
+      truncated,
       data: {
         products,
         suppliers,
@@ -218,12 +280,52 @@ router.get('/full-backup', authenticate, adminOnly, exportLimiter, async (_req: 
         invoices,
         invoiceItems,
         settings,
+        salesOrders,
+        salesItems,
+        supplierPayments,
+        inventoryBatches,
+        inventoryLogs,
+        auditLogs,
+        notifications,
+        aiProviders,
+        users,
       },
     };
 
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Content-Disposition', `attachment; filename=pandamart-backup-${new Date().toISOString().split('T')[0]}.json`);
-    res.send(JSON.stringify(backup, null, 2));
+    res.send(JSON.stringify(backup));
+  } catch (err: any) {
+    sendError(res, 500, 'INTERNAL_ERROR', err.message);
+  }
+});
+
+// GET /api/v1/export/reorder-suggestions
+router.get('/reorder-suggestions', authenticate, adminOnly, exportLimiter, async (_req: AuthRequest, res: Response) => {
+  try {
+    const data = await analyticsService.getReorderSuggestions();
+
+    const rows = data.map((r) => ({
+      'SKU/英文名': r.nameEn,
+      '中文名': r.nameZh || '',
+      '当前库存': Number(r.currentStock),
+      '安全库存': Number(r.safeStock),
+      '周均消耗': Number(r.avgWeeklyUsage),
+      '建议补货量': Number(r.suggestedQuantity),
+      '建议供应商': r.suggestedSupplier?.name || '',
+      '最近进价': Number(r.lastPrice),
+      '预计成本': Number(r.estimatedCost),
+      '紧急度': r.urgency === 'high' ? '高' : r.urgency === 'medium' ? '中' : '低',
+    }));
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, '补货建议');
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=reorder-suggestions.xlsx');
+    res.send(buffer);
   } catch (err: any) {
     sendError(res, 500, 'INTERNAL_ERROR', err.message);
   }

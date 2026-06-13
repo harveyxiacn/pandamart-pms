@@ -59,6 +59,14 @@ export const productService = {
       }
     }
 
+    // 条码查重：barcode 为空时跳过；否则若已有产品占用该条码则拒绝
+    if (data.barcode) {
+      const existing = await ProductModel.findByBarcode(data.barcode);
+      if (existing) {
+        throw new AppError(409, 'CONFLICT', `条码 "${data.barcode}" 已存在`);
+      }
+    }
+
     const productId = await ProductModel.create({
       sku: data.sku || null,
       barcode: data.barcode || null,
@@ -101,6 +109,14 @@ export const productService = {
       const existing = await ProductModel.findBySku(data.sku);
       if (existing) {
         throw new AppError(409, 'CONFLICT', `SKU "${data.sku}" 已存在`);
+      }
+    }
+
+    // 条码查重：仅在 barcode 改为新的非空值时校验，并排除当前产品自身
+    if (data.barcode && data.barcode !== product.barcode) {
+      const existing = await ProductModel.findByBarcode(data.barcode);
+      if (existing && existing.id !== id) {
+        throw new AppError(409, 'CONFLICT', `条码 "${data.barcode}" 已存在`);
       }
     }
 

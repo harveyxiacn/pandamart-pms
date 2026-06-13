@@ -9,6 +9,9 @@
  */
 type Entry = { value: unknown; expires: number };
 
+// 缓存条目上限：防止罕见 key（如管理员手动扫日期区间）累积导致无界增长（PERF-N6）。
+const MAX_ENTRIES = 500;
+
 const store = new Map<string, Entry>();
 const pending = new Map<string, Promise<unknown>>();
 
@@ -26,6 +29,19 @@ export async function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>
   const promise = fn().then((value) => {
     if (pending.get(key) === promise) {
       store.set(key, { value, expires: Date.now() + ttlMs });
+      // 超过上限时先清理已过期条目，仍超限则按插入顺序淘汰最老条目（PERF-N6）。
+      if (store.size > MAX_ENTRIES) {
+        const expiredAt = Date.now();
+        for (const [k, e] of store) {
+          if (e.expires <= expiredAt) store.delete(k);
+        }
+        while (store.size > MAX_ENTRIES) {
+          // Map 保留插入顺序，首个 key 即最早写入项。
+          const oldest = store.keys().next().value;
+          if (oldest === undefined) break;
+          store.delete(oldest);
+        }
+      }
     }
     return value;
   });

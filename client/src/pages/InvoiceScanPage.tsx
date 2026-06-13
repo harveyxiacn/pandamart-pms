@@ -253,8 +253,13 @@ export default function InvoiceScanPage() {
       };
       const result = await confirmInvoice(invoiceId, payload);
       setSuccess(
-        `入库完成：更新库存 ${result.inventoryUpdated} 项，创建新产品 ${result.newProductsCreated} 项`
+        `入库完成：更新库存 ${result.inventoryUpdated} 项，创建新产品 ${result.newProductsCreated} 项。可继续上传下一张发票。`
       );
+      // 确认成功后清空已识别发票状态，避免对已处理发票重复点击「确认入库」（canSubmit 依赖这些值，会同时禁用确认与驳回按钮）（FE-N2）
+      setInvoiceId(null);
+      setRecognized(null);
+      setSupplierId(null);
+      setFile(null);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "确认入库失败");
     } finally {

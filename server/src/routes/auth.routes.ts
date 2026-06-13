@@ -66,6 +66,13 @@ router.put(
         req.body.currentPassword,
         req.body.newPassword
       );
+      await AuditLogModel.create({
+        user_id: req.user!.sub,
+        action: 'change_password',
+        entity_type: 'user',
+        entity_id: req.user!.sub,
+        ip_address: getClientIp(req),
+      });
       sendSuccess(res, null, '密码修改成功');
     } catch (err: any) {
       sendRouteError(res, err, '修改密码失败');

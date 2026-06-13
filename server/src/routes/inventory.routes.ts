@@ -4,7 +4,8 @@ import { adminOnly } from '../middleware/permission';
 import { validate } from '../middleware/validator';
 import { inventoryService } from '../services/inventory.service';
 import { AuthRequest } from '../types';
-import { sendSuccess, sendError, parsePagination } from '../utils/helpers';
+import { sendSuccess, parsePagination } from '../utils/helpers';
+import { sendRouteError } from '../utils/routeError';
 
 const router = Router();
 
@@ -23,7 +24,7 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
     });
     sendSuccess(res, result);
   } catch (err: any) {
-    sendError(res, 500, 'INTERNAL_ERROR', err.message);
+    sendRouteError(res, err, '获取库存列表失败');
   }
 });
 
@@ -43,7 +44,7 @@ router.post(
       const result = await inventoryService.adjust(productId, type, quantity, reason || null, req.user!.sub);
       sendSuccess(res, result, '库存调整成功');
     } catch (err: any) {
-      sendError(res, err.statusCode || 500, err.code || 'INTERNAL_ERROR', err.message);
+      sendRouteError(res, err, '库存调整失败');
     }
   }
 );
@@ -62,13 +63,13 @@ router.put(
       await inventoryService.setSafeStock(productId, req.body.safeStock, req.user!.sub);
       sendSuccess(res, null, '安全库存设置成功');
     } catch (err: any) {
-      sendError(res, err.statusCode || 500, err.code || 'INTERNAL_ERROR', err.message);
+      sendRouteError(res, err, '安全库存设置失败');
     }
   }
 );
 
 // GET /api/v1/inventory/:productId/logs
-router.get('/:productId/logs', authenticate, async (req: AuthRequest, res: Response) => {
+router.get('/:productId/logs', authenticate, adminOnly, async (req: AuthRequest, res: Response) => {
   try {
     const productId = parseInt(req.params.productId as string);
     const { page, pageSize } = parsePagination(req.query);
@@ -81,7 +82,7 @@ router.get('/:productId/logs', authenticate, async (req: AuthRequest, res: Respo
     });
     sendSuccess(res, result);
   } catch (err: any) {
-    sendError(res, err.statusCode || 500, err.code || 'INTERNAL_ERROR', err.message);
+    sendRouteError(res, err, '获取库存日志失败');
   }
 });
 
@@ -96,7 +97,7 @@ router.post(
       const result = await inventoryService.stocktake(req.body.items, req.body.notes || '', req.user!.sub);
       sendSuccess(res, result, `盘点完成，${result.adjustedCount}个产品库存已调整`);
     } catch (err: any) {
-      sendError(res, err.statusCode || 500, err.code || 'INTERNAL_ERROR', err.message);
+      sendRouteError(res, err, '库存盘点失败');
     }
   }
 );

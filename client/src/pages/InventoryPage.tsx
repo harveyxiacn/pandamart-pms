@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { adjustInventory, getInventory, getInventoryLogs, setSafeStock } from "../api/inventory";
 import type { InventoryItem } from "../types";
 import { Card } from "../components/ui/Card";
@@ -42,17 +42,23 @@ export default function InventoryPage() {
   const [actionReason, setActionReason] = useState("");
   const [safeStockValue, setSafeStockValue] = useState<number>(0);
   const [logs, setLogs] = useState<InventoryLog[]>([]);
+  // 请求竞态守卫：手动「查询」/Enter 与 debounce 触发可能并发，防止过期请求覆盖新结果（FE-N3）
+  const reqIdRef = useRef(0);
 
   const load = async () => {
+    const myReq = ++reqIdRef.current;
     setLoading(true);
     setError(null);
     try {
       const data = await getInventory({ pageSize: 200, keyword: keyword || undefined, alertOnly });
+      // 过期请求直接丢弃结果（FE-N3）
+      if (myReq !== reqIdRef.current) return;
       setItems(data.items);
     } catch (err: unknown) {
+      if (myReq !== reqIdRef.current) return;
       setError(err instanceof Error ? err.message : "加载库存失败");
     } finally {
-      setLoading(false);
+      if (myReq === reqIdRef.current) setLoading(false);
     }
   };
 

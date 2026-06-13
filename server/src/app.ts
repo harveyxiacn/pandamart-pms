@@ -1,4 +1,5 @@
 import express from 'express';
+import compression from 'compression';
 import cors from 'cors';
 import helmet from 'helmet';
 import path from 'path';
@@ -33,6 +34,9 @@ const app = express();
 if (env.nodeEnv === 'production') {
   app.set('trust proxy', 1);
 }
+
+// gzip/deflate 压缩 HTTP 响应体，降低仪表盘/分析页等重 JSON 接口的传输耗时
+app.use(compression());
 
 // 安全响应头（X-Frame-Options / X-Content-Type-Options / HSTS 等）。
 // crossOriginResourcePolicy 放宽到 cross-origin，使前端在不同源时仍能加载受控的图片资源。

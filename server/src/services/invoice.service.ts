@@ -4,13 +4,13 @@ import { InvoiceModel } from '../models/Invoice';
 import { InvoiceItemModel } from '../models/InvoiceItem';
 import { SupplierTemplateModel } from '../models/SupplierTemplate';
 import { AuditLogModel } from '../models/AuditLog';
-import { NotificationModel } from '../models/Notification';
 import { SettingModel } from '../models/Setting';
 import { AppError } from '../middleware/errorHandler';
 import { buildPagination } from '../utils/helpers';
 import { ConfirmInvoiceBody, UpdateInvoiceBody } from '../types';
 import db from '../config/database';
 import { adjustStockTx } from './inventory.service';
+import { notificationService } from './notification.service';
 import { DEFAULT_STORE_ID } from '../config/store';
 import { invalidateAnalyticsCache } from '../utils/cache';
 
@@ -301,6 +301,12 @@ export const invoiceService = {
       throw new AppError(422, 'BUSINESS_ERROR', '该发票已被处理');
     }
 
+    // 入参防护：明细必须为非空数组，否则提前以 400 拒绝
+    // （避免 undefined/非数组直接进入 for...of 抛 TypeError -> 500）
+    if (!Array.isArray(body.items) || body.items.length === 0) {
+      throw new AppError(400, 'VALIDATION_ERROR', '至少需要 1 条发票明细');
+    }
+
     // 防重复入库：同一供应商 + 发票号若已有其它已确认发票，则拦截。
     // PRD 将"重复发票"列为驳回原因；重复确认会虚增库存与应付，必须在入库前阻断。
     if (body.supplierId && body.invoiceNumber) {
@@ -332,6 +338,22 @@ export const invoiceService = {
       for (const item of body.items) {
         let productId = item.productId;
 
+        // 逐条入参校验：与 sales.service.create 保持一致，
+        // 防止负数/NaN 的数量或单价进入 adjustStockTx 污染库存与金额（返回 400 而非 500）
+        const quantity = Number(item.quantity);
+        if (!Number.isFinite(quantity) || quantity <= 0) {
+          throw new AppError(400, 'VALIDATION_ERROR', '数量无效');
+        }
+        const unitPrice = Number(item.unitPrice);
+        if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+          throw new AppError(400, 'VALIDATION_ERROR', '单价无效');
+        }
+        if (!productId && !item.isNewProduct) {
+          throw new AppError(400, 'VALIDATION_ERROR', '商品无效');
+        }
+        // 行金额服务端重算，不再盲信客户端传值（grand_total 单独写入，不存在对账依赖）
+        const lineTotal = Math.round(unitPrice * quantity * 100) / 100;
+
         // 新产品自动创建
         if (item.isNewProduct && !productId) {
           const [newId] = await trx('products').insert({
@@ -340,7 +362,7 @@ export const invoiceService = {
             category_id: item.categoryId || null,
             default_supplier_id: body.supplierId || null,
             default_unit: item.unit,
-            default_price: item.unitPrice,
+            default_price: unitPrice,
           });
           productId = newId;
 
@@ -371,10 +393,10 @@ export const invoiceService = {
           raw_product_number: item.productNumber || null,
           raw_un: item.un || null,
           raw_tax_code: item.taxCode || null,
-          quantity: item.quantity,
+          quantity,
           unit: item.unit,
-          unit_price: item.unitPrice,
-          line_total: item.lineTotal,
+          unit_price: unitPrice,
+          line_total: lineTotal,
         });
 
         // 更新库存（统一走带行锁、按门店范围的库存原语，消除与销售并发的丢更新、补齐 store_id）
@@ -382,7 +404,7 @@ export const invoiceService = {
           await adjustStockTx(trx, {
             productId,
             storeId: DEFAULT_STORE_ID,
-            delta: item.quantity,
+            delta: quantity,
             type: 'in',
             invoiceId: id,
             userId,
@@ -394,7 +416,7 @@ export const invoiceService = {
             .where('store_id', DEFAULT_STORE_ID)
             .update({
               last_restock_date: body.invoiceDate,
-              last_restock_quantity: item.quantity,
+              last_restock_quantity: quantity,
               updated_at: trx.fn.now(),
             });
 
@@ -411,7 +433,7 @@ export const invoiceService = {
 
           if (priceHistory.length >= 2) {
             const prevPrice = Number(priceHistory[1].unit_price);
-            const currPrice = item.unitPrice;
+            const currPrice = unitPrice;
             if (prevPrice > 0) {
               const changePercent = ((currPrice - prevPrice) / prevPrice) * 100;
               if (Math.abs(changePercent) > priceThreshold * 100) {
@@ -431,7 +453,7 @@ export const invoiceService = {
           await trx('products')
             .where('id', productId)
             .whereNull('deleted_at')
-            .update({ default_price: item.unitPrice, updated_at: trx.fn.now() });
+            .update({ default_price: unitPrice, updated_at: trx.fn.now() });
         }
       }
 
@@ -472,14 +494,16 @@ export const invoiceService = {
     invalidateAnalyticsCache();
 
     // 事务外：发送通知（非关键操作）
+    // 走 notificationService（位置参数）而非裸 NotificationModel，
+    // 以便在 email_notification_enabled 开启时同时发送邮件提醒。
     for (const alert of priceAlerts) {
       try {
-        await NotificationModel.createForAllAdmins({
-          type: 'price_alert',
-          title: '价格异常波动',
-          message: `${alert.productName} 价格从 $${alert.previousPrice} 变为 $${alert.currentPrice}（${alert.changePercent > 0 ? '+' : ''}${alert.changePercent}%）`,
-          link: `/products/${alert.productId}/price-history`,
-        });
+        await notificationService.createForAllAdmins(
+          'price_alert',
+          '价格异常波动',
+          `${alert.productName} 价格从 $${alert.previousPrice} 变为 $${alert.currentPrice}（${alert.changePercent > 0 ? '+' : ''}${alert.changePercent}%）`,
+          `/products/${alert.productId}/price-history`
+        );
       } catch {
         /* ignore notification errors */
       }

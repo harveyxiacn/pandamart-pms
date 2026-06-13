@@ -77,6 +77,11 @@ router.put(
   '/:id',
   authenticate,
   adminOnly,
+  // 与 POST 对齐：role 仅允许 admin/staff，displayName 若提供需非空。均非 required，保留部分更新语义
+  validate([
+    { field: 'role', enum: ['admin', 'staff'] },
+    { field: 'displayName', type: 'string', minLength: 1 },
+  ]),
   async (req: AuthRequest, res: Response) => {
     try {
       const id = parseInt(req.params.id as string);

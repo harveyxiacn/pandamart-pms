@@ -217,6 +217,13 @@ router.delete('/:id', authenticate, adminOnly, async (req: AuthRequest, res: Res
     }
 
     await AiProviderModel.delete(id);
+    await AuditLogModel.create({
+      user_id: req.user!.sub,
+      action: 'delete',
+      entity_type: 'ai_provider',
+      entity_id: id,
+      details: JSON.stringify({ name: provider.name, model: provider.model }),
+    });
     sendSuccess(res, null, 'AI 提供商已删除');
   } catch (err: any) {
     sendError(res, err.statusCode || 500, err.code || 'INTERNAL_ERROR', err.message);
@@ -238,6 +245,12 @@ router.put('/:id/set-default', authenticate, adminOnly, async (req: AuthRequest,
     }
 
     await AiProviderModel.setDefault(id);
+    await AuditLogModel.create({
+      user_id: req.user!.sub,
+      action: 'set_default',
+      entity_type: 'ai_provider',
+      entity_id: id,
+    });
     sendSuccess(res, null, '已设为默认提供商');
   } catch (err: any) {
     sendError(res, err.statusCode || 500, err.code || 'INTERNAL_ERROR', err.message);

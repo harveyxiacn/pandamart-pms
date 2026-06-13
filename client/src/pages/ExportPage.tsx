@@ -4,6 +4,7 @@ import {
   exportInventory,
   exportInvoices,
   exportPurchases,
+  exportReorderSuggestions,
   exportSuppliers,
 } from "../api/export";
 import { getSuppliers } from "../api/suppliers";
@@ -108,6 +109,12 @@ export default function ExportPage() {
             }
           >
             导出采购明细
+          </Button>
+          <Button
+            disabled={loading}
+            onClick={() => void runExport(() => exportReorderSuggestions(), "补货建议导出已开始。")}
+          >
+            导出补货建议
           </Button>
           <Button
             variant="secondary"

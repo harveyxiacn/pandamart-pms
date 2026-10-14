@@ -681,6 +681,7 @@ export const analyticsService = {
         'inventory.safe_stock as safeStock',
         'inventory.unit',
         'products.default_supplier_id',
+        'products.category_id as categoryId',
         'suppliers.name as supplierName',
         'products.default_price as lastPrice'
       )
@@ -723,6 +724,7 @@ export const analyticsService = {
         productId: row.productId,
         nameEn: row.nameEn,
         nameZh: row.nameZh,
+        categoryId: row.categoryId != null ? Number(row.categoryId) : null,
         currentStock: Number(row.currentStock),
         safeStock: Number(row.safeStock),
         avgWeeklyUsage: Math.round(avgWeeklyUsage * 10) / 10,

@@ -4,6 +4,8 @@ import { env } from '../config/env';
 import path from 'path';
 import type { Server } from 'http';
 import { encrypt } from '../utils/crypto';
+import { toDateKey } from '../services/batch-fifo';
+import { aliasService } from '../services/alias.service';
 
 type ApiError = {
   code: string;
@@ -56,6 +58,7 @@ if (!E2E_ADMIN_PASSWORD) {
 const runMigrations = parseBoolean(process.env.E2E_RUN_MIGRATIONS, env.nodeEnv !== 'production');
 const runSeeds = parseBoolean(process.env.E2E_RUN_SEEDS, env.nodeEnv !== 'production');
 const runWriteFlow = parseBoolean(process.env.E2E_WRITE_TEST, false);
+const runBatchFifoChecks = parseBoolean(process.env.E2E_BATCH_FIFO_TEST, false);
 const runSecurityRegression = parseBoolean(process.env.E2E_SECURITY_REGRESSION, true);
 const runRateLimitRegression = parseBoolean(process.env.E2E_RATE_LIMIT_REGRESSION, false);
 
@@ -910,9 +913,15 @@ async function runSecurityHardeningChecks(baseUrl: string, adminToken: string): 
   const demotedAdminCall = await requestJson<UserListPayload>(baseUrl, '/api/v1/users', {
     token: demotedAdminToken,
   });
+  // 角色变更会递增 token_version 使旧令牌失效（SEC-5）：旧 admin token 现在应被拒。
+  // 401 TOKEN_REVOKED（令牌失效机制生效）或 403（若未启用令牌失效）均为安全的拒绝结果。
   ensure(
-    demotedAdminCall.status === 403,
-    `降权用户旧 admin token 预期 403，实际 status=${demotedAdminCall.status}, body=${stringifyBody(demotedAdminCall.body)}`
+    demotedAdminCall.status === 401 || demotedAdminCall.status === 403,
+    `降权用户旧 admin token 预期被拒(401/403)，实际 status=${demotedAdminCall.status}, body=${stringifyBody(demotedAdminCall.body)}`
+  );
+  ensure(
+    (demotedAdminCall.body as ApiResponse)?.success === false,
+    `降权用户旧 admin token 预期 success=false，实际 body=${stringifyBody(demotedAdminCall.body)}`
   );
 
   await expectWeakPasswordRejected(baseUrl, '/api/v1/users', {
@@ -1015,6 +1024,196 @@ async function runWriteValidation(baseUrl: string, token: string): Promise<void>
   }
 }
 
+/** 批次台账合计（含已扣空/depleted）应与库存总量一致——FIFO 记账的核心不变量。 */
+async function assertBatchInventoryConsistency(productId: number, label: string): Promise<void> {
+  const inv = await db('inventory').where('product_id', productId).first();
+  const agg = await db('inventory_batches')
+    .where('product_id', productId)
+    .sum('quantity as s')
+    .first();
+  const batchSum = Number(agg?.s || 0);
+  const stock = Number(inv?.quantity || 0);
+  ensure(
+    Math.abs(stock - batchSum) < 0.01,
+    `${label}: 批次合计(${batchSum}) 与库存总量(${stock}) 不一致`
+  );
+}
+
+/**
+ * 批次 FIFO 端到端（DATA-5）：发票确认自动建批 → 销售按到期日 FIFO 扣减 → 作废精确回补 → 回滚清批。
+ * 全程校验「批次合计 == 库存总量」不变量。
+ */
+async function runBatchFifoFlow(baseUrl: string, token: string): Promise<void> {
+  const suffix = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+  const supplierId = await ensureSupplierFixture(suffix);
+  const admin = await db('users').where('username', E2E_ADMIN_USERNAME).first();
+  ensure(admin?.id, 'E2E 管理员账户不存在');
+
+  const [productId] = await db('products').insert({
+    name_en: `E2E FIFO ${suffix}`,
+    name_zh: null,
+    default_supplier_id: supplierId,
+    default_unit: 'Case',
+    default_price: 3,
+    is_perishable: true,
+    shelf_life_days: 5,
+    is_active: true,
+  });
+  const pid = Number(productId);
+  const invoiceId = await createInvoiceFixture({
+    invoiceNumber: `E2E-FIFO-${suffix}`,
+    supplierId,
+    uploadedBy: Number(admin.id),
+    status: 'pending',
+    grandTotal: 60,
+  });
+
+  try {
+    // 1) 确认发票入库：生鲜商品应自动建立批次（到期日 = 发票日 + 货架期 5 天）
+    const confirm = await requestJson(baseUrl, `/api/v1/invoices/${invoiceId}/confirm`, {
+      method: 'POST',
+      token,
+      body: {
+        supplierId,
+        invoiceDate: '2026-06-01',
+        items: [
+          {
+            productId: pid,
+            productNameEn: `E2E FIFO ${suffix}`,
+            productCode: `E2E-CODE-${suffix}`,
+            quantity: 20,
+            unit: 'Case',
+            unitPrice: 3,
+            taxCode: 'E',
+          },
+        ],
+      },
+    });
+    ensure(
+      confirm.status === 200 && (confirm.body as ApiResponse)?.success === true,
+      `发票确认失败: status=${confirm.status}, body=${stringifyBody(confirm.body)}`
+    );
+
+    const autoBatch = await db('inventory_batches')
+      .where('product_id', pid)
+      .where('invoice_id', invoiceId)
+      .first();
+    ensure(!!autoBatch, '发票确认未为生鲜商品自动建立批次');
+    ensure(
+      Number(autoBatch.quantity) === 20 && toDateKey(autoBatch.expiry_date) === '2026-06-06',
+      `自动批次数量/到期日不符: qty=${autoBatch.quantity}, expiry=${toDateKey(autoBatch.expiry_date)}`
+    );
+    await assertBatchInventoryConsistency(pid, '确认后');
+
+    // 1b) 别名学习：确认即一次人工标注，应沉淀「供应商 + 货号/名称 → 商品」映射
+    const aliasRes = await requestJson<{ items: Array<{ aliasType: string; aliasKey: string; productId: number }> }>(
+      baseUrl,
+      `/api/v1/product-aliases?supplierId=${supplierId}`,
+      { token }
+    );
+    const learnedAliases = (aliasRes.body as ApiResponse<{ items: any[] }>)?.data?.items ?? [];
+    ensure(
+      aliasRes.status === 200 &&
+        learnedAliases.some((a) => a.productId === pid && a.aliasType === 'code') &&
+        learnedAliases.some((a) => a.productId === pid && a.aliasType === 'name'),
+      `别名学习未生效: status=${aliasRes.status}, body=${stringifyBody(aliasRes.body)}`
+    );
+
+    // 1c) 服务层回查：下一张同供应商发票应能凭货号直接命中该商品
+    const hit = await aliasService.lookup(supplierId, {
+      productCode: `E2E-CODE-${suffix}`,
+      productNameEn: 'completely different name',
+    });
+    ensure(
+      hit !== null && hit.productId === pid && hit.type === 'code',
+      `别名回查未命中货号映射: ${JSON.stringify(hit)}`
+    );
+
+    // 2) 手动建一个更早到期的批次，FIFO 应先扣它
+    const batchRes = await requestJson<{ id: number }>(baseUrl, '/api/v1/batches', {
+      method: 'POST',
+      token,
+      body: { productId: pid, quantity: 5, expiryDate: '2026-06-03', batchNo: `E2E-B-${suffix}` },
+    });
+    ensure(
+      batchRes.status === 201 && (batchRes.body as ApiResponse<{ id: number }>)?.success === true,
+      `批次入库失败: status=${batchRes.status}, body=${stringifyBody(batchRes.body)}`
+    );
+    const manualBatchId = Number((batchRes.body as ApiResponse<{ id: number }>)?.data?.id);
+
+    // 3) 销售 8：应先扣空更早到期的手动批次(5)，再从自动批次扣 3
+    const sale = await requestJson<{ id: number }>(baseUrl, '/api/v1/sales', {
+      method: 'POST',
+      token,
+      body: { items: [{ productId: pid, quantity: 8, unitPrice: 5 }] },
+    });
+    ensure(
+      sale.status === 200 && (sale.body as ApiResponse<{ id: number }>)?.success === true,
+      `销售下单失败: status=${sale.status}, body=${stringifyBody(sale.body)}`
+    );
+    const salesOrderId = Number((sale.body as ApiResponse<{ id: number }>)?.data?.id);
+
+    const manualAfter = await db('inventory_batches').where('id', manualBatchId).first();
+    const autoAfter = await db('inventory_batches').where('id', Number(autoBatch.id)).first();
+    ensure(
+      Number(manualAfter.quantity) === 0 && manualAfter.status === 'depleted',
+      `FIFO 未优先扣空早期批次: qty=${manualAfter.quantity}, status=${manualAfter.status}`
+    );
+    ensure(
+      Number(autoAfter.quantity) === 17,
+      `FIFO 未按预期扣减自动批次: 期望 17，实际 ${autoAfter.quantity}`
+    );
+    await assertBatchInventoryConsistency(pid, '销售后');
+
+    // 4) 作废销售单：精确回补到原批次
+    const voidRes = await requestJson(baseUrl, `/api/v1/sales/${salesOrderId}/void`, {
+      method: 'POST',
+      token,
+    });
+    ensure(
+      voidRes.status === 200 && (voidRes.body as ApiResponse)?.success === true,
+      `作废销售失败: status=${voidRes.status}, body=${stringifyBody(voidRes.body)}`
+    );
+    const manualRestored = await db('inventory_batches').where('id', manualBatchId).first();
+    ensure(
+      Number(manualRestored.quantity) === 5 && manualRestored.status === 'active',
+      `作废未回补批次: qty=${manualRestored.quantity}, status=${manualRestored.status}`
+    );
+    await assertBatchInventoryConsistency(pid, '作废后');
+
+    // 5) 回滚发票确认：自动批次被清理
+    const rollback = await requestJson(baseUrl, `/api/v1/invoices/${invoiceId}/rollback-confirm`, {
+      method: 'POST',
+      token,
+      body: { reason: 'e2e fifo rollback' },
+    });
+    ensure(
+      rollback.status === 200 && (rollback.body as ApiResponse)?.success === true,
+      `回滚发票失败: status=${rollback.status}, body=${stringifyBody(rollback.body)}`
+    );
+    const autoGone = await db('inventory_batches').where('id', Number(autoBatch.id)).first();
+    ensure(!autoGone, '回滚发票后自动批次未清理');
+    await assertBatchInventoryConsistency(pid, '回滚后');
+
+    console.log('[E2E] 批次 FIFO 验证通过（发票建批 / FIFO 扣减 / 作废回补 / 回滚清批，批次合计=库存）');
+    console.log('[E2E] 供应商别名学习验证通过（确认即学习 + 货号回查命中）');
+  } finally {
+    // 清理本次 fixture（该商品为本次运行独有，可安全按 product_id 删除）
+    const items = await db('sales_items').where('product_id', pid).select('id', 'sales_order_id');
+    const itemIds = items.map((r: any) => Number(r.id));
+    const orderIds = [...new Set(items.map((r: any) => Number(r.sales_order_id)))];
+    if (itemIds.length) await db('sales_item_batches').whereIn('sales_item_id', itemIds).delete();
+    await db('sales_items').where('product_id', pid).delete();
+    if (orderIds.length) await db('sales_orders').whereIn('id', orderIds).delete();
+    await db('inventory_batches').where('product_id', pid).delete();
+    await db('invoice_items').where('invoice_id', invoiceId).delete();
+    await db('invoices').where('id', invoiceId).delete();
+    await db('inventory_logs').where('product_id', pid).delete();
+    await db('inventory').where('product_id', pid).delete();
+    await db('products').where('id', pid).delete();
+  }
+}
+
 async function main(): Promise<void> {
   console.log(`[E2E] 环境=${env.nodeEnv}, host=${env.db.host}, db=${env.db.name}`);
   console.log(
@@ -1045,6 +1244,12 @@ async function main(): Promise<void> {
       await runWriteValidation(server.baseUrl, token);
     } else {
       console.log('[E2E] 已跳过写链路（设置 E2E_WRITE_TEST=true 可启用）');
+    }
+
+    if (runBatchFifoChecks) {
+      await runBatchFifoFlow(server.baseUrl, token);
+    } else {
+      console.log('[E2E] 已跳过批次 FIFO（设置 E2E_BATCH_FIFO_TEST=true 可启用）');
     }
 
     console.log('[E2E] 集成测试全部通过');

@@ -2,7 +2,6 @@ import fs from 'fs';
 import path from 'path';
 import { InvoiceModel } from '../models/Invoice';
 import { InvoiceItemModel } from '../models/InvoiceItem';
-import { SupplierTemplateModel } from '../models/SupplierTemplate';
 import { AuditLogModel } from '../models/AuditLog';
 import { SettingModel } from '../models/Setting';
 import { AppError } from '../middleware/errorHandler';
@@ -10,9 +9,12 @@ import { buildPagination } from '../utils/helpers';
 import { ConfirmInvoiceBody, UpdateInvoiceBody } from '../types';
 import db from '../config/database';
 import { adjustStockTx } from './inventory.service';
+import { receiveInvoiceBatchTx, removeInvoiceBatchesTx } from './batch.service';
+import { aliasService } from './alias.service';
 import { notificationService } from './notification.service';
 import { DEFAULT_STORE_ID } from '../config/store';
 import { invalidateAnalyticsCache } from '../utils/cache';
+import logger from '../utils/logger';
 
 function parseOcrRaw(raw: any): any {
   if (!raw) return null;
@@ -255,6 +257,9 @@ export const invoiceService = {
         });
       }
 
+      // 清理该发票确认时自动建立的批次，避免批次台账残留（已产生的销售扣减历史保留）
+      await removeInvoiceBatchesTx(trx, id);
+
       const rollbackStamp = new Date().toISOString();
       const nextNotes = invoice.notes
         ? `${invoice.notes}\n[${rollbackStamp}] ${rollbackReason}`
@@ -328,6 +333,14 @@ export const invoiceService = {
     let newProductsCreated = 0;
     let inventoryUpdated = 0;
     const priceAlerts: any[] = [];
+    // 供「供应商商品别名学习」使用：记录每条明细最终归属的商品 + 原始字段
+    const learnedItems: Array<{
+      productId: number | null;
+      productNumber: unknown;
+      productCode: unknown;
+      productNameEn: unknown;
+      productNameZh: unknown;
+    }> = [];
 
     const priceThreshold = Number((await SettingModel.get('price_alert_threshold')) || '0.1');
 
@@ -399,6 +412,15 @@ export const invoiceService = {
           line_total: lineTotal,
         });
 
+        // 记录「原始字段 → 商品」供别名学习（人工确认即为一次标注）
+        learnedItems.push({
+          productId: productId ?? null,
+          productNumber: item.productNumber,
+          productCode: item.productCode,
+          productNameEn: item.productNameEn,
+          productNameZh: item.productNameZh,
+        });
+
         // 更新库存（统一走带行锁、按门店范围的库存原语，消除与销售并发的丢更新、补齐 store_id）
         if (productId) {
           await adjustStockTx(trx, {
@@ -419,6 +441,16 @@ export const invoiceService = {
               last_restock_quantity: quantity,
               updated_at: trx.fn.now(),
             });
+
+          // 生鲜商品：入库同时建立批次台账，使销售 FIFO 与临期预警覆盖发票入库的库存
+          await receiveInvoiceBatchTx(trx, {
+            productId,
+            storeId: DEFAULT_STORE_ID,
+            quantity,
+            invoiceId: id,
+            invoiceDate: body.invoiceDate,
+            userId,
+          });
 
           inventoryUpdated++;
 
@@ -509,12 +541,12 @@ export const invoiceService = {
       }
     }
 
-    // 更新供应商模板
-    if (body.supplierId && invoice.ocr_raw_result) {
+    // 事务外：学习本次人工确认的「原始字段 → 商品」映射（失败不影响确认结果）
+    if (body.supplierId) {
       try {
-        await SupplierTemplateModel.incrementSuccess(body.supplierId);
-      } catch {
-        /* ignore */
+        await aliasService.learnFromConfirm(body.supplierId, learnedItems);
+      } catch (err) {
+        logger.warn('供应商商品别名学习失败（已忽略）:', err);
       }
     }
 

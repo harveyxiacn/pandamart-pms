@@ -3,7 +3,8 @@ import { authenticate } from '../middleware/auth';
 import { adminOnly } from '../middleware/permission';
 import { AuditLogModel } from '../models/AuditLog';
 import { AuthRequest } from '../types';
-import { sendSuccess, sendError, parsePagination, buildPagination } from '../utils/helpers';
+import { sendSuccess, parsePagination, buildPagination } from '../utils/helpers';
+import { sendRouteError } from '../utils/routeError';
 
 const router = Router();
 
@@ -41,7 +42,7 @@ router.get('/', authenticate, adminOnly, async (req: AuthRequest, res: Response)
       pagination,
     });
   } catch (err: any) {
-    sendError(res, 500, 'INTERNAL_ERROR', err.message);
+    sendRouteError(res, err);
   }
 });
 

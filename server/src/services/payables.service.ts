@@ -126,9 +126,20 @@ export const payablesService = {
     const supplier = await db('suppliers').where('id', body.supplierId).first();
     if (!supplier) throw new AppError(404, 'NOT_FOUND', '供应商不存在');
 
+    // 若指定关联发票，校验其存在且归属同一供应商，避免把付款挂到无关/不存在的发票上
+    let invoiceId: number | null = null;
+    if (body.invoiceId) {
+      const invoice = await db('invoices').where('id', body.invoiceId).first();
+      if (!invoice) throw new AppError(404, 'NOT_FOUND', '关联发票不存在');
+      if (Number(invoice.supplier_id) !== Number(body.supplierId)) {
+        throw new AppError(400, 'VALIDATION_ERROR', '关联发票不属于该供应商');
+      }
+      invoiceId = Number(body.invoiceId);
+    }
+
     const [id] = await db('supplier_payments').insert({
       supplier_id: body.supplierId,
-      invoice_id: body.invoiceId || null,
+      invoice_id: invoiceId,
       amount: body.amount,
       method: body.method || null,
       paid_at: body.paidAt || new Date().toISOString().slice(0, 10),

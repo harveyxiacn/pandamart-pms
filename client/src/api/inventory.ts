@@ -1,10 +1,18 @@
 import type { InventoryItem, InventorySummary, PaginatedData } from "../types";
 import { apiClient, unwrap } from "./client";
+import { fetchAllPages } from "./pagination";
 
 export function getInventory(params?: Record<string, string | number | boolean | undefined>) {
   return unwrap<PaginatedData<InventoryItem> & { summary: InventorySummary }>(
     apiClient.get("/inventory", { params })
   );
+}
+
+/** 拉取全部库存行（跨页），供盘点页等需要完整集合的场景使用。 */
+export function getAllInventory(
+  params?: Omit<Record<string, string | number | boolean | undefined>, "page" | "pageSize">
+): Promise<InventoryItem[]> {
+  return fetchAllPages<InventoryItem>((page, pageSize) => getInventory({ ...params, page, pageSize }));
 }
 
 export function adjustInventory(

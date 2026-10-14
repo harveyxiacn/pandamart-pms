@@ -9,6 +9,7 @@ import { Button } from "../components/ui/Button";
 import { Badge } from "../components/ui/Badge";
 import { Modal } from "../components/ui/Modal";
 import { SkeletonTable } from "../components/ui/Skeleton";
+import { Pagination } from "../components/ui/Pagination";
 import { EmptyState } from "../components/ui/EmptyState";
 import { useToast } from "../components/ui/Toast";
 import { usePermission } from "../hooks/usePermission";
@@ -36,6 +37,10 @@ export default function InventoryPage() {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // 服务端 pageSize 上限 100：改为真实分页，避免库存超出一页时被静默截断
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [total, setTotal] = useState(0);
   const [actionProduct, setActionProduct] = useState<InventoryItem | null>(null);
   const [actionType, setActionType] = useState<"adjust" | "out" | "stocktake">("adjust");
   const [actionQty, setActionQty] = useState(0);
@@ -45,15 +50,22 @@ export default function InventoryPage() {
   // 请求竞态守卫：手动「查询」/Enter 与 debounce 触发可能并发，防止过期请求覆盖新结果（FE-N3）
   const reqIdRef = useRef(0);
 
-  const load = async () => {
+  const load = async (targetPage = page, targetPageSize = pageSize) => {
     const myReq = ++reqIdRef.current;
     setLoading(true);
     setError(null);
     try {
-      const data = await getInventory({ pageSize: 200, keyword: keyword || undefined, alertOnly });
+      const data = await getInventory({
+        page: targetPage,
+        pageSize: targetPageSize,
+        keyword: keyword || undefined,
+        alertOnly,
+      });
       // 过期请求直接丢弃结果（FE-N3）
       if (myReq !== reqIdRef.current) return;
       setItems(data.items);
+      setTotal(data.pagination.total);
+      setPage(data.pagination.page);
     } catch (err: unknown) {
       if (myReq !== reqIdRef.current) return;
       setError(err instanceof Error ? err.message : "加载库存失败");
@@ -65,7 +77,8 @@ export default function InventoryPage() {
   const debouncedKeyword = useDebounce(keyword, 400);
 
   useEffect(() => {
-    void load();
+    // 关键词/筛选变化时回到第 1 页
+    void load(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedKeyword, alertOnly]);
 
@@ -79,7 +92,7 @@ export default function InventoryPage() {
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") void load();
+                if (e.key === "Enter") void load(1);
               }}
               placeholder="产品名 / SKU"
             />
@@ -88,7 +101,7 @@ export default function InventoryPage() {
             <span className="mb-2 block">低库存</span>
             <input type="checkbox" checked={alertOnly} onChange={(e) => setAlertOnly(e.target.checked)} />
           </label>
-          <Button onClick={() => void load()}>查询</Button>
+          <Button onClick={() => void load(1)}>查询</Button>
         </div>
       </Card>
 
@@ -146,8 +159,13 @@ export default function InventoryPage() {
                           onClick={async () => {
                             setActionProduct(item);
                             setSafeStockValue(item.safeStock ?? 0);
-                            const logRes = await getInventoryLogs(item.product.id, { pageSize: 10 });
-                            setLogs(logRes.items as InventoryLog[]);
+                            try {
+                              const logRes = await getInventoryLogs(item.product.id, { pageSize: 10 });
+                              setLogs(logRes.items as InventoryLog[]);
+                            } catch (err: unknown) {
+                              setLogs([]);
+                              toast.error(err instanceof Error ? err.message : "加载库存日志失败");
+                            }
                           }}
                         >
                           调整
@@ -159,6 +177,20 @@ export default function InventoryPage() {
               ))}
             </tbody>
           </Table>
+        ) : null}
+        {!loading && !error && items.length > 0 ? (
+          <div className="mt-3">
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={(next) => void load(next)}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                void load(1, size);
+              }}
+            />
+          </div>
         ) : null}
       </Card>
 

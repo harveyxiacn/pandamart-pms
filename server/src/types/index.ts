@@ -236,6 +236,17 @@ export interface CreateBatchBody {
   batchNo?: string | null;
   receivedDate?: string | null;
   note?: string | null;
+  /** 关联来源发票（可选）：手动按发票收货时记录批次→发票溯源。 */
+  invoiceId?: number | null;
+}
+
+/** 销售明细消耗批次台账（迁移 023）：记录某条销售明细扣了哪些批次各多少，供 FIFO 记账与作废回补。 */
+export interface SalesItemBatchRow {
+  id: number;
+  sales_item_id: number;
+  batch_id: number | null;
+  quantity: number;
+  created_at: Date;
 }
 
 // ==================== AI 提供商相关 ====================
@@ -314,15 +325,16 @@ export interface NotificationRow {
   created_at: Date;
 }
 
-// ==================== 供应商模板相关 ====================
-export interface SupplierTemplateRow {
+// ==================== 供应商商品别名（学习型匹配）相关 ====================
+export type ProductAliasType = 'barcode' | 'code' | 'name';
+
+export interface SupplierProductAliasRow {
   id: number;
   supplier_id: number;
-  template_type: 'regex' | 'positional' | 'ai_prompt';
-  template_config: any;
-  sample_file_path: string | null;
-  success_count: number;
-  last_used_at: Date | null;
+  alias_type: ProductAliasType;
+  alias_key: string;
+  product_id: number;
+  hits: number;
   created_at: Date;
   updated_at: Date;
 }

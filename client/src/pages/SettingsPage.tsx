@@ -8,6 +8,7 @@ import {
   updateAiProvider,
 } from "../api/aiProviders";
 import { getSettings, updateSettings } from "../api/settings";
+import { getProductAliases, deleteProductAlias, type ProductAlias } from "../api/productAliases";
 import type { AiProvider } from "../types";
 import { Card } from "../components/ui/Card";
 import { Input } from "../components/ui/Input";
@@ -33,6 +34,12 @@ type ProviderForm = {
   notes: string;
 };
 
+const ALIAS_TYPE_LABEL: Record<ProductAlias["aliasType"], string> = {
+  barcode: "条码",
+  code: "货号",
+  name: "名称",
+};
+
 const defaultProviderForm: ProviderForm = {
   name: "",
   baseUrl: "",
@@ -52,6 +59,7 @@ export default function SettingsPage() {
   const confirm = useConfirm();
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [providers, setProviders] = useState<AiProvider[]>([]);
+  const [aliases, setAliases] = useState<ProductAlias[]>([]);
   const [providerForm, setProviderForm] = useState<ProviderForm>(defaultProviderForm);
   const [editingProvider, setEditingProvider] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -74,9 +82,15 @@ export default function SettingsPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const [settingRes, providerRes] = await Promise.all([getSettings(), getAiProviders()]);
+      const [settingRes, providerRes, aliasRes] = await Promise.all([
+        getSettings(),
+        getAiProviders(),
+        // 别名学习列表失败不应阻塞设置页其余内容
+        getProductAliases().catch(() => []),
+      ]);
       setSettings(settingRes);
       setProviders(providerRes);
+      setAliases(aliasRes);
     } catch (err: unknown) {
       showError(err, "加载设置失败");
     } finally {
@@ -418,6 +432,62 @@ export default function SettingsPage() {
             {message}
           </p>
         ) : null}
+      </Card>
+
+      <Card>
+        <h2 className="mb-1 text-lg font-bold">OCR 商品匹配学习</h2>
+        <p className="mb-3 text-sm text-slate-600">
+          每次在「发票识别」中确认商品归属，系统会把该供应商的原始字段（条码 / 货号 / 名称）记为该商品的别名，
+          下次识别同一供应商的发票即可高置信度自动匹配。命中次数越多表示该映射使用越频繁；若发现错误匹配可在此删除。
+        </p>
+        {aliases.length === 0 ? (
+          <p className="text-sm text-slate-500">暂无已学习记录。确认发票后这里会出现自动学习的匹配。</p>
+        ) : (
+          <Table>
+            <thead>
+              <tr className="bg-slate-50 text-left text-xs text-slate-600">
+                <th className="px-3 py-2">供应商</th>
+                <th className="px-3 py-2">字段类型</th>
+                <th className="px-3 py-2">原始值</th>
+                <th className="px-3 py-2">匹配商品</th>
+                <th className="px-3 py-2">命中次数</th>
+                <th className="px-3 py-2">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {aliases.map((alias) => (
+                <tr key={alias.id} className="border-t border-slate-100">
+                  <td className="px-3 py-2">{alias.supplierName}</td>
+                  <td className="px-3 py-2">{ALIAS_TYPE_LABEL[alias.aliasType]}</td>
+                  <td className="px-3 py-2 font-mono text-xs">{alias.aliasKey}</td>
+                  <td className="px-3 py-2">{alias.productName}</td>
+                  <td className="px-3 py-2">{alias.hits}</td>
+                  <td className="px-3 py-2">
+                    <Button
+                      variant="ghost"
+                      onClick={async () => {
+                        const ok = await confirm({
+                          title: "删除已学习匹配",
+                          message: `确认删除「${alias.aliasKey} → ${alias.productName}」这条匹配吗？`,
+                        });
+                        if (!ok) return;
+                        try {
+                          await deleteProductAlias(alias.id);
+                          await load();
+                          showSuccess("已删除该条学习记录");
+                        } catch (err: unknown) {
+                          showError(err, "删除失败");
+                        }
+                      }}
+                    >
+                      删除
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        )}
       </Card>
     </div>
   );

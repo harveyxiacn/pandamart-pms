@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Download, Package, Upload } from "lucide-react";
 import {
   CartesianGrid,
@@ -13,26 +13,29 @@ import { getCategoryFlat } from "../api/categories";
 import {
   createProduct,
   deleteProduct,
+  getProductById,
   getProductPriceHistory,
   getProducts,
   importProducts,
   updateProduct,
   uploadProductImage,
 } from "../api/products";
-import { getSuppliers } from "../api/suppliers";
+import { useSearchParams } from "react-router-dom";
+import { getAllSuppliers } from "../api/suppliers";
 import type { Category, Product, Supplier } from "../types";
 import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Select } from "../components/ui/Select";
 import { Table } from "../components/ui/Table";
+import { Pagination } from "../components/ui/Pagination";
 import { Modal } from "../components/ui/Modal";
 import { SkeletonTable } from "../components/ui/Skeleton";
 import { EmptyState } from "../components/ui/EmptyState";
 import { useToast } from "../components/ui/Toast";
 import { useConfirm } from "../components/ui/ConfirmDialog";
 import { formatCurrency, formatDate } from "../utils/formatters";
-import { API_BASE_URL } from "../utils/constants";
+import { exportProducts } from "../api/export";
 import { usePermission } from "../hooks/usePermission";
 import { useDebounce } from "../hooks/useDebounce";
 
@@ -120,6 +123,13 @@ export default function ProductsPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [keyword, setKeyword] = useState("");
+  // 服务端 pageSize 上限 100：改为真实分页，避免超过一页的产品被静默截断
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [total, setTotal] = useState(0);
+  const [searchParams, setSearchParams] = useSearchParams();
+  // 记录已通过深链打开的产品 id，避免重复触发
+  const openedDeepLinkRef = useRef<number | null>(null);
   const [form, setForm] = useState<ProductForm>(initialForm);
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -171,18 +181,41 @@ export default function ProductsPage() {
     };
   });
 
-  const load = async () => {
+  const beginEdit = (item: Product) => {
+    setEditing(true);
+    setForm({
+      id: item.id,
+      sku: item.sku || "",
+      barcode: item.barcode || "",
+      nameEn: item.name_en,
+      nameZh: item.name_zh || "",
+      categoryId: item.category_id ? String(item.category_id) : "",
+      defaultSupplierId: item.default_supplier_id ? String(item.default_supplier_id) : "",
+      defaultUnit: item.default_unit,
+      defaultPrice: item.default_price ? String(item.default_price) : "",
+      sellingPrice: item.selling_price != null ? String(item.selling_price) : "",
+      isPerishable: item.is_perishable ?? false,
+      shelfLifeDays: item.shelf_life_days != null ? String(item.shelf_life_days) : "",
+      notes: item.notes || "",
+      isActive: item.is_active,
+    });
+  };
+
+  const load = async (targetPage = page, targetPageSize = pageSize) => {
     setLoading(true);
     setError(null);
     try {
-      const [productsRes, categoriesRes, suppliersRes] = await Promise.all([
-        getProducts({ pageSize: 200, keyword: keyword || undefined }),
+      const [productsRes, categoriesRes, suppliersAll] = await Promise.all([
+        getProducts({ page: targetPage, pageSize: targetPageSize, keyword: keyword || undefined }),
         getCategoryFlat(),
-        getSuppliers({ pageSize: 200 }),
+        // 供应商仅用于下拉筛选/表单：跨页拉全，避免第 100 个之后的供应商无法选择
+        getAllSuppliers(),
       ]);
       setItems(productsRes.items);
+      setTotal(productsRes.pagination.total);
+      setPage(productsRes.pagination.page);
       setCategories(categoriesRes);
-      setSuppliers(suppliersRes.items);
+      setSuppliers(suppliersAll);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "加载产品失败");
     } finally {
@@ -193,9 +226,32 @@ export default function ProductsPage() {
   const debouncedKeyword = useDebounce(keyword, 400);
 
   useEffect(() => {
-    void load();
+    // 关键词变化时回到第 1 页
+    void load(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedKeyword]);
+
+  // 深链支持：/products?id=123（来自 Header 全局搜索结果），直接拉取该产品并进入编辑态
+  useEffect(() => {
+    const idParam = searchParams.get("id");
+    if (!idParam) return;
+    const id = Number(idParam);
+    if (!Number.isFinite(id) || id <= 0) return;
+    if (!canEditCatalog || openedDeepLinkRef.current === id) return;
+    openedDeepLinkRef.current = id;
+    void (async () => {
+      try {
+        beginEdit(await getProductById(id));
+      } catch (err: unknown) {
+        toast.error(err instanceof Error ? err.message : "打开产品失败");
+      } finally {
+        const next = new URLSearchParams(searchParams);
+        next.delete("id");
+        setSearchParams(next, { replace: true });
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, canEditCatalog]);
 
   return (
     <div className="space-y-4">
@@ -377,15 +433,20 @@ export default function ProductsPage() {
                 }}
               />
             </label>
-            <a
-              href={`${API_BASE_URL}/products/export`}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center rounded-lg bg-amber px-3 py-2 text-sm font-semibold text-ink"
+            <Button
+              variant="secondary"
+              onClick={async () => {
+                // 走 axios（自动带 Authorization 头 + blob 下载）；原生 <a href> 不带鉴权头会触发 401
+                try {
+                  await exportProducts();
+                } catch (err: unknown) {
+                  toast.error(err instanceof Error ? err.message : "导出失败");
+                }
+              }}
             >
               <Download size={15} className="mr-1" />
               导出
-            </a>
+            </Button>
           </div>
         </Card>
       ) : null}
@@ -398,12 +459,12 @@ export default function ProductsPage() {
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") void load();
+                if (e.key === "Enter") void load(1);
               }}
               placeholder="名称 / SKU"
             />
           </label>
-          <Button onClick={() => void load()}>查询</Button>
+          <Button onClick={() => void load(1)}>查询</Button>
         </div>
         {loading ? <SkeletonTable rows={6} columns={canViewFinancials ? 7 : 6} /> : null}
         {!loading && error ? (
@@ -453,32 +514,7 @@ export default function ProductsPage() {
                   <td className="px-3 py-2">
                     <div className="flex flex-wrap gap-1">
                       {canEditCatalog ? (
-                        <Button
-                          variant="ghost"
-                          onClick={() => {
-                            setEditing(true);
-                            setForm({
-                              id: item.id,
-                              sku: item.sku || "",
-                              barcode: item.barcode || "",
-                              nameEn: item.name_en,
-                              nameZh: item.name_zh || "",
-                              categoryId: item.category_id ? String(item.category_id) : "",
-                              defaultSupplierId: item.default_supplier_id
-                                ? String(item.default_supplier_id)
-                                : "",
-                              defaultUnit: item.default_unit,
-                              defaultPrice: item.default_price ? String(item.default_price) : "",
-                              sellingPrice:
-                                item.selling_price != null ? String(item.selling_price) : "",
-                              isPerishable: item.is_perishable ?? false,
-                              shelfLifeDays:
-                                item.shelf_life_days != null ? String(item.shelf_life_days) : "",
-                              notes: item.notes || "",
-                              isActive: item.is_active,
-                            });
-                          }}
-                        >
+                        <Button variant="ghost" onClick={() => beginEdit(item)}>
                           编辑
                         </Button>
                       ) : null}
@@ -526,6 +562,20 @@ export default function ProductsPage() {
               ))}
             </tbody>
           </Table>
+        ) : null}
+        {!loading && !error && items.length > 0 ? (
+          <div className="mt-3">
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={(next) => void load(next)}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                void load(1, size);
+              }}
+            />
+          </div>
         ) : null}
       </Card>
 

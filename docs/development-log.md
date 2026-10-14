@@ -356,3 +356,60 @@
 - 说明：
   - `npm run lint` 当前为 0 error，但仍有大量既有 warning（主要为 `any` 与少量未用变量），本轮未做全仓类型债重构。
   - `npm run format:check` 仍因历史 97 个文件格式状态失败；未执行全仓格式化，避免产生大规模无关 diff。
+
+## 2026-10-15
+
+### 0. 本轮目标与选题
+
+对前后端各做一次完整通读式审计，优先处理"设计过但从未真正可用"的模块与一类**静默失效**缺陷（用户看不到报错、功能却已不完整）。完整设计见 `docs/module-design-2026-10.md`。**迁移基线由 022 推进到 024**。
+
+### 1. 销售 FIFO 批次扣减（迁移 023，模块缺口，此前 migration 019 注释即标注为待办）
+
+- 新增纯函数模块 `server/src/services/batch-fifo.ts`：`planFifoAllocation(batches, requested, today)` 按「未过期优先 → 到期日升序(null 最后) → 收货日升序 → id 升序」分配，返回 `{allocations, unallocated}`；不变量 `Σ allocations + unallocated === min(需求, 可用)`。`toDateKey()` 统一本地日历日。
+- 迁移 023：新建 `sales_item_batches`（记录每条销售明细消耗的批次，供作废精确回补；`batch_id` 置空保留历史）；`inventory_batches` 加 `idx_batches_fifo` 复合索引。
+- 接线：
+  - `sales.service.create` 插入明细后调 `deductBatchesFifo`（批次行 `forUpdate`，无批次商品空操作）。批次不足不报错，记 `unallocated` 并 warn，不阻塞销售。
+  - `sales.service.void` 调 `restoreBatchesForSalesItem` 把消耗量加回原批次（`depleted → active`，`disposed` 保持）。
+  - `invoice.service.confirm` 对 `is_perishable` 商品调 `receiveInvoiceBatchTx`（发票日 + `shelf_life_days`）自动建批，补齐 `invoice_id` 溯源；`rollbackConfirm` 调 `removeInvoiceBatchesTx` 清理。
+  - `batch.service.create` 补写此前从未落库的 `invoice_id`。
+- 顺带修正：批次到期日/收货日/临期汇总此前用 `toISOString()` 计算，在 UTC+8 下**错位一天**，统一改本地日历日。
+
+### 2. 供应商商品别名学习（迁移 024，替代死代码 supplier_templates）
+
+- 审计确认 `supplier_templates` 整条链路（表 + model + `template.service`）**无任何调用方**，`incrementSuccess` 对该永远为空的表做 UPDATE —— 是纯死代码。迁移 024 **删除该表**（down 忠实还原），改为 `supplier_product_aliases`。
+- 新增 `server/src/services/alias.service.ts`：纯函数 `normalizeAliasKey`（barcode 8–16 位数字 / code 去空白大写≥3 / name 去符号小写≥2，兼容中文 2 字名）与 `deriveAliasCandidates`；`learnFromConfirm`（确认发票即学习，`ON DUPLICATE KEY UPDATE` 累加 hits 并可被人工修正覆盖）、`lookup`（barcode > code > name，同类型取 hits 高者）、`list`、`remove`。
+- 接线：`ocr.service.processFile` 把"解析供应商"提到"匹配商品"之前；`matchProducts(items, supplierId)` 改为三级瀑布 —— ①已学习别名(0.99) → ②条码精确命中(0.95) → ③名称模糊匹配兜底。`invoice.service.confirm` 事务外学习人工确认结果（失败不影响确认）。
+- 新增 `GET/DELETE /api/v1/product-aliases`（adminOnly，删除写审计）；设置页新增「OCR 商品匹配学习」卡片（列表 + 删除误学习项）。
+
+### 3. 前端静默截断（高影响）
+
+- 根因：服务端 `parsePagination` 把 `pageSize` 钳到 ≤100，前端多处请求 200/500/1000 且无分页 → **盘点漏盘、收银/批次选品只能选前 100 个商品、发票列表只显示前 100 张**。
+- 新增 `client/src/api/pagination.ts` 的 `fetchAllPages`（逐页拉取，`maxPages` 兜底防死循环）+ `getAllProducts/getAllSuppliers/getAllInventory`。
+- 选择器/盘点改用跨页拉全：SalesPage、BatchesPage、StocktakePage、ExportPage、InvoiceScanPage、ProductsPage/InvoiceListPage 的供应商下拉。
+- 列表页接入真实分页 `<Pagination>`：Products、Inventory、Suppliers、InvoiceList、Batches、Notifications（筛选变化回第 1 页）。
+
+### 4. 其余修复
+
+- 产品页导出从原生 `<a href>`（不带 Authorization，点了是 401 JSON）改为 axios + blob 的 `exportProducts()`。
+- Header 全局搜索框按 `isAdmin` 渲染（后端 `/analytics/search` 为 adminOnly，店员此前看到空下拉）。
+- ProductsPage / SuppliersPage 接上 `?id=` 深链（此前 Header 搜索结果跳过去是死的）。
+- MobileNav「更多」补齐 批次/盘点/应付/AI/导出/审计/用户 入口。
+- `/ai/reorder-advice?categoryId=` 恒空：`getReorderSuggestions` 补返回 `categoryId`，过滤改数值比较。
+- 9 个路由文件的裸 `sendError(500, err.message)` 统一为 `sendRouteError`（AppError 状态码透传 + DB→503 + 未知错误落日志）。
+- `getExpiringSummary` 加 LIMIT；`recordPayment` 校验关联发票存在且归属该供应商。
+- 前端补错误捕获/重试：Users / AiAssistant / Notifications / Inventory(日志) / Dashboard / Analytics / Stocktake / AuditLogs。
+- e2e 滞后断言修复：降权 token 现返回 401 TOKEN_REVOKED（token_version 生效），断言改为「401/403 且 success=false」。
+
+### 5. CI
+
+- 新增 `.github/workflows/ci.yml`：push/PR 到 main 时并行跑 server、client 的 `npm ci` → `tsc --noEmit` → `npm test` → `npm run build` → `npm run lint`。
+
+### 6. 测试与验证记录
+
+- 后端单测：`cd server && npm run test` → **63 通过**（新增 `batch-fifo.test.ts` 13、`alias.service.test.ts` 9）。
+- 前端单测：`cd client && npm run test` → **23 通过**（新增 `api/__tests__/pagination.test.ts` 5；同步更新 InvoiceList/Products 既有测试以适配分页参数、Router 与新增 API mock）。
+- 类型检查：`server`/`client` 的 `tsc --noEmit` 均 0 错。
+- Lint：两侧 0 error（保留既有 `any` warning）。
+- 构建：两侧 `npm run build` 通过。
+- 端到端（本地真实 MySQL，migration 024）：`E2E_BATCH_FIFO_TEST=true npm run test:e2e` → 只读链路 / 财务可见性边界 / 安全加固回归 / **批次 FIFO（发票建批→FIFO 扣减→作废回补→回滚清批，全程断言批次合计=库存）** / **别名学习（确认即学习 + 货号回查命中）** 全部通过。
+- 说明：`npm run format:check` 仍因历史文件格式状态失败，本轮未做全仓格式化以避免大规模无关 diff。

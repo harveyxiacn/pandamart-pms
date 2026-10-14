@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import { getProducts } from "../api/products";
+import { getAllProducts } from "../api/products";
 import { createSale, getSales, voidSale, type SaleSummary } from "../api/sales";
 import type { Product } from "../types";
 import { Card } from "../components/ui/Card";
@@ -49,8 +49,9 @@ export default function SalesPage() {
 
   const loadProducts = async () => {
     try {
-      const res = await getProducts({ pageSize: 1000 });
-      setProducts(res.items);
+      // 跨页拉取全部商品：服务端 pageSize 上限为 100，直接请求 1000 只会拿到前 100 个，
+      // 导致第 100 个之后的商品无法售卖。
+      setProducts(await getAllProducts());
     } catch {
       // 商品加载失败不阻塞页面，提交时再校验
     }

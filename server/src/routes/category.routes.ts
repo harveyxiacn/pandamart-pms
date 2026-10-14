@@ -6,6 +6,7 @@ import { CategoryModel } from '../models/Category';
 import { AuditLogModel } from '../models/AuditLog';
 import { AuthRequest, CategoryRow } from '../types';
 import { sendSuccess, sendError } from '../utils/helpers';
+import { sendRouteError } from '../utils/routeError';
 import db from '../config/database';
 
 const router = Router();
@@ -53,7 +54,7 @@ router.get('/', authenticate, async (_req: AuthRequest, res: Response) => {
     const tree = buildTree(categoriesWithCount);
     sendSuccess(res, tree);
   } catch (err: any) {
-    sendError(res, 500, 'INTERNAL_ERROR', err.message);
+    sendRouteError(res, err);
   }
 });
 
@@ -63,7 +64,7 @@ router.get('/flat', authenticate, async (_req: AuthRequest, res: Response) => {
     const categories = await CategoryModel.findAll();
     sendSuccess(res, categories);
   } catch (err: any) {
-    sendError(res, 500, 'INTERNAL_ERROR', err.message);
+    sendRouteError(res, err);
   }
 });
 
@@ -93,7 +94,7 @@ router.post(
 
       sendSuccess(res, { id }, '分类创建成功', 201);
     } catch (err: any) {
-      sendError(res, 500, 'INTERNAL_ERROR', err.message);
+      sendRouteError(res, err);
     }
   }
 );
@@ -117,7 +118,7 @@ router.put('/:id', authenticate, adminOnly, async (req: AuthRequest, res: Respon
     await CategoryModel.update(id, updateData);
     sendSuccess(res, null, '分类更新成功');
   } catch (err: any) {
-    sendError(res, 500, 'INTERNAL_ERROR', err.message);
+    sendRouteError(res, err);
   }
 });
 
@@ -146,7 +147,7 @@ router.delete('/:id', authenticate, adminOnly, async (req: AuthRequest, res: Res
     await CategoryModel.delete(id);
     sendSuccess(res, null, '分类已删除');
   } catch (err: any) {
-    sendError(res, 500, 'INTERNAL_ERROR', err.message);
+    sendRouteError(res, err);
   }
 });
 

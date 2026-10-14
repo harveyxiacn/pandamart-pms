@@ -5,6 +5,7 @@ import { adminOnly } from '../middleware/permission';
 import { exportLimiter } from '../middleware/rateLimit';
 import { AuthRequest } from '../types';
 import { sendSuccess, sendError } from '../utils/helpers';
+import { sendRouteError } from '../utils/routeError';
 import { analyticsService } from '../services/analytics.service';
 import db from '../config/database';
 
@@ -53,7 +54,7 @@ router.get('/invoices', authenticate, adminOnly, exportLimiter, async (req: Auth
     res.setHeader('Content-Disposition', 'attachment; filename=invoices.xlsx');
     res.send(buffer);
   } catch (err: any) {
-    sendError(res, 500, 'INTERNAL_ERROR', err.message);
+    sendRouteError(res, err);
   }
 });
 
@@ -99,7 +100,7 @@ router.get('/inventory', authenticate, adminOnly, exportLimiter, async (_req: Au
     res.setHeader('Content-Disposition', 'attachment; filename=inventory.xlsx');
     res.send(buffer);
   } catch (err: any) {
-    sendError(res, 500, 'INTERNAL_ERROR', err.message);
+    sendRouteError(res, err);
   }
 });
 
@@ -129,7 +130,7 @@ router.get('/suppliers', authenticate, adminOnly, exportLimiter, async (_req: Au
     res.setHeader('Content-Disposition', 'attachment; filename=suppliers.xlsx');
     res.send(buffer);
   } catch (err: any) {
-    sendError(res, 500, 'INTERNAL_ERROR', err.message);
+    sendRouteError(res, err);
   }
 });
 
@@ -191,7 +192,7 @@ router.get('/purchases', authenticate, adminOnly, exportLimiter, async (req: Aut
     res.setHeader('Content-Disposition', 'attachment; filename=purchases.xlsx');
     res.send(buffer);
   } catch (err: any) {
-    sendError(res, 500, 'INTERNAL_ERROR', err.message);
+    sendRouteError(res, err);
   }
 });
 
@@ -296,7 +297,7 @@ router.get('/full-backup', authenticate, adminOnly, exportLimiter, async (_req: 
     res.setHeader('Content-Disposition', `attachment; filename=pandamart-backup-${new Date().toISOString().split('T')[0]}.json`);
     res.send(JSON.stringify(backup));
   } catch (err: any) {
-    sendError(res, 500, 'INTERNAL_ERROR', err.message);
+    sendRouteError(res, err);
   }
 });
 
@@ -327,7 +328,7 @@ router.get('/reorder-suggestions', authenticate, adminOnly, exportLimiter, async
     res.setHeader('Content-Disposition', 'attachment; filename=reorder-suggestions.xlsx');
     res.send(buffer);
   } catch (err: any) {
-    sendError(res, 500, 'INTERNAL_ERROR', err.message);
+    sendRouteError(res, err);
   }
 });
 

@@ -7,6 +7,7 @@ import { AuditLogModel } from '../models/AuditLog';
 import { authService } from '../services/auth.service';
 import { AuthRequest } from '../types';
 import { sendSuccess, sendError } from '../utils/helpers';
+import { sendRouteError } from '../utils/routeError';
 
 const router = Router();
 
@@ -16,7 +17,7 @@ router.get('/', authenticate, adminOnly, async (req: AuthRequest, res: Response)
     const users = await UserModel.findAll();
     sendSuccess(res, users);
   } catch (err: any) {
-    sendError(res, 500, 'INTERNAL_ERROR', err.message);
+    sendRouteError(res, err);
   }
 });
 
@@ -67,7 +68,7 @@ router.post(
 
       sendSuccess(res, { id: userId }, '用户创建成功', 201);
     } catch (err: any) {
-      sendError(res, 500, 'INTERNAL_ERROR', err.message);
+      sendRouteError(res, err);
     }
   }
 );
@@ -113,7 +114,7 @@ router.put(
 
       sendSuccess(res, null, '用户更新成功');
     } catch (err: any) {
-      sendError(res, 500, 'INTERNAL_ERROR', err.message);
+      sendRouteError(res, err);
     }
   }
 );
@@ -149,7 +150,7 @@ router.put(
 
       sendSuccess(res, null, req.body.isActive ? '用户已启用' : '用户已禁用');
     } catch (err: any) {
-      sendError(res, 500, 'INTERNAL_ERROR', err.message);
+      sendRouteError(res, err);
     }
   }
 );
@@ -191,7 +192,7 @@ router.put(
 
       sendSuccess(res, null, '密码重置成功');
     } catch (err: any) {
-      sendError(res, 500, 'INTERNAL_ERROR', err.message);
+      sendRouteError(res, err);
     }
   }
 );

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { confirmInvoice, deleteInvoice, getInvoiceById, getInvoices, rollbackInvoiceConfirm, updateInvoice } from "../api/invoices";
-import { getSuppliers } from "../api/suppliers";
+import { getAllSuppliers } from "../api/suppliers";
 import type { InvoiceDetail, InvoiceSummary, Supplier } from "../types";
 import { Card } from "../components/ui/Card";
 import { Table } from "../components/ui/Table";
@@ -11,6 +11,7 @@ import { Button } from "../components/ui/Button";
 import { Modal } from "../components/ui/Modal";
 import { Badge } from "../components/ui/Badge";
 import { SkeletonTable } from "../components/ui/Skeleton";
+import { Pagination } from "../components/ui/Pagination";
 import { EmptyState } from "../components/ui/EmptyState";
 import { useToast } from "../components/ui/Toast";
 import { useConfirm } from "../components/ui/ConfirmDialog";
@@ -148,6 +149,10 @@ export default function InvoiceListPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [status, setStatus] = useState(isAdmin ? "" : "pending");
   const [keyword, setKeyword] = useState("");
+  // 服务端 pageSize 上限 100：改为真实分页，避免超过 100 张发票后旧记录不可见
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<InvoiceDetail | null>(null);
@@ -163,13 +168,20 @@ export default function InvoiceListPage() {
 
   const debouncedKeyword = useDebounce(keyword, 400);
 
-  const load = async (kw: string = keyword) => {
+  const load = async (targetPage = page, kw: string = keyword, targetPageSize = pageSize) => {
     setLoading(true);
     setError(null);
     try {
       const statusFilter = isAdmin ? status || undefined : "pending";
-      const data = await getInvoices({ pageSize: 100, status: statusFilter, keyword: kw || undefined });
+      const data = await getInvoices({
+        page: targetPage,
+        pageSize: targetPageSize,
+        status: statusFilter,
+        keyword: kw || undefined,
+      });
       setItems(data.items);
+      setTotal(data.pagination.total);
+      setPage(data.pagination.page);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "加载失败");
     } finally {
@@ -178,14 +190,15 @@ export default function InvoiceListPage() {
   };
 
   useEffect(() => {
-    // 用防抖后的关键字触发搜索；手动「查询/回车」仍走 load() 使用即时关键字
-    void load(debouncedKeyword);
+    // 用防抖后的关键字触发搜索并回到第 1 页；手动「查询/回车」仍走 load(1) 使用即时关键字
+    void load(1, debouncedKeyword);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedKeyword, status]);
 
   useEffect(() => {
-    getSuppliers({ pageSize: 500 })
-      .then((res) => setSuppliers(res.items))
+    // 跨页拉取全部供应商（服务端 pageSize 上限 100），避免筛选下拉漏项
+    getAllSuppliers()
+      .then((items) => setSuppliers(items))
       .catch(() => setSuppliers([]));
   }, []);
 
@@ -502,12 +515,12 @@ export default function InvoiceListPage() {
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") void load();
+                if (e.key === "Enter") void load(1);
               }}
               placeholder="输入发票号搜索"
             />
           </label>
-          <Button onClick={() => void load()}>筛选</Button>
+          <Button onClick={() => void load(1)}>筛选</Button>
         </div>
       </Card>
 
@@ -562,6 +575,20 @@ export default function InvoiceListPage() {
               ))}
             </tbody>
           </Table>
+        ) : null}
+        {!loading && !error && items.length > 0 ? (
+          <div className="mt-3">
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={(next) => void load(next)}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                void load(1, keyword, size);
+              }}
+            />
+          </div>
         ) : null}
       </Card>
 

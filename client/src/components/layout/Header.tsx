@@ -10,7 +10,7 @@ import type { GlobalSearchResult } from "../../types";
 
 export function Header() {
   const [unreadCount, setUnreadCount] = useState(0);
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
   const navigate = useNavigate();
 
   /* ── search state ──────────────────────────────────────── */
@@ -92,7 +92,8 @@ export function Header() {
         </div>
       </div>
 
-      {/* ── center: search bar ──────────────────────────── */}
+      {/* ── center: search bar（后端 /analytics/search 为 adminOnly，店员不展示搜索框）── */}
+      {isAdmin ? (
       <div className="relative flex-1 max-w-md" ref={dropdownRef}>
         <div className="relative">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -173,6 +174,9 @@ export function Header() {
           </div>
         )}
       </div>
+      ) : (
+        <div className="flex-1" />
+      )}
 
       {/* ── right: actions ──────────────────────────────── */}
       <div className="flex items-center gap-2 shrink-0">

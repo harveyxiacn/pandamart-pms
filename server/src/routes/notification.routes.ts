@@ -2,7 +2,8 @@ import { Router, Response } from 'express';
 import { authenticate } from '../middleware/auth';
 import { notificationService } from '../services/notification.service';
 import { AuthRequest } from '../types';
-import { sendSuccess, sendError, parsePagination } from '../utils/helpers';
+import { sendSuccess, parsePagination } from '../utils/helpers';
+import { sendRouteError } from '../utils/routeError';
 
 const router = Router();
 
@@ -17,7 +18,7 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
     });
     sendSuccess(res, result);
   } catch (err: any) {
-    sendError(res, 500, 'INTERNAL_ERROR', err.message);
+    sendRouteError(res, err);
   }
 });
 
@@ -27,7 +28,7 @@ router.get('/unread-count', authenticate, async (req: AuthRequest, res: Response
     const count = await notificationService.getUnreadCount(req.user!.sub);
     sendSuccess(res, { count });
   } catch (err: any) {
-    sendError(res, 500, 'INTERNAL_ERROR', err.message);
+    sendRouteError(res, err);
   }
 });
 
@@ -38,7 +39,7 @@ router.put('/:id/read', authenticate, async (req: AuthRequest, res: Response) =>
     await notificationService.markAsRead(id, req.user!.sub);
     sendSuccess(res, null, '已标记为已读');
   } catch (err: any) {
-    sendError(res, 500, 'INTERNAL_ERROR', err.message);
+    sendRouteError(res, err);
   }
 });
 
@@ -48,7 +49,7 @@ router.put('/read-all', authenticate, async (req: AuthRequest, res: Response) =>
     await notificationService.markAllAsRead(req.user!.sub);
     sendSuccess(res, null, '全部标记为已读');
   } catch (err: any) {
-    sendError(res, 500, 'INTERNAL_ERROR', err.message);
+    sendRouteError(res, err);
   }
 });
 

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { UploadCloud } from "lucide-react";
 import { getCategoryFlat } from "../api/categories";
 import { uploadInvoice, confirmInvoice, rejectInvoice } from "../api/invoices";
-import { getSuppliers } from "../api/suppliers";
+import { getAllSuppliers } from "../api/suppliers";
 import type { Category, Supplier } from "../types";
 import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
@@ -71,8 +71,9 @@ export default function InvoiceScanPage() {
   const [notes, setNotes] = useState("");
 
   useEffect(() => {
-    getSuppliers({ pageSize: 200 })
-      .then((res) => setSuppliers(res.items))
+    // 跨页拉取全部供应商（服务端 pageSize 上限 100），避免发票供应商下拉漏项
+    getAllSuppliers()
+      .then((items) => setSuppliers(items))
       .catch(() => setSuppliers([]));
     getCategoryFlat()
       .then((res) => setCategories(res))

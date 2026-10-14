@@ -116,7 +116,14 @@ export default function AuditLogsPage() {
 
       <Card>
         {loading ? <SkeletonTable rows={6} columns={5} /> : null}
-        {error ? <p className="text-sm text-rose-600">{error}</p> : null}
+        {error ? (
+          <div className="flex items-center gap-3">
+            <p className="text-sm text-rose-600">{error}</p>
+            <Button variant="ghost" onClick={() => void load()}>
+              重试
+            </Button>
+          </div>
+        ) : null}
         {!loading ? (
           <>
             <Table>

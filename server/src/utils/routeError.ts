@@ -1,5 +1,6 @@
 import type { Response } from 'express';
 import { sendError } from './helpers';
+import logger from './logger';
 
 function normalizeErrorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
@@ -45,9 +46,12 @@ export function sendRouteError(
   }
 
   if (isDatabaseConnectionError(err)) {
+    logger.error('请求处理失败（数据库不可用）:', err);
     sendError(res, 503, 'DB_UNAVAILABLE', '数据库服务不可用，请先启动并配置 MySQL。');
     return;
   }
 
+  // 未知错误：完整堆栈只落服务端日志，响应体沿用（业务层有意透出的）中文消息或回退文案
+  logger.error('请求处理失败:', err);
   sendError(res, 500, 'INTERNAL_ERROR', normalizeErrorMessage(err) || fallbackMessage);
 }

@@ -6,6 +6,7 @@ import { Input } from "../components/ui/Input";
 import { Select } from "../components/ui/Select";
 import { Button } from "../components/ui/Button";
 import { Table } from "../components/ui/Table";
+import { useToast } from "../components/ui/Toast";
 import { formatDateTime } from "../utils/formatters";
 
 type UserRecord = {
@@ -36,6 +37,7 @@ const initialForm: UserForm = {
 };
 
 export default function UsersPage() {
+  const toast = useToast();
   const [items, setItems] = useState<UserRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -95,9 +97,14 @@ export default function UsersPage() {
         <div className="mt-3">
           <Button
             onClick={async () => {
-              await createUser(form);
-              setForm(initialForm);
-              await load();
+              try {
+                await createUser(form);
+                toast.success("用户已创建");
+                setForm(initialForm);
+                await load();
+              } catch (err: unknown) {
+                toast.error(err instanceof Error ? err.message : "创建用户失败");
+              }
             }}
           >
             创建用户
@@ -108,7 +115,14 @@ export default function UsersPage() {
       <Card>
         <h2 className="mb-3 text-lg font-bold">用户列表</h2>
         {loading ? <SkeletonTable rows={5} columns={5} /> : null}
-        {error ? <p className="text-sm text-rose-600">{error}</p> : null}
+        {error ? (
+          <div className="flex items-center gap-3">
+            <p className="text-sm text-rose-600">{error}</p>
+            <Button variant="ghost" onClick={() => void load()}>
+              重试
+            </Button>
+          </div>
+        ) : null}
         {!loading ? (
           <Table>
             <thead>
@@ -140,8 +154,13 @@ export default function UsersPage() {
                           if (email === null) return;
                           const role = window.prompt("角色(admin/staff)", item.role);
                           if (role !== "admin" && role !== "staff") return;
-                          await updateUser(item.id, { displayName, email, role });
-                          await load();
+                          try {
+                            await updateUser(item.id, { displayName, email, role });
+                            toast.success("用户已更新");
+                            await load();
+                          } catch (err: unknown) {
+                            toast.error(err instanceof Error ? err.message : "更新用户失败");
+                          }
                         }}
                       >
                         编辑
@@ -149,8 +168,12 @@ export default function UsersPage() {
                       <Button
                         variant={item.is_active ? "danger" : "secondary"}
                         onClick={async () => {
-                          await updateUserStatus(item.id, !item.is_active);
-                          await load();
+                          try {
+                            await updateUserStatus(item.id, !item.is_active);
+                            await load();
+                          } catch (err: unknown) {
+                            toast.error(err instanceof Error ? err.message : "更新状态失败");
+                          }
                         }}
                       >
                         {item.is_active ? "禁用" : "启用"}
@@ -158,10 +181,14 @@ export default function UsersPage() {
                       <Button
                         variant="ghost"
                         onClick={async () => {
-                          const newPassword = window.prompt("输入新密码（至少6位）");
+                          const newPassword = window.prompt("输入新密码（至少8位且含字母与数字）");
                           if (!newPassword) return;
-                          await resetUserPassword(item.id, newPassword);
-                          alert("密码已重置");
+                          try {
+                            await resetUserPassword(item.id, newPassword);
+                            toast.success("密码已重置，该用户需重新登录");
+                          } catch (err: unknown) {
+                            toast.error(err instanceof Error ? err.message : "重置密码失败");
+                          }
                         }}
                       >
                         重置密码

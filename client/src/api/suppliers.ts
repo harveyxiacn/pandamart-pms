@@ -1,8 +1,16 @@
 import type { PaginatedData, Supplier } from "../types";
 import { apiClient, unwrap } from "./client";
+import { fetchAllPages } from "./pagination";
 
 export function getSuppliers(params?: Record<string, string | number | boolean | undefined>) {
   return unwrap<PaginatedData<Supplier>>(apiClient.get("/suppliers", { params }));
+}
+
+/** 拉取全部供应商（跨页），供选择器使用。 */
+export function getAllSuppliers(
+  params?: Omit<Record<string, string | number | boolean | undefined>, "page" | "pageSize">
+): Promise<Supplier[]> {
+  return fetchAllPages<Supplier>((page, pageSize) => getSuppliers({ ...params, page, pageSize }));
 }
 
 export function getSupplierById(id: number): Promise<Supplier> {

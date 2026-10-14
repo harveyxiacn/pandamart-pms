@@ -10,6 +10,7 @@ import { ocrService } from '../services/ocr.service';
 import { AuditLogModel } from '../models/AuditLog';
 import { AuthRequest } from '../types';
 import { sendSuccess, sendError, parsePagination, getClientIp } from '../utils/helpers';
+import { sendRouteError } from '../utils/routeError';
 
 const router = Router();
 
@@ -130,7 +131,7 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
     });
     sendSuccess(res, result);
   } catch (err: any) {
-    sendError(res, 500, 'INTERNAL_ERROR', err.message);
+    sendRouteError(res, err);
   }
 });
 

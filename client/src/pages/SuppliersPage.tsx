@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { createSupplier, deleteSupplier, getSupplierById, getSuppliers, updateSupplier } from "../api/suppliers";
 import type { Supplier } from "../types";
 import { Card } from "../components/ui/Card";
@@ -7,6 +8,7 @@ import { Button } from "../components/ui/Button";
 import { Table } from "../components/ui/Table";
 import { Modal } from "../components/ui/Modal";
 import { SkeletonTable } from "../components/ui/Skeleton";
+import { Pagination } from "../components/ui/Pagination";
 import { EmptyState } from "../components/ui/EmptyState";
 import { useToast } from "../components/ui/Toast";
 import { useConfirm } from "../components/ui/ConfirmDialog";
@@ -42,18 +44,39 @@ export default function SuppliersPage() {
   const confirm = useConfirm();
   const [items, setItems] = useState<Supplier[]>([]);
   const [keyword, setKeyword] = useState("");
+  // 服务端 pageSize 上限 100：改为真实分页，避免供应商超出一页时被静默截断
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [total, setTotal] = useState(0);
+  const [searchParams, setSearchParams] = useSearchParams();
+  // 记录已通过深链打开的供应商 id，避免重复触发
+  const openedDeepLinkRef = useRef<number | null>(null);
   const [form, setForm] = useState<SupplierForm>(initialForm);
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<Supplier | null>(null);
 
-  const load = async () => {
+  const openDetail = async (id: number) => {
+    try {
+      setDetail(await getSupplierById(id));
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "加载供应商详情失败");
+    }
+  };
+
+  const load = async (targetPage = page, targetPageSize = pageSize) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await getSuppliers({ pageSize: 200, keyword: keyword || undefined });
+      const data = await getSuppliers({
+        page: targetPage,
+        pageSize: targetPageSize,
+        keyword: keyword || undefined,
+      });
       setItems(data.items);
+      setTotal(data.pagination.total);
+      setPage(data.pagination.page);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "加载供应商失败");
     } finally {
@@ -64,9 +87,23 @@ export default function SuppliersPage() {
   const debouncedKeyword = useDebounce(keyword, 400);
 
   useEffect(() => {
-    void load();
+    void load(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedKeyword]);
+
+  // 深链支持：/suppliers?id=123（来自 Header 全局搜索结果），拉取并打开该供应商详情
+  useEffect(() => {
+    const idParam = searchParams.get("id");
+    if (!idParam) return;
+    const id = Number(idParam);
+    if (!Number.isFinite(id) || id <= 0 || openedDeepLinkRef.current === id) return;
+    openedDeepLinkRef.current = id;
+    void openDetail(id);
+    const next = new URLSearchParams(searchParams);
+    next.delete("id");
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   return (
     <div className="space-y-4">
@@ -150,12 +187,12 @@ export default function SuppliersPage() {
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") void load();
+                if (e.key === "Enter") void load(1);
               }}
               placeholder="名称 / 编号"
             />
           </label>
-          <Button onClick={() => void load()}>查询</Button>
+          <Button onClick={() => void load(1)}>查询</Button>
         </div>
 
         {loading ? <SkeletonTable rows={6} columns={5} /> : null}
@@ -215,13 +252,7 @@ export default function SuppliersPage() {
                           编辑
                         </Button>
                       ) : null}
-                      <Button
-                        variant="ghost"
-                        onClick={async () => {
-                          const detailData = await getSupplierById(item.id);
-                          setDetail(detailData);
-                        }}
-                      >
+                      <Button variant="ghost" onClick={() => void openDetail(item.id)}>
                         详情
                       </Button>
                       {canEditCatalog ? (
@@ -253,6 +284,20 @@ export default function SuppliersPage() {
               ))}
             </tbody>
           </Table>
+        ) : null}
+        {!loading && !error && items.length > 0 ? (
+          <div className="mt-3">
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={(next) => void load(next)}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                void load(1, size);
+              }}
+            />
+          </div>
         ) : null}
       </Card>
 

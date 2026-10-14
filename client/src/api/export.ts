@@ -32,6 +32,10 @@ export function exportInventory() {
   return downloadFile("/export/inventory", "inventory.xlsx");
 }
 
+export function exportProducts() {
+  return downloadFile("/products/export", "products.xlsx");
+}
+
 export function exportSuppliers() {
   return downloadFile("/export/suppliers", "suppliers.xlsx");
 }

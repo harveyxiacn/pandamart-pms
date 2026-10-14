@@ -4,7 +4,8 @@ import { adminOnly } from '../middleware/permission';
 import { SettingModel } from '../models/Setting';
 import { AuditLogModel } from '../models/AuditLog';
 import { AuthRequest } from '../types';
-import { sendSuccess, sendError } from '../utils/helpers';
+import { sendSuccess } from '../utils/helpers';
+import { sendRouteError } from '../utils/routeError';
 
 const router = Router();
 
@@ -14,7 +15,7 @@ router.get('/', authenticate, adminOnly, async (_req: AuthRequest, res: Response
     const settings = await SettingModel.getAll();
     sendSuccess(res, settings);
   } catch (err: any) {
-    sendError(res, 500, 'INTERNAL_ERROR', err.message);
+    sendRouteError(res, err);
   }
 });
 
@@ -32,7 +33,7 @@ router.put('/', authenticate, adminOnly, async (req: AuthRequest, res: Response)
 
     sendSuccess(res, null, '设置已更新');
   } catch (err: any) {
-    sendError(res, 500, 'INTERNAL_ERROR', err.message);
+    sendRouteError(res, err);
   }
 });
 

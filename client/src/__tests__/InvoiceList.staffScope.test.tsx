@@ -1,8 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import userEvent from "@testing-library/user-event";
 import InvoiceListPage from "../pages/InvoiceListPage";
 import { useAuthStore } from "../store/authStore";
+
+// InvoiceListPage 使用 useSearchParams（深链 ?id= 打开详情），
+// 因此测试必须提供 Router 上下文，否则 useLocation 抛错。
+const renderPage = () =>
+  render(
+    <MemoryRouter initialEntries={["/invoices"]}>
+      <InvoiceListPage />
+    </MemoryRouter>
+  );
 
 const getInvoicesMock = vi.fn();
 const getInvoiceByIdMock = vi.fn();
@@ -19,6 +29,8 @@ vi.mock("../api/invoices", () => ({
 
 vi.mock("../api/suppliers", () => ({
   getSuppliers: (...args: unknown[]) => getSuppliersMock(...args),
+  // InvoiceListPage 的供应商下拉改为跨页拉全（getAllSuppliers），返回的是数组
+  getAllSuppliers: async () => [{ id: 3, name: "CBS" }],
 }));
 
 describe("Invoice list staff scope", () => {
@@ -107,12 +119,13 @@ describe("Invoice list staff scope", () => {
   });
 
   it("forces pending-only query and hides historical status filter for staff", async () => {
-    render(<InvoiceListPage />);
+    renderPage();
 
     await screen.findByText("INV-42");
     await waitFor(() =>
       expect(getInvoicesMock).toHaveBeenCalledWith({
-        pageSize: 100,
+        page: 1,
+        pageSize: 20,
         status: "pending",
         keyword: undefined,
       })
@@ -122,7 +135,7 @@ describe("Invoice list staff scope", () => {
 
   it("keeps pending invoice confirm flow available for staff", async () => {
     const user = userEvent.setup();
-    render(<InvoiceListPage />);
+    renderPage();
 
     await screen.findByText("INV-42");
     await user.click(screen.getAllByRole("button", { name: "查看" })[0]);

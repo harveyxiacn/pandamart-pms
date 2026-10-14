@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { getInventory, submitStocktake } from "../api/inventory";
+import { getAllInventory, submitStocktake } from "../api/inventory";
 import type { InventoryItem } from "../types";
 import { Card } from "../components/ui/Card";
 import { SkeletonTable } from "../components/ui/Skeleton";
@@ -26,11 +26,13 @@ export default function StocktakePage() {
     setLoading(true);
     setError(null);
     try {
-      const result = await getInventory({ pageSize: 500, keyword: keyword || undefined });
-      setInventory(result.items);
+      // 跨页拉取全部库存行：服务端 pageSize 上限 100，直接请求 500 只会盘到前 100 个商品，
+      // 会静默漏盘其余商品。
+      const items = await getAllInventory({ keyword: keyword || undefined });
+      setInventory(items);
       setDraft((prev) => {
         const next = { ...prev };
-        for (const item of result.items) {
+        for (const item of items) {
           if (!next[item.product.id]) {
             next[item.product.id] = { actualQuantity: item.quantity, notes: "" };
           }
@@ -81,7 +83,14 @@ export default function StocktakePage() {
       </Card>
 
       {message ? <Card className="text-emerald-700">{message}</Card> : null}
-      {error ? <Card className="text-rose-700">{error}</Card> : null}
+      {error ? (
+        <Card className="flex items-center gap-3 text-rose-700">
+          <span>{error}</span>
+          <Button variant="ghost" onClick={() => void load()}>
+            重试
+          </Button>
+        </Card>
+      ) : null}
 
       <Card>
         <div className="mb-3 flex items-center justify-between">

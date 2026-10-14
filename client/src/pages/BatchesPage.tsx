@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { CalendarClock } from "lucide-react";
-import { getProducts } from "../api/products";
+import { getAllProducts } from "../api/products";
 import {
   createBatch,
   disposeBatch,
@@ -18,6 +18,7 @@ import { Button } from "../components/ui/Button";
 import { Badge } from "../components/ui/Badge";
 import { SkeletonTable } from "../components/ui/Skeleton";
 import { EmptyState } from "../components/ui/EmptyState";
+import { Pagination } from "../components/ui/Pagination";
 import { useToast } from "../components/ui/Toast";
 import { useConfirm } from "../components/ui/ConfirmDialog";
 import { usePermission } from "../hooks/usePermission";
@@ -44,6 +45,10 @@ export default function BatchesPage() {
   const [expiring, setExpiring] = useState<ExpiringSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // 服务端 pageSize 上限 100：批次列表改为真实分页，避免在库批次超出一页时被截断
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [total, setTotal] = useState(0);
 
   // 新批次表单
   const [productId, setProductId] = useState("");
@@ -52,17 +57,20 @@ export default function BatchesPage() {
   const [batchNo, setBatchNo] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const load = async () => {
+  const load = async (targetPage = page, targetPageSize = pageSize) => {
     setLoading(true);
     setError(null);
     try {
-      const [prodRes, batchRes, expRes] = await Promise.all([
-        getProducts({ pageSize: 1000 }),
-        getBatches({ status: "active", pageSize: 100 }),
+      const [prodList, batchRes, expRes] = await Promise.all([
+        // 跨页拉取全部商品：服务端 pageSize 上限 100，直接请求 1000 会漏掉第 100 个之后的商品
+        getAllProducts(),
+        getBatches({ status: "active", page: targetPage, pageSize: targetPageSize }),
         getExpiringBatches(7),
       ]);
-      setProducts(prodRes.items);
+      setProducts(prodList);
       setBatches(batchRes.items);
+      setTotal(batchRes.pagination.total);
+      setPage(batchRes.pagination.page);
       setExpiring(expRes);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "批次数据加载失败");
@@ -252,6 +260,20 @@ export default function BatchesPage() {
             </tbody>
           </Table>
         )}
+        {!loading && !error && batches.length > 0 ? (
+          <div className="mt-3">
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={(next) => void load(next)}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                void load(1, size);
+              }}
+            />
+          </div>
+        ) : null}
       </Card>
     </div>
   );

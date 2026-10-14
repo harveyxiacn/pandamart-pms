@@ -1,8 +1,20 @@
 import type { PaginatedData, Product } from "../types";
 import { apiClient, unwrap } from "./client";
+import { fetchAllPages } from "./pagination";
 
 export function getProducts(params?: Record<string, string | number | boolean | undefined>) {
   return unwrap<PaginatedData<Product>>(apiClient.get("/products", { params }));
+}
+
+/** 拉取全部商品（跨页），供选择器/搜索等需要完整集合的场景使用，避免被服务端 100 条上限静默截断。 */
+export function getAllProducts(
+  params?: Omit<Record<string, string | number | boolean | undefined>, "page" | "pageSize">
+): Promise<Product[]> {
+  return fetchAllPages<Product>((page, pageSize) => getProducts({ ...params, page, pageSize }));
+}
+
+export function getProductById(id: number): Promise<Product> {
+  return unwrap(apiClient.get(`/products/${id}`));
 }
 
 export function createProduct(payload: Record<string, unknown>): Promise<{ id: number }> {

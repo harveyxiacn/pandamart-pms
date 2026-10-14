@@ -4,7 +4,7 @@ import sharp from 'sharp';
 import { pdfService } from './pdf.service';
 import { excelService } from './excel.service';
 import { llmService } from './llm.service';
-import { templateService } from './template.service';
+import { aliasService } from './alias.service';
 import { ProductModel } from '../models/Product';
 import { SupplierModel } from '../models/Supplier';
 import { InvoiceModel } from '../models/Invoice';
@@ -214,10 +214,7 @@ export const ocrService = {
         throw new Error(`不支持的文件类型: ${fileType}`);
     }
 
-    // 智能匹配已有产品
-    recognized.items = await this.matchProducts(recognized.items);
-
-    // 尝试匹配供应商
+    // 先解析供应商：商品匹配要用 supplierId 查「供应商别名学习」映射，故必须排在匹配之前
     let supplierId: number | null = null;
     if (recognized.supplierName) {
       const supplier = await SupplierModel.findByName(recognized.supplierName);
@@ -225,6 +222,9 @@ export const ocrService = {
         supplierId = supplier.id;
       }
     }
+
+    // 智能匹配已有产品（优先用已学习的别名映射，其次条码精确命中，最后名称模糊匹配）
+    recognized.items = await this.matchProducts(recognized.items, supplierId);
 
     // 创建发票记录（pending 状态）
     const relativePath = filePath.replace(/\\/g, '/');
@@ -743,23 +743,67 @@ export const ocrService = {
     return -1;
   },
 
-  async matchProducts(items: OcrRecognizedItem[]): Promise<OcrRecognizedItem[]> {
+  async matchProducts(
+    items: OcrRecognizedItem[],
+    supplierId: number | null = null
+  ): Promise<OcrRecognizedItem[]> {
     const results: OcrRecognizedItem[] = [];
 
     for (const item of items) {
       const keyword = item.productNameEn || item.productNameZh || '';
+
+      // ① 已学习的供应商别名映射（条码 > 货号 > 名称，命中次数高者优先）——最高置信度
+      const learned = await aliasService.lookup(supplierId, {
+        productNumber: item.productNumber,
+        productCode: item.productCode,
+        productNameEn: item.productNameEn,
+        productNameZh: item.productNameZh,
+      });
+      if (learned) {
+        const product = await ProductModel.findById(learned.productId);
+        if (product) {
+          results.push({
+            ...item,
+            matchedProduct: {
+              id: product.id,
+              nameEn: product.name_en,
+              nameZh: product.name_zh,
+              confidence: 0.99,
+            },
+          });
+          continue;
+        }
+      }
+
+      // ② 条码精确命中（首次出现、尚未学习的条码）
+      if (item.productNumber) {
+        const byBarcode = await ProductModel.findByBarcode(item.productNumber).catch(() => undefined);
+        if (byBarcode) {
+          results.push({
+            ...item,
+            matchedProduct: {
+              id: byBarcode.id,
+              nameEn: byBarcode.name_en,
+              nameZh: byBarcode.name_zh,
+              confidence: 0.95,
+            },
+          });
+          continue;
+        }
+      }
+
       if (!keyword) {
         results.push(item);
         continue;
       }
 
+      // ③ 名称模糊匹配兜底
       const candidates = await ProductModel.search(keyword, 5);
       if (candidates.length === 0) {
         results.push(item);
         continue;
       }
 
-      // 简单匹配：名称相似度
       const best = this.findBestMatch(keyword, candidates);
       results.push({
         ...item,

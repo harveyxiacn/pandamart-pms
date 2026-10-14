@@ -3,6 +3,7 @@ import { getAiInsights, getAiReorderAdvice, sendAiChat } from "../api/ai";
 import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
+import { useToast } from "../components/ui/Toast";
 
 type ChatMessage = {
   role: "user" | "assistant";
@@ -10,6 +11,7 @@ type ChatMessage = {
 };
 
 export default function AiAssistantPage() {
+  const toast = useToast();
   const [message, setMessage] = useState("");
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [chat, setChat] = useState<ChatMessage[]>([]);
@@ -39,6 +41,8 @@ export default function AiAssistantPage() {
                 const result = await sendAiChat(userMessage, conversationId);
                 setConversationId(result.conversationId);
                 setChat((prev) => [...prev, { role: "assistant", content: result.reply }]);
+              } catch (err: unknown) {
+                toast.error(err instanceof Error ? err.message : "AI 对话失败");
               } finally {
                 setLoading(false);
               }
@@ -116,6 +120,8 @@ export default function AiAssistantPage() {
                 try {
                   const result = await getAiReorderAdvice(undefined, "下周有社区活动，客流可能增加");
                   setReorderAdvice(result.advice);
+                } catch (err: unknown) {
+                  toast.error(err instanceof Error ? err.message : "生成补货建议失败");
                 } finally {
                   setLoading(false);
                 }

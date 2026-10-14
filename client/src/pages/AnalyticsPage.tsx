@@ -31,6 +31,7 @@ import {
 } from "../api/analytics";
 import { Card } from "../components/ui/Card";
 import { SkeletonCard } from "../components/ui/Skeleton";
+import { Button } from "../components/ui/Button";
 import { Select } from "../components/ui/Select";
 import { formatCurrency } from "../utils/formatters";
 import { cn } from "../utils/classnames";
@@ -169,7 +170,15 @@ export default function AnalyticsPage() {
         ))}
       </div>
     );
-  if (error) return <Card className="text-rose-700">{error}</Card>;
+  if (error)
+    return (
+      <Card className="flex items-center gap-3 text-rose-700">
+        <span>{error}</span>
+        <Button variant="ghost" onClick={() => void load()}>
+          重试
+        </Button>
+      </Card>
+    );
 
   return (
     <div className="space-y-4">

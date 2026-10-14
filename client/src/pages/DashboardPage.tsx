@@ -27,6 +27,7 @@ import {
 import { getDashboard, getAlerts } from "../api/analytics";
 import { Card } from "../components/ui/Card";
 import { SkeletonCard } from "../components/ui/Skeleton";
+import { Button } from "../components/ui/Button";
 import { Badge } from "../components/ui/Badge";
 import { formatCurrency, formatDate, formatDateTime } from "../utils/formatters";
 import { cn } from "../utils/classnames";
@@ -88,9 +89,13 @@ export default function DashboardPage() {
   const [alerts, setAlerts] = useState<DashboardAlert[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // 递增即触发重新加载（供失败重试）
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let mounted = true;
+    setLoading(true);
+    setError(null);
     Promise.all([getDashboard(), getAlerts()])
       .then(([dash, alertList]) => {
         if (mounted) {
@@ -105,7 +110,7 @@ export default function DashboardPage() {
         if (mounted) setLoading(false);
       });
     return () => { mounted = false; };
-  }, []);
+  }, [reloadKey]);
 
   const trendData = useMemo(
     () => [
@@ -128,7 +133,15 @@ export default function DashboardPage() {
     );
   }
 
-  if (error) return <Card className="text-rose-700">仪表盘加载失败: {error}</Card>;
+  if (error)
+    return (
+      <Card className="flex items-center gap-3 text-rose-700">
+        <span>仪表盘加载失败: {error}</span>
+        <Button variant="ghost" onClick={() => setReloadKey((k) => k + 1)}>
+          重试
+        </Button>
+      </Card>
+    );
   if (!data) return <Card>暂无数据</Card>;
 
   const highAlerts = alerts.filter((a) => a.severity === "high");

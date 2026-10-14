@@ -4,6 +4,7 @@ import { AuditLogModel } from '../models/AuditLog';
 import { AppError } from '../middleware/errorHandler';
 import { buildPagination } from '../utils/helpers';
 import { inventoryService, adjustStockTx } from './inventory.service';
+import { deductBatchesFifo, restoreBatchesForSalesItem } from './batch.service';
 import { DEFAULT_STORE_ID } from '../config/store';
 import { CreateSaleBody } from '../types';
 import { invalidateAnalyticsCache } from '../utils/cache';
@@ -107,7 +108,7 @@ export const salesService = {
       });
 
       for (const line of lines) {
-        await trx('sales_items').insert({
+        const [salesItemId] = await trx('sales_items').insert({
           sales_order_id: orderId,
           product_id: line.productId,
           quantity: line.quantity,
@@ -129,6 +130,14 @@ export const salesService = {
           unit: line.unit,
           preventNegative: true,
           label: line.label,
+        });
+
+        // 同步按 FIFO 扣减批次台账（无批次的商品为空操作），使批次合计与库存保持一致
+        await deductBatchesFifo(trx, {
+          productId: line.productId,
+          storeId,
+          quantity: line.quantity,
+          salesItemId,
         });
 
         affectedProducts.push({ productId: line.productId, after });
@@ -217,6 +226,10 @@ export const salesService = {
           userId,
           unit: it.unit,
         });
+
+        // 把此前 FIFO 消耗的批次量精确回补到原批次（保持批次台账与库存一致）
+        await restoreBatchesForSalesItem(trx, it.id);
+
         restocked.push({ productId: it.product_id, after });
       }
 

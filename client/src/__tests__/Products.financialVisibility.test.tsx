@@ -1,16 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import userEvent from "@testing-library/user-event";
 import ProductsPage from "../pages/ProductsPage";
 import { useAuthStore } from "../store/authStore";
 
 const getProductsMock = vi.fn();
 const getCategoryFlatMock = vi.fn();
-const getSuppliersMock = vi.fn();
+const getAllSuppliersMock = vi.fn();
 const getProductPriceHistoryMock = vi.fn();
 
 vi.mock("../api/products", () => ({
   getProducts: (...args: unknown[]) => getProductsMock(...args),
+  getAllProducts: (...args: unknown[]) => getProductsMock(...args),
+  getProductById: vi.fn(),
   createProduct: vi.fn(),
   updateProduct: vi.fn(),
   deleteProduct: vi.fn(),
@@ -19,12 +22,16 @@ vi.mock("../api/products", () => ({
   uploadProductImage: vi.fn(),
 }));
 
+vi.mock("../api/export", () => ({
+  exportProducts: vi.fn(),
+}));
+
 vi.mock("../api/categories", () => ({
   getCategoryFlat: (...args: unknown[]) => getCategoryFlatMock(...args),
 }));
 
 vi.mock("../api/suppliers", () => ({
-  getSuppliers: (...args: unknown[]) => getSuppliersMock(...args),
+  getAllSuppliers: (...args: unknown[]) => getAllSuppliersMock(...args),
 }));
 
 describe("Products financial visibility", () => {
@@ -63,10 +70,7 @@ describe("Products financial visibility", () => {
       pagination: { page: 1, pageSize: 200, total: 1, totalPages: 1 },
     });
     getCategoryFlatMock.mockResolvedValue([]);
-    getSuppliersMock.mockResolvedValue({
-      items: [],
-      pagination: { page: 1, pageSize: 200, total: 0, totalPages: 0 },
-    });
+    getAllSuppliersMock.mockResolvedValue([]);
     getProductPriceHistoryMock.mockResolvedValue([]);
   });
 
@@ -76,12 +80,16 @@ describe("Products financial visibility", () => {
     localStorage.clear();
     getProductsMock.mockReset();
     getCategoryFlatMock.mockReset();
-    getSuppliersMock.mockReset();
+    getAllSuppliersMock.mockReset();
     getProductPriceHistoryMock.mockReset();
   });
 
   it("hides default price and price-trend UI for staff", async () => {
-    render(<ProductsPage />);
+    render(
+      <MemoryRouter initialEntries={["/products"]}>
+        <ProductsPage />
+      </MemoryRouter>
+    );
 
     await screen.findByText("绍菜");
 
@@ -101,7 +109,11 @@ describe("Products financial visibility", () => {
       },
     });
 
-    render(<ProductsPage />);
+    render(
+      <MemoryRouter initialEntries={["/products"]}>
+        <ProductsPage />
+      </MemoryRouter>
+    );
 
     await screen.findByText("绍菜");
     await userEvent.click(screen.getByRole("button", { name: "价格趋势" }));

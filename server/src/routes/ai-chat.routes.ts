@@ -6,7 +6,8 @@ import { validate } from '../middleware/validator';
 import { aiChatService } from '../services/ai-chat.service';
 import { aiInsightService } from '../services/ai-insight.service';
 import { AuthRequest } from '../types';
-import { sendSuccess, sendError } from '../utils/helpers';
+import { sendSuccess } from '../utils/helpers';
+import { sendRouteError } from '../utils/routeError';
 
 const router = Router();
 router.use(authenticate, adminOnly);
@@ -22,7 +23,7 @@ router.post(
       const result = await aiChatService.chat(message, conversationId || null, req.user!.sub);
       sendSuccess(res, result);
     } catch (err: any) {
-      sendError(res, 500, 'INTERNAL_ERROR', err.message || 'AI 对话服务暂不可用');
+      sendRouteError(res, err, 'AI 对话服务暂不可用');
     }
   }
 );
@@ -39,7 +40,7 @@ router.post(
       );
       sendSuccess(res, data);
     } catch (err: any) {
-      sendError(res, 500, 'INTERNAL_ERROR', err.message);
+      sendRouteError(res, err);
     }
   }
 );
@@ -50,7 +51,7 @@ router.get('/insights', aiLimiter, async (req: AuthRequest, res: Response) => {
     const data = await aiInsightService.getInsights(req.query.period as string);
     sendSuccess(res, data);
   } catch (err: any) {
-    sendError(res, 500, 'INTERNAL_ERROR', err.message);
+    sendRouteError(res, err);
   }
 });
 

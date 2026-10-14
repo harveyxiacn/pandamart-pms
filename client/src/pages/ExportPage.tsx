@@ -7,7 +7,7 @@ import {
   exportReorderSuggestions,
   exportSuppliers,
 } from "../api/export";
-import { getSuppliers } from "../api/suppliers";
+import { getAllSuppliers } from "../api/suppliers";
 import type { Supplier } from "../types";
 import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
@@ -24,8 +24,9 @@ export default function ExportPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    getSuppliers({ pageSize: 200 })
-      .then((result) => setSuppliers(result.items))
+    // 跨页拉取全部供应商（服务端 pageSize 上限 100），避免导出筛选下拉漏掉供应商
+    getAllSuppliers()
+      .then((items) => setSuppliers(items))
       .catch(() => setSuppliers([]));
   }, []);
 

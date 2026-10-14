@@ -146,9 +146,12 @@ ${contextParts.join('\n\n')}
   async getReorderAdvice(categoryId?: number, context?: string): Promise<any> {
     // 获取需要补货的产品
     const suggestions = await analyticsService.getReorderSuggestions();
-    const filtered = categoryId
-      ? suggestions.filter((s: any) => s.categoryId === categoryId)
-      : suggestions;
+    // categoryId 可能以字符串传入（JSON 体/表单），统一按数值比较，避免 === 恒不相等导致过滤后恒为空
+    const wantedCategory = categoryId != null && categoryId !== ('' as any) ? Number(categoryId) : null;
+    const filtered =
+      wantedCategory != null && Number.isFinite(wantedCategory)
+        ? suggestions.filter((s: any) => s.categoryId != null && Number(s.categoryId) === wantedCategory)
+        : suggestions;
 
     if (filtered.length === 0) {
       return {

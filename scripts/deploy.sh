@@ -1,26 +1,32 @@
 #!/usr/bin/env bash
-# PandaMart PMS — 生产部署脚本（与现网一致）
+# PandaMart PMS — production deployment script
 #
-# 现网拓扑（详见 docs / 团队记忆）：
-#   - 代码目录 /opt/pandamart/server（owner www-data），后端监听 127.0.0.1:3001
-#   - systemd 服务 pandamart.service（EnvironmentFile=/opt/pandamart/server/.env）
-#   - nginx vhost /etc/nginx/sites-enabled/pandapms.conf 反代 -> 3001（复用 *.example.com 证书）
-#   - MariaDB 库 pandamart_pms
-#   - 生产 .env 留存在服务器上（chmod 600），部署不覆盖
+# Everything host-specific is supplied by the environment; there are no
+# defaults pointing at a real machine. Set:
+#   VPS_HOST   remote host (IP or DNS name)                       [required]
+#   VPS_USER   remote user for the deploy connection              (default: deploy)
+#   SSH_KEY    path to the private key for that connection        (default: ~/.ssh/id_ed25519)
+#   APP_DIR    absolute path of the server directory on the host   (default: /srv/pandamart/server)
+#   APP_NAME   systemd unit to restart                            (default: pandamart)
+#   APP_OWNER  user that owns the deployed files                  (default: www-data)
 #
-# 用法（在仓库根目录执行）：
-#   VPS_HOST=YOUR_VPS_HOST SSH_KEY=~/.ssh/id_ed25519 bash scripts/deploy.sh
+# Usage (from the repository root):
+#   VPS_HOST=203.0.113.10 SSH_KEY=~/.ssh/id_ed25519 bash scripts/deploy.sh
 #
-# 流程：本地构建客户端 -> 打包 server（排除 node_modules/dist/uploads/logs/.env）
-#       -> scp 到 VPS -> 远端备份 -> 解包 -> npm install -> build -> migrate -> 重启 -> 健康校验
+# Flow: build the client locally -> tar the server (minus node_modules/dist/
+#       uploads/logs/.env) -> scp to the host -> back up the previous release ->
+#       extract -> npm install -> build -> migrate -> restart -> health check
 #
-# 注意 fail2ban：该 VPS 装了 fail2ban，部署时放慢连接节奏，避免短时大量连接被封。
+# The remote .env is never overwritten by a deploy: it lives on the server,
+# owned by the service account, mode 600.
 set -euo pipefail
 
-VPS_HOST="${VPS_HOST:-YOUR_VPS_HOST}"
-VPS_USER="${VPS_USER:-root}"
+VPS_HOST="${VPS_HOST:?set VPS_HOST to the deployment target}"
+VPS_USER="${VPS_USER:-deploy}"
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519}"
-APP_DIR="/opt/pandamart/server"
+APP_DIR="${APP_DIR:-/srv/pandamart/server}"
+APP_NAME="${APP_NAME:-pandamart}"
+APP_OWNER="${APP_OWNER:-www-data}"
 TARBALL="pandapms-deploy.tar.gz"
 SSH="ssh -o ProxyJump=none -o ConnectTimeout=20 -i ${SSH_KEY} ${VPS_USER}@${VPS_HOST}"
 
@@ -41,11 +47,12 @@ echo "=== [3/5] 传输到 VPS:/tmp ==="
 scp -o ProxyJump=none -o ConnectTimeout=20 -i "$SSH_KEY" "$TARBALL" "${VPS_USER}@${VPS_HOST}:/tmp/$TARBALL"
 
 echo "=== [4/5] 远端部署（备份/解包/install/build/migrate/重启/校验）==="
-$SSH "APP=$APP_DIR TARBALL=$TARBALL bash -s" <<'REMOTE'
+$SSH "APP=$APP_DIR TARBALL=$TARBALL APP_NAME=$APP_NAME APP_OWNER=$APP_OWNER bash -s" <<'REMOTE'
 set -eo pipefail
 TS=$(date +%Y%m%d-%H%M%S)
-echo "  [backup] -> /opt/pandamart/backup-app-$TS.tar.gz"
-cd /opt/pandamart
+ROOT_DIR="$(dirname "$APP")"
+echo "  [backup] -> $ROOT_DIR/backup-app-$TS.tar.gz"
+cd "$ROOT_DIR"
 tar czf backup-app-$TS.tar.gz --exclude='server/node_modules' --exclude='server/uploads' --exclude='server/logs' server
 echo "  [extract] overlay -> $APP"
 tar xzf /tmp/$TARBALL -C $APP
@@ -57,16 +64,16 @@ npm run build >/tmp/deploy-build.log 2>&1 || { tail -40 /tmp/deploy-build.log; e
 echo "  [migrate]"
 npm run migrate >/tmp/deploy-migrate.log 2>&1 || { tail -40 /tmp/deploy-migrate.log; exit 1; }
 grep -iE 'Batch|already|run:' /tmp/deploy-migrate.log | tail -2
-echo "  [perms] chown www-data + chmod 600 .env"
-chown -R www-data:www-data $APP
+echo "  [perms] chown $APP_OWNER + chmod 600 .env"
+chown -R "$APP_OWNER:$APP_OWNER" $APP
 chmod 600 $APP/.env
-echo "  [restart] systemctl restart pandamart"
-systemctl restart pandamart
+echo "  [restart] systemctl restart $APP_NAME"
+systemctl restart "$APP_NAME"
 sleep 3
-systemctl is-active pandamart
+systemctl is-active "$APP_NAME"
 REMOTE
 
-echo "=== [5/5] 健康校验（本机 3001 经远端 curl）==="
+echo "=== [5/5] 健康校验（远端本机 127.0.0.1:3001）==="
 $SSH 'curl -sf -m 10 http://127.0.0.1:3001/api/v1/health && echo "" && curl -sf -m 10 http://127.0.0.1:3001/api/v1/ready && echo ""'
 
-echo "=== 部署完成。回滚：解开 /opt/pandamart/backup-app-<ts>.tar.gz 覆盖 server 后 systemctl restart pandamart ==="
+echo "=== 部署完成。回滚：解开 $APP_DIR/../backup-app-<ts>.tar.gz 覆盖 server 后 systemctl restart $APP_NAME ==="

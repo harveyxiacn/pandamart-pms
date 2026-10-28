@@ -467,7 +467,7 @@ async function handleAPI(req, res) {
           taskId,
           code2 === 0 ? 'done' : 'error',
           code2,
-          code2 === 0 ? '\n✅ 数据库初始化完成！\n默认管理员：admin / CHANGE_ME_ON_FIRST_LOGIN' : '\n❌ 初始数据导入失败'
+          code2 === 0 ? '\n✅ 数据库初始化完成！\n管理员账号：admin（密码为你设置的 SEED_ADMIN_PASSWORD）' : '\n❌ 初始数据导入失败'
         );
       });
     });

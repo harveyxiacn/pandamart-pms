@@ -139,10 +139,11 @@ copy .env.production .env
 
 | 配置项 | 说明 | 示例 |
 |--------|------|------|
-| `DB_PASSWORD` | 数据库密码 | `MyDbPass123!` |
-| `JWT_SECRET` | 登录加密密钥（随机字符串，至少 32 位） | `CHANGE_ME_RANDOM_32_PLUS` |
-| `AI_ENCRYPTION_KEY` | AI 密钥加密用（恰好 32 字符） | `CHANGE_ME_32_CHARS` |
-| `SEED_ADMIN_PASSWORD` | 初始化管理员密码（至少 8 位，含字母和数字） | `AdminPass1234` |
+| `DB_PASSWORD` | 数据库密码 | 自行生成，勿照抄 |
+| `JWT_SECRET` | 登录加密密钥（随机字符串，至少 32 位） | 见 4.4 生成命令 |
+| `AI_ENCRYPTION_KEY` | AI 密钥加密用（恰好 32 字符） | 见 4.4 生成命令 |
+| `SEED_ADMIN_PASSWORD` | 初始化管理员密码（至少 8 位，含字母和数字） | 自行设置，勿照抄 |
+| `SEED_STAFF_PASSWORD` | 演示员工账号密码（至少 8 位，含字母和数字） | 自行设置，勿照抄 |
 
 如果使用了自定义数据库用户名，也需要修改 `DB_USER`。
 

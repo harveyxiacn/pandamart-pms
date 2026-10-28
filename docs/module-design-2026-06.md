@@ -287,4 +287,4 @@ server (Express)
 
 **后续迭代（P2/P3）**：asyncHandler 全量迁移、CSP、token 失效、分析缓存、价格趋势图、批量发票队列、采购订单、FIFO 批次、OCR/页面拆分、CI、备份脚本与真实运维手册入库。
 
-**部署**：构建 → 打包 server/（排除 node_modules/dist/uploads/.env）→ scp 到 `YOUR_VPS_HOST` → `npm ci && npm run build && npm run migrate` → `systemctl restart pandamart`。注意 fail2ban：放慢连接节奏；确认 devDeps 在位（迁移依赖 tsx）。部署前与用户确认；部署后 `/health`+`/ready`+关键页面 smoke。详见 [[deployment-vps]]。
+**部署**：构建 → 打包 server/（排除 node_modules/dist/uploads/.env）→ scp 到目标主机 → `npm ci && npm run build && npm run migrate` → `systemctl restart pandamart`。注意 fail2ban：放慢连接节奏；确认 devDeps 在位（迁移依赖 tsx）。部署前与用户确认；部署后 `/health`+`/ready`+关键页面 smoke。详见 [[deployment-vps]]。

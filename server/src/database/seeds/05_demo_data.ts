@@ -27,7 +27,14 @@ export async function seed(knex: Knex): Promise<void> {
   // ============ 1. 创建 Staff 用户 ============
   const staffExists = await knex('users').where('username', 'staff01').first();
   if (!staffExists) {
-    const passwordHash = await bcrypt.hash('CHANGE_ME_STAFF_PASSWORD', 12);
+    const staffPassword = process.env.SEED_STAFF_PASSWORD || process.env.E2E_STAFF_PASSWORD;
+    if (!staffPassword) {
+      throw new Error('缺少 SEED_STAFF_PASSWORD（或 E2E_STAFF_PASSWORD）环境变量，无法创建演示员工账号');
+    }
+    if (!/^(?=.*[A-Za-z])(?=.*\d).{8,}$/.test(staffPassword)) {
+      throw new Error('SEED_STAFF_PASSWORD 必须至少8位且包含字母和数字');
+    }
+    const passwordHash = await bcrypt.hash(staffPassword, 12);
     await knex('users').insert({
       username: 'staff01',
       password_hash: passwordHash,

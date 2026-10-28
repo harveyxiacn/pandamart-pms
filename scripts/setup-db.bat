@@ -34,8 +34,8 @@ if errorlevel 1 (
 echo.
 echo ============================================
 echo   数据库初始化完成！
-echo   默认管理员账号：admin
-echo   默认管理员密码：CHANGE_ME_ON_FIRST_LOGIN
+echo   管理员账号：admin
+echo   管理员密码：你在 server\.env 中设置的 SEED_ADMIN_PASSWORD
 echo   请登录后尽快修改密码
 echo ============================================
 pause

@@ -2,7 +2,7 @@
 
 > 熊猫超市智能库存管理系统 · A full-stack inventory/procurement platform where an LLM agent and an OCR pipeline do the busywork — turning supplier invoices into structured stock data and answering operational questions in natural language.
 
-<!-- TODO(before publishing): add a hero screenshot/GIF of the dashboard + AI chat here. -->
+<!-- A hero screenshot/GIF of the dashboard and the AI chat panel would go here. -->
 
 ## Why this is interesting (engineering)
 

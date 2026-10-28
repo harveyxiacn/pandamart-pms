@@ -176,6 +176,9 @@ async function prepareDatabase(): Promise<void> {
   }
 
   if (runSeeds) {
+    // 演示种子要求单独的 staff 密码。E2E 从不以 staff01 登录，
+    // 复用管理员密码即可，免得再引入一个必填环境变量。
+    process.env.SEED_STAFF_PASSWORD ??= E2E_ADMIN_PASSWORD;
     const seedsDir = path.resolve(__dirname, '../database/seeds');
     const seedFiles = await db.seed.run({
       directory: seedsDir,

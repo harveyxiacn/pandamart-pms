@@ -21,6 +21,7 @@ describe("LoginPage credential exposure", () => {
     expect(usernameInput.value).toBe("");
     expect(passwordInput.value).toBe("");
     expect(screen.queryByText(/默认管理员/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/CHANGE_ME_ON_FIRST_LOGIN/)).not.toBeInTheDocument();
+    // Regression guard: the login page must never render a seeded password.
+    expect(screen.queryByText(/PandaMart\d{4}!/)).not.toBeInTheDocument();
   });
 });

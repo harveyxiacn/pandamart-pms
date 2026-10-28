@@ -48,9 +48,13 @@ PandaMartPMS/
 ├── client/    React 18 + Vite admin UI
 ├── server/    Express + TypeScript API
 │   └── src/{config,middleware,models,routes,services,database,types,utils}
-├── docs/      api-design.md and design notes
-└── sampleinvoice/   fictional sample invoices for testing
+├── docs/      api-design.md, deployment guide and design notes
+└── logo-300x292.png
 ```
+
+Sample invoices are deliberately not shipped: the ones used to develop the OCR
+pipeline were real supplier documents. Put your own PDFs under `sampleinvoice/`
+(local only — it is git-ignored) to exercise the invoice flow.
 
 ## Quick start
 

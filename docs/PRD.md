@@ -375,6 +375,5 @@
 | Thinking Effort | 思考深度参数，控制 LLM 推理的深度和耗时 |
 
 ### B. 参考样本
-- `sampleinvoice/vegis_invoice.pdf` — 蔬菜类供应商发票样本
-- `sampleinvoice/dry_goods_invoice.pdf` — 干货类供应商发票样本
-- `sampleinvoice/vegis_invoice.png` — 发票图片样本
+仓库不附带发票样本：开发 OCR 时用的是真实供应商单据，不适合公开。
+使用时把自己的 PDF/图片放进仓库根目录的 `sampleinvoice/`（该目录已 git-ignore）。

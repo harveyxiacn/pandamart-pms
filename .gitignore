@@ -19,6 +19,9 @@ server/uploads/
 client/dist/
 server/dist/
 
+# Real customer/supplier documents used to test the OCR pipeline stay local
+sampleinvoice/
+
 # Local automation/session artifacts
 .claude/
 .run-logs/

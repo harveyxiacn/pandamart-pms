@@ -11,6 +11,6 @@ describe("Button", () => {
   it("applies variant class", () => {
     render(<Button variant="danger">删除</Button>);
     const button = screen.getByRole("button", { name: "删除" });
-    expect(button.className).toContain("bg-coral");
+    expect(button.className).toContain("bg-danger");
   });
 });

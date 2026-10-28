@@ -72,7 +72,7 @@ export default function NotificationsPage() {
         {loading ? <SkeletonTable rows={5} columns={3} /> : null}
         {error ? (
           <div className="flex items-center gap-3">
-            <p className="text-sm text-rose-600">{error}</p>
+            <p className="text-sm text-danger">{error}</p>
             <Button variant="ghost" onClick={() => void load()}>
               重试
             </Button>

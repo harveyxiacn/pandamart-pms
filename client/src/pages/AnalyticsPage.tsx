@@ -172,7 +172,7 @@ export default function AnalyticsPage() {
     );
   if (error)
     return (
-      <Card className="flex items-center gap-3 text-rose-700">
+      <Card className="flex items-center gap-3 text-danger">
         <span>{error}</span>
         <Button variant="ghost" onClick={() => void load()}>
           重试
@@ -214,7 +214,7 @@ export default function AnalyticsPage() {
               </button>
             )}
             {invalidRange && (
-              <span className="text-xs text-rose-600">起始日期不能晚于结束日期</span>
+              <span className="text-xs text-danger">起始日期不能晚于结束日期</span>
             )}
           </div>
         </div>
@@ -236,7 +236,7 @@ export default function AnalyticsPage() {
         </Card>
         <Card>
           <p className="text-xs text-slate-500">需补货商品</p>
-          <p className={cn("text-2xl font-bold", summaryStats.reorderCount > 0 ? "text-rose-600" : "text-emerald-600")}>
+          <p className={cn("text-2xl font-bold", summaryStats.reorderCount > 0 ? "text-danger" : "text-emerald-600")}>
             {summaryStats.reorderCount}
           </p>
         </Card>

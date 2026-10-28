@@ -112,7 +112,7 @@ export function Modal({
         className={cn("glass mx-auto w-full max-w-5xl overflow-hidden p-0 shadow-2xl outline-none", widthClassName)}
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-rose-100 bg-white/95 px-4 py-3">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-white/95 px-4 py-3">
           <h3 className="text-lg font-bold text-ink">{title}</h3>
           <Button variant="ghost" onClick={onClose}>
             关闭

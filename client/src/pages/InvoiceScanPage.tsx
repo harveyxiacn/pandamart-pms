@@ -293,7 +293,9 @@ export default function InvoiceScanPage() {
           <label
             className={cn(
               "block cursor-pointer rounded-xl border-2 border-dashed p-4 transition",
-              loading ? "border-amber bg-amber/10" : "border-rose-200 bg-rose-50/60 hover:border-coral hover:bg-rose-50"
+              loading
+                ? "border-warning bg-warning-soft/60"
+                : "border-line-strong bg-surface-muted hover:border-accent hover:bg-accent-soft/40"
             )}
           >
             <input
@@ -326,15 +328,15 @@ export default function InvoiceScanPage() {
           </Button>
         </div>
 
-        <div className="mt-4 rounded-xl border border-rose-100 bg-white p-3">
+        <div className="mt-4 rounded-xl border border-line bg-white p-3">
           <div className="flex items-center justify-between text-xs text-slate-600">
             <span>{uploadStageText}</span>
             <span>{uploadProgress}%</span>
           </div>
-          <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-rose-100">
+          <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-surface-inset">
             <div
               className={cn(
-                "h-full rounded-full bg-gradient-to-r from-coral via-amber to-pine transition-all duration-500",
+                "h-full rounded-full bg-accent transition-[width] duration-500",
                 loading ? "animate-pulse" : ""
               )}
               style={{ width: `${uploadProgress}%` }}
@@ -354,7 +356,7 @@ export default function InvoiceScanPage() {
         </div>
       </Card>
 
-      {error ? <Card className="text-rose-700">错误: {error}</Card> : null}
+      {error ? <Card className="text-danger">错误: {error}</Card> : null}
       {success ? <Card className="text-emerald-700">{success}</Card> : null}
 
       {recognized ? (

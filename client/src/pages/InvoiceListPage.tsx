@@ -556,7 +556,7 @@ export default function InvoiceListPage() {
             </thead>
             <tbody>
               {items.map((item) => (
-                <tr key={item.id} className="border-t border-slate-100 hover:bg-rose-50/30">
+                <tr key={item.id} className="border-t border-slate-100 hover:bg-surface-inset">
                   <td className="px-3 py-2 font-medium">{item.invoiceNumber}</td>
                   <td className="px-3 py-2">{item.supplierName || "-"}</td>
                   <td className="px-3 py-2">{formatDate(item.invoiceDate)}</td>
@@ -603,7 +603,7 @@ export default function InvoiceListPage() {
         ) : detail && source ? (
           <div className="space-y-4 text-sm">
             {actionMessage ? <p className="rounded-lg bg-emerald-50 px-3 py-2 text-emerald-700">{actionMessage}</p> : null}
-            {actionError ? <p className="rounded-lg bg-rose-50 px-3 py-2 text-rose-700">{actionError}</p> : null}
+            {actionError ? <p className="rounded-lg bg-danger-soft px-3 py-2 text-danger">{actionError}</p> : null}
 
             <div className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2 lg:grid-cols-4">
               <label>
@@ -875,7 +875,7 @@ export default function InvoiceListPage() {
               </table>
             </div>
 
-            <div className="sticky bottom-0 z-10 flex flex-wrap items-center gap-2 rounded-lg border border-rose-100 bg-white/95 p-3">
+            <div className="sticky bottom-0 z-10 flex flex-wrap items-center gap-2 rounded-lg border border-line bg-white/95 p-3">
               <Badge tone={detail.status === "confirmed" ? "success" : detail.status === "rejected" ? "danger" : "warning"}>
                 {detail.status === "confirmed" ? "已确认" : detail.status === "rejected" ? "已驳回" : "待处理"}
               </Badge>

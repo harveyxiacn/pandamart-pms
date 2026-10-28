@@ -428,7 +428,7 @@ export default function SettingsPage() {
           </tbody>
         </Table>
         {message ? (
-          <p className={`mt-3 text-sm ${messageTone === "success" ? "text-emerald-700" : "text-rose-700"}`}>
+          <p className={`mt-3 text-sm ${messageTone === "success" ? "text-emerald-700" : "text-danger"}`}>
             {message}
           </p>
         ) : null}

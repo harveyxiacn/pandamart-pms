@@ -95,17 +95,19 @@ export function Sidebar() {
   }, []);
 
   return (
-    <aside className="hidden w-64 shrink-0 border-r border-rose-100 bg-white/90 p-4 backdrop-blur-md lg:block">
-      <div className="mb-5 rounded-xl border border-rose-200 bg-gradient-to-br from-rose-50 to-white p-4 text-rose-950 shadow-sm">
+    <aside className="hidden w-64 shrink-0 border-r border-line bg-surface p-4 lg:block">
+      <div className="mb-5 rounded-xl border border-line bg-surface-muted p-4">
         <div className="flex items-center gap-3">
           <img
             src="/logo-300x292.png"
-            alt="PandaMart Logo"
-            className="h-12 w-12 rounded-lg bg-white object-contain p-1 ring-1 ring-rose-200"
+            alt=""
+            className="h-11 w-11 rounded-lg bg-surface object-contain p-1 ring-1 ring-line"
           />
           <div>
-            <p className="text-xs uppercase tracking-[0.22em] text-rose-500">PandaMart</p>
-            <h1 className="text-lg font-bold">{APP_NAME}</h1>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
+              PandaMart
+            </p>
+            <h1 className="text-base font-bold text-ink">{APP_NAME}</h1>
           </div>
         </div>
       </div>

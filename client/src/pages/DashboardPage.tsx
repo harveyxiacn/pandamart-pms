@@ -48,7 +48,7 @@ function TrendBadge({ current, previous }: { current: number; previous: number }
   if (pct === 0) return <span className="inline-flex items-center gap-0.5 text-xs text-slate-400"><Minus size={12} />持平</span>;
   const isUp = pct > 0;
   return (
-    <span className={cn("inline-flex items-center gap-0.5 text-xs font-medium", isUp ? "text-emerald-600" : "text-rose-600")}>
+    <span className={cn("inline-flex items-center gap-0.5 text-xs font-medium", isUp ? "text-emerald-600" : "text-danger")}>
       {isUp ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
       {isUp ? "+" : ""}{pct}%
     </span>
@@ -56,7 +56,7 @@ function TrendBadge({ current, previous }: { current: number; previous: number }
 }
 
 const severityStyles: Record<string, string> = {
-  high: "border-l-4 border-l-rose-500 bg-rose-50/60",
+  high: "border-l-4 border-l-danger bg-danger-soft/60",
   medium: "border-l-4 border-l-amber-500 bg-amber-50/60",
   low: "border-l-4 border-l-slate-400 bg-slate-50/60",
 };
@@ -135,7 +135,7 @@ export default function DashboardPage() {
 
   if (error)
     return (
-      <Card className="flex items-center gap-3 text-rose-700">
+      <Card className="flex items-center gap-3 text-danger">
         <span>仪表盘加载失败: {error}</span>
         <Button variant="ghost" onClick={() => setReloadKey((k) => k + 1)}>
           重试
@@ -154,10 +154,10 @@ export default function DashboardPage() {
       {alerts.length > 0 && (
         <section className="space-y-2">
           {highAlerts.length > 0 && (
-            <Card className="border-rose-200 bg-rose-50/40">
+            <Card className="border-line bg-danger-soft/40">
               <div className="mb-2 flex items-center gap-2">
-                <AlertTriangle size={18} className="text-rose-600" />
-                <h2 className="text-sm font-bold text-rose-800">需要注意</h2>
+                <AlertTriangle size={18} className="text-danger" />
+                <h2 className="text-sm font-bold text-danger">需要注意</h2>
                 <Badge tone="danger">{highAlerts.length}</Badge>
               </div>
               <div className="space-y-2">
@@ -354,7 +354,7 @@ export default function DashboardPage() {
                   className={cn(
                     "block rounded-lg border p-3 transition hover:shadow-sm",
                     batch.expired
-                      ? "border-rose-300 bg-rose-50/50 hover:border-rose-400"
+                      ? "border-danger/40 bg-danger-soft/50 hover:border-danger"
                       : "border-amber-200 bg-amber-50/50 hover:border-amber-400"
                   )}
                 >
@@ -364,7 +364,7 @@ export default function DashboardPage() {
                       <p className="text-xs text-slate-500">批次 {batch.batchNo} · 数量 {batch.quantity}</p>
                     </div>
                     <div className="text-right">
-                      <p className={cn("text-xs font-medium", batch.expired ? "text-rose-600" : "text-amber-600")}>
+                      <p className={cn("text-xs font-medium", batch.expired ? "text-danger" : "text-amber-600")}>
                         {batch.expired ? "已过期" : `到期 ${formatDate(batch.expiryDate)}`}
                       </p>
                     </div>
@@ -385,7 +385,7 @@ function AlertRow({ alert }: { alert: DashboardAlert }) {
   const Icon = severityIcon[alert.severity] ?? AlertTriangle;
   const content = (
     <div className={cn("flex items-start gap-3 rounded-lg p-3 transition", severityStyles[alert.severity])}>
-      <Icon size={16} className={cn("mt-0.5 shrink-0", alert.severity === "high" ? "text-rose-600" : alert.severity === "medium" ? "text-amber-600" : "text-slate-500")} />
+      <Icon size={16} className={cn("mt-0.5 shrink-0", alert.severity === "high" ? "text-danger" : alert.severity === "medium" ? "text-amber-600" : "text-slate-500")} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold">{alert.title}</span>

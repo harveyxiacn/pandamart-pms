@@ -7,8 +7,8 @@ interface TableProps {
 
 export function Table({ className, children }: PropsWithChildren<TableProps>) {
   return (
-    <div className={cn("overflow-x-auto rounded-lg border border-slate-200", className)}>
-      <table className="min-w-full divide-y divide-slate-200 text-sm">{children}</table>
+    <div className={cn("overflow-x-auto rounded-xl border border-line bg-surface", className)}>
+      <table className="min-w-full divide-y divide-line text-sm tabular">{children}</table>
     </div>
   );
 }

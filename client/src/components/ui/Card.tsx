@@ -6,5 +6,5 @@ interface CardProps {
 }
 
 export function Card({ className, children }: PropsWithChildren<CardProps>) {
-  return <div className={cn("glass p-4 animate-rise", className)}>{children}</div>;
+  return <div className={cn("surface p-4 animate-rise", className)}>{children}</div>;
 }

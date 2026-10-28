@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertTriangle, Lock, User } from "lucide-react";
+import { AlertTriangle, Eye, EyeOff, Lock, User } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
@@ -10,6 +10,7 @@ export default function LoginPage() {
   const { login } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,15 +30,17 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="grid min-h-screen place-items-center p-4">
-      <div className="w-full max-w-md animate-rise rounded-2xl border border-rose-100 bg-white/90 p-6 shadow-card backdrop-blur-md">
+    <div className="grid min-h-dvh place-items-center p-4">
+      <div className="w-full max-w-md animate-rise rounded-2xl border border-line bg-surface p-6 shadow-pop">
         <div className="mb-2 flex items-center gap-3">
           <img
             src="/logo-300x292.png"
-            alt="PandaMart Logo"
-            className="h-11 w-11 rounded-lg bg-white object-contain p-1 ring-1 ring-rose-200"
+            alt=""
+            className="h-11 w-11 rounded-lg bg-surface object-contain p-1 ring-1 ring-line"
           />
-          <p className="text-xs uppercase tracking-[0.2em] text-rose-500">PandaMart PMS</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
+            PandaMart PMS
+          </p>
         </div>
         <h1 className="mt-2 text-2xl font-bold text-ink">智能库存管理登录</h1>
         <p className="mt-1 text-sm text-slate-600">使用账号进入系统，开始发票识别与库存管理。</p>
@@ -46,28 +49,57 @@ export default function LoginPage() {
           <label className="block">
             <span className="mb-1 block text-sm font-medium text-slate-700">用户名</span>
             <div className="relative">
-              <User className="pointer-events-none absolute left-3 top-2.5 text-slate-400" size={16} />
-              <Input value={username} onChange={(e) => setUsername(e.target.value)} className="pl-9" required />
+              <User
+                aria-hidden="true"
+                className="pointer-events-none absolute left-3 top-2.5 text-slate-400"
+                size={16}
+              />
+              <Input
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="pl-9"
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                required
+              />
             </div>
           </label>
 
           <label className="block">
             <span className="mb-1 block text-sm font-medium text-slate-700">密码</span>
             <div className="relative">
-              <Lock className="pointer-events-none absolute left-3 top-2.5 text-slate-400" size={16} />
+              <Lock
+                aria-hidden="true"
+                className="pointer-events-none absolute left-3 top-2.5 text-slate-400"
+                size={16}
+              />
               <Input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="pl-9"
+                className="pl-9 pr-10"
+                autoComplete="current-password"
                 required
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? "隐藏密码" : "显示密码"}
+                aria-pressed={showPassword}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-slate-400 transition-colors hover:bg-surface-inset hover:text-ink"
+              >
+                {showPassword ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
+              </button>
             </div>
           </label>
 
           {error ? (
-            <div className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
-              <AlertTriangle className="mr-1 inline" size={14} />
+            <div
+              role="alert"
+              className="flex items-center gap-2 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger"
+            >
+              <AlertTriangle size={14} aria-hidden="true" className="shrink-0" />
               {error}
             </div>
           ) : null}

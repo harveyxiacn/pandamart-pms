@@ -118,7 +118,7 @@ export default function AuditLogsPage() {
         {loading ? <SkeletonTable rows={6} columns={5} /> : null}
         {error ? (
           <div className="flex items-center gap-3">
-            <p className="text-sm text-rose-600">{error}</p>
+            <p className="text-sm text-danger">{error}</p>
             <Button variant="ghost" onClick={() => void load()}>
               重试
             </Button>

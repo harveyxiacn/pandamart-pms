@@ -89,7 +89,7 @@ export default function PayablesPage() {
       <section className="grid gap-3 sm:grid-cols-3">
         <Card>
           <p className="text-xs text-slate-500">应付总额（未结清）</p>
-          <p className="text-2xl font-bold text-rose-700">{formatCurrency(totalOutstanding)}</p>
+          <p className="text-2xl font-bold text-danger">{formatCurrency(totalOutstanding)}</p>
         </Card>
         <Card>
           <p className="text-xs text-slate-500">涉及供应商</p>
@@ -103,7 +103,7 @@ export default function PayablesPage() {
           <SkeletonTable rows={6} columns={5} />
         ) : error ? (
           <div className="space-y-2 text-sm">
-            <p className="text-rose-600">{error}</p>
+            <p className="text-danger">{error}</p>
             <Button variant="ghost" onClick={() => void load()}>
               重试
             </Button>
@@ -164,7 +164,7 @@ export default function PayablesPage() {
               </div>
               <div className="rounded-lg bg-slate-50 p-2">
                 <p className="text-xs text-slate-500">未结清</p>
-                <p className="font-bold text-rose-700">{formatCurrency(detail.outstanding)}</p>
+                <p className="font-bold text-danger">{formatCurrency(detail.outstanding)}</p>
               </div>
             </div>
 

@@ -1,4 +1,5 @@
-import { Bell, LogOut, Search, X } from "lucide-react";
+import { Bell, Building2, FileText, LogOut, Package, Search, X } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getUnreadCount } from "../../api/notifications";
@@ -76,16 +77,18 @@ export function Header() {
     : 0;
 
   return (
-    <header className="sticky top-0 z-20 mb-4 flex items-center justify-between gap-3 rounded-xl border border-rose-100 bg-white/90 px-4 py-3 backdrop-blur-md">
+    <header className="sticky top-0 z-20 mb-4 flex items-center justify-between gap-3 rounded-xl border border-line bg-surface/95 px-4 py-3 backdrop-blur-md">
       {/* ── left: brand ─────────────────────────────────── */}
       <div className="flex items-center gap-3">
         <img
           src="/logo-300x292.png"
-          alt="PandaMart Logo"
-          className="h-9 w-9 rounded-lg bg-white object-contain p-1 ring-1 ring-rose-200"
+          alt=""
+          className="h-9 w-9 rounded-lg bg-surface object-contain p-1 ring-1 ring-line"
         />
         <div className="hidden sm:block">
-          <p className="text-xs uppercase tracking-[0.2em] text-rose-500">PandaMart</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
+            PandaMart
+          </p>
           <p className="text-sm font-semibold text-ink">
             {user?.displayName || user?.username} · {user?.role === "admin" ? "管理员" : "店员"}
           </p>
@@ -104,7 +107,8 @@ export function Header() {
             onChange={(e) => { setQuery(e.target.value); doSearch(e.target.value); setOpen(true); }}
             onFocus={() => setOpen(true)}
             placeholder="搜索产品、发票、供应商…"
-            className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-9 pr-16 text-sm outline-none transition focus:border-pine focus:bg-white focus:ring-2 focus:ring-pine/20"
+            aria-label="全局搜索"
+            className="w-full rounded-lg border border-line bg-surface-muted py-2 pl-9 pr-16 text-sm text-ink outline-none transition-colors placeholder:text-ink-subtle focus:border-accent focus:bg-surface focus:ring-2 focus:ring-accent/25"
           />
           <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
             {query && (
@@ -112,6 +116,7 @@ export function Header() {
                 type="button"
                 onClick={() => { setQuery(""); setResults(null); setOpen(false); }}
                 className="rounded p-0.5 text-slate-400 hover:text-slate-600"
+                aria-label="清除搜索"
               >
                 <X size={14} />
               </button>
@@ -134,7 +139,7 @@ export function Header() {
             {!searching && results && totalHits > 0 && (
               <div className="py-1">
                 {results.products.length > 0 && (
-                  <SearchSection title="产品" icon="📦">
+                  <SearchSection title="产品" icon={Package}>
                     {results.products.slice(0, 5).map((p) => (
                       <SearchItem
                         key={`p-${p.id}`}
@@ -146,7 +151,7 @@ export function Header() {
                   </SearchSection>
                 )}
                 {results.invoices.length > 0 && (
-                  <SearchSection title="发票" icon="📄">
+                  <SearchSection title="发票" icon={FileText}>
                     {results.invoices.slice(0, 5).map((inv) => (
                       <SearchItem
                         key={`i-${inv.id}`}
@@ -158,7 +163,7 @@ export function Header() {
                   </SearchSection>
                 )}
                 {results.suppliers.length > 0 && (
-                  <SearchSection title="供应商" icon="🏢">
+                  <SearchSection title="供应商" icon={Building2}>
                     {results.suppliers.slice(0, 5).map((s) => (
                       <SearchItem
                         key={`s-${s.id}`}
@@ -181,14 +186,18 @@ export function Header() {
       {/* ── right: actions ──────────────────────────────── */}
       <div className="flex items-center gap-2 shrink-0">
         <button
-          className="relative rounded-lg border border-slate-200 bg-white p-2"
+          className="relative rounded-lg border border-line bg-surface p-2 text-ink-muted transition-colors hover:bg-surface-inset hover:text-ink"
           onClick={() => navigate("/notifications")}
           type="button"
           title="通知"
+          aria-label={unreadCount > 0 ? `通知，${unreadCount} 条未读` : "通知"}
         >
-          <Bell size={18} />
+          <Bell size={18} aria-hidden="true" />
           {unreadCount > 0 && (
-            <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-coral px-1 text-center text-[10px] font-bold text-white">
+            <span
+              aria-hidden="true"
+              className="absolute -right-1 -top-1 min-w-5 rounded-full bg-danger px-1 text-center text-[10px] font-bold text-white"
+            >
               {unreadCount > 99 ? "99+" : unreadCount}
             </span>
           )}
@@ -208,10 +217,13 @@ export function Header() {
 
 /* ── sub-components ──────────────────────────────────────── */
 
-function SearchSection({ title, icon, children }: { title: string; icon: string; children: React.ReactNode }) {
+function SearchSection({ title, icon: Icon, children }: { title: string; icon: LucideIcon; children: React.ReactNode }) {
   return (
     <div>
-      <p className="px-4 py-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{icon} {title}</p>
+      <p className="flex items-center gap-1.5 px-4 py-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+        <Icon size={12} aria-hidden="true" />
+        {title}
+      </p>
       <div className="space-y-0.5">{children}</div>
     </div>
   );

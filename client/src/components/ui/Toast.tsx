@@ -20,7 +20,7 @@ const ToastContext = createContext<ToastApi | null>(null);
 
 const toneStyles: Record<ToastTone, string> = {
   success: "border-emerald-200 bg-emerald-50 text-emerald-800",
-  error: "border-rose-200 bg-rose-50 text-rose-800",
+  error: "border-line bg-danger-soft text-danger",
   info: "border-slate-200 bg-white text-ink",
 };
 

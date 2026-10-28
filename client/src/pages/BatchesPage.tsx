@@ -155,7 +155,7 @@ export default function BatchesPage() {
       <section className="grid gap-3 sm:grid-cols-3">
         <Card>
           <p className="text-xs text-slate-500">已过期批次</p>
-          <p className="text-2xl font-bold text-rose-700">{expiring?.expiredCount ?? 0}</p>
+          <p className="text-2xl font-bold text-danger">{expiring?.expiredCount ?? 0}</p>
         </Card>
         <Card>
           <p className="text-xs text-slate-500">7 天内临期</p>
@@ -218,7 +218,7 @@ export default function BatchesPage() {
           <SkeletonTable rows={6} columns={6} />
         ) : error ? (
           <div className="space-y-2 text-sm">
-            <p className="text-rose-600">{error}</p>
+            <p className="text-danger">{error}</p>
             <Button variant="ghost" onClick={() => void load()}>
               重试
             </Button>

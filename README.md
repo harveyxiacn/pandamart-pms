@@ -26,7 +26,7 @@ Ask *"what should I reorder this week?"* and the agent calls `get_reorder_sugges
 
 ## Tech stack
 
-- **Frontend:** React 18 + TypeScript + Vite + TailwindCSS + shadcn/ui + Recharts
+- **Frontend:** React 18 + TypeScript + Vite + TailwindCSS (custom tokens) + Lucide + Recharts
 - **Backend:** Node.js + Express + TypeScript
 - **Database:** MariaDB/MySQL 10.x via Knex.js (migrations + seeds)
 - **AI:** OpenAI-compatible API (multi-provider), Vision for scanned invoices
@@ -55,6 +55,20 @@ PandaMartPMS/
 Sample invoices are deliberately not shipped: the ones used to develop the OCR
 pipeline were real supplier documents. Put your own PDFs under `sampleinvoice/`
 (local only — it is git-ignored) to exercise the invoice flow.
+
+## Interface
+
+The UI is a dense operations console, not a marketing app: neutral surfaces,
+one primary action per screen, red reserved for destructive/error states.
+Colour, spacing and type come from semantic tokens in
+[`docs/design-system.md`](docs/design-system.md) — components reference roles
+(`primary`, `danger`, `line`), never raw hex, so the palette can change in one
+place.
+
+Accessibility work already in place: skip-to-content link, a single
+`:focus-visible` treatment across the app, `prefers-reduced-motion` fallback,
+labelled icon-only buttons, `role="alert"` on login errors, and tabular figures
+in every table so numbers do not shift columns.
 
 ## Quick start
 

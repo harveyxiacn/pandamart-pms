@@ -84,7 +84,7 @@ export default function StocktakePage() {
 
       {message ? <Card className="text-emerald-700">{message}</Card> : null}
       {error ? (
-        <Card className="flex items-center gap-3 text-rose-700">
+        <Card className="flex items-center gap-3 text-danger">
           <span>{error}</span>
           <Button variant="ghost" onClick={() => void load()}>
             重试
@@ -139,7 +139,7 @@ export default function StocktakePage() {
                         }
                       />
                     </td>
-                    <td className={`px-3 py-2 font-semibold ${diff === 0 ? "text-slate-500" : diff > 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                    <td className={`px-3 py-2 font-semibold ${diff === 0 ? "text-slate-500" : diff > 0 ? "text-emerald-700" : "text-danger"}`}>
                       {diff > 0 ? "+" : ""}
                       {diff}
                     </td>

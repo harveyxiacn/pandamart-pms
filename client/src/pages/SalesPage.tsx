@@ -270,7 +270,7 @@ export default function SalesPage() {
           <SkeletonTable rows={5} columns={5} />
         ) : error ? (
           <div className="space-y-2 text-sm">
-            <p className="text-rose-600">{error}</p>
+            <p className="text-danger">{error}</p>
             <Button variant="ghost" onClick={() => void loadOrders(page)}>
               重试
             </Button>

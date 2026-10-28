@@ -658,7 +658,7 @@ export default function ProductsPage() {
                 </thead>
                 <tbody>
                   {priceChartData.map((row, index) => (
-                    <tr key={index} className={row.isAnomaly ? "bg-rose-50" : ""}>
+                    <tr key={index} className={row.isAnomaly ? "bg-danger-soft" : ""}>
                       <td className="border-b p-2">
                         {priceHistoryGroupBy === "month"
                           ? row.date.slice(0, 7)
@@ -666,7 +666,7 @@ export default function ProductsPage() {
                       </td>
                       <td className="border-b p-2">{formatCurrency(row.unitPrice)}</td>
                       <td
-                        className={`border-b p-2 ${row.changePercent > 0 ? "text-rose-600" : row.changePercent < 0 ? "text-emerald-600" : "text-slate-400"}`}
+                        className={`border-b p-2 ${row.changePercent > 0 ? "text-danger" : row.changePercent < 0 ? "text-emerald-600" : "text-slate-400"}`}
                       >
                         {index === 0
                           ? "-"

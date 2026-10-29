@@ -1,15 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { ChevronRight, FileSearch, FileText, SearchX } from "lucide-react";
 import { confirmInvoice, deleteInvoice, getInvoiceById, getInvoices, rollbackInvoiceConfirm, updateInvoice } from "../api/invoices";
 import { getAllSuppliers } from "../api/suppliers";
 import type { InvoiceDetail, InvoiceSummary, Supplier } from "../types";
+import { PageHeader } from "../components/ui/PageHeader";
 import { Card } from "../components/ui/Card";
-import { Table } from "../components/ui/Table";
-import { Input } from "../components/ui/Input";
+import { Table, Td, Th } from "../components/ui/Table";
+import { Input, Textarea } from "../components/ui/Input";
 import { Select } from "../components/ui/Select";
+import { SearchInput } from "../components/ui/SearchInput";
 import { Button } from "../components/ui/Button";
 import { Modal } from "../components/ui/Modal";
 import { Badge } from "../components/ui/Badge";
+import { Toolbar, ToolbarGroup } from "../components/ui/Toolbar";
+import { SegmentedControl } from "../components/ui/SegmentedControl";
+import { DateRangePicker } from "../components/ui/DatePicker";
 import { SkeletonTable } from "../components/ui/Skeleton";
 import { Pagination } from "../components/ui/Pagination";
 import { EmptyState } from "../components/ui/EmptyState";
@@ -18,7 +24,7 @@ import { useConfirm } from "../components/ui/ConfirmDialog";
 import { formatCurrency, formatDate } from "../utils/formatters";
 import { useDebounce } from "../hooks/useDebounce";
 import { useAuth } from "../hooks/useAuth";
-import { FileText } from "lucide-react";
+import type { DateRange } from "../utils/date";
 
 type EditableItem = {
   id: number;
@@ -149,6 +155,8 @@ export default function InvoiceListPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [status, setStatus] = useState(isAdmin ? "" : "pending");
   const [keyword, setKeyword] = useState("");
+  const [supplierId, setSupplierId] = useState("");
+  const [dateRange, setDateRange] = useState<DateRange>({ start: null, end: null });
   // 服务端 pageSize 上限 100：改为真实分页，避免超过 100 张发票后旧记录不可见
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -178,6 +186,9 @@ export default function InvoiceListPage() {
         pageSize: targetPageSize,
         status: statusFilter,
         keyword: kw || undefined,
+        supplierId: supplierId || undefined,
+        dateFrom: dateRange.start || undefined,
+        dateTo: dateRange.end || undefined,
       });
       setItems(data.items);
       setTotal(data.pagination.total);
@@ -190,10 +201,10 @@ export default function InvoiceListPage() {
   };
 
   useEffect(() => {
-    // 用防抖后的关键字触发搜索并回到第 1 页；手动「查询/回车」仍走 load(1) 使用即时关键字
+    // 用防抖后的关键字触发搜索并回到第 1 页；手动「回车」仍走 load(1) 使用即时关键字
     void load(1, debouncedKeyword);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedKeyword, status]);
+  }, [debouncedKeyword, status, supplierId, dateRange.start, dateRange.end]);
 
   useEffect(() => {
     // 跨页拉取全部供应商（服务端 pageSize 上限 100），避免筛选下拉漏项
@@ -492,40 +503,94 @@ export default function InvoiceListPage() {
     ? new Set(source.items.map((item) => item.productCode || item.productNumber || item.productNameEn || item.productNameZh).filter(Boolean)).size
     : 0;
 
+  const hasFilters = Boolean(keyword || supplierId || dateRange.start || dateRange.end || (isAdmin && status));
+  const clearFilters = () => {
+    setKeyword("");
+    setSupplierId("");
+    setDateRange({ start: null, end: null });
+    if (isAdmin) setStatus("");
+  };
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      <PageHeader
+        title="发票列表"
+        description="查看、校对并确认供应商发票；确认后自动入库并更新批次。"
+        actions={
+          <Button leadingIcon={FileSearch} onClick={() => (window.location.href = "/invoices/scan")}>
+            识别新发票
+          </Button>
+        }
+      />
+
       <Card>
-        <div className="flex flex-wrap items-end gap-2">
-          {isAdmin ? (
-            <label className="w-full text-sm md:w-56">
-              状态
-              <Select value={status} onChange={(e) => setStatus(e.target.value)}>
-                <option value="">全部</option>
-                <option value="pending">待处理</option>
-                <option value="confirmed">已确认</option>
-                <option value="rejected">已驳回</option>
-              </Select>
-            </label>
-          ) : (
-            <p className="w-full text-sm text-slate-600 md:w-56">当前范围: 待处理发票</p>
-          )}
-          <label className="w-full text-sm md:w-72">
-            发票号
-            <Input
+        <Toolbar>
+          <ToolbarGroup grow>
+            <SearchInput
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
+              onClear={() => setKeyword("")}
               onKeyDown={(e) => {
                 if (e.key === "Enter") void load(1);
               }}
-              placeholder="输入发票号搜索"
+              placeholder="搜索发票号"
+              aria-label="搜索发票号"
+              containerClassName="w-full sm:max-w-[15rem]"
             />
-          </label>
-          <Button onClick={() => void load(1)}>筛选</Button>
-        </div>
+            <DateRangePicker
+              value={dateRange}
+              onChange={setDateRange}
+              label="按开票日期筛选"
+              className="w-auto min-w-[13rem]"
+            />
+            {isAdmin ? (
+              <Select
+                value={supplierId}
+                onChange={(e) => setSupplierId(e.target.value)}
+                aria-label="按供应商筛选"
+                className="w-auto min-w-[9rem]"
+              >
+                <option value="">全部供应商</option>
+                {suppliers.map((supplier) => (
+                  <option key={supplier.id} value={supplier.id}>
+                    {supplier.name}
+                  </option>
+                ))}
+              </Select>
+            ) : null}
+            {hasFilters ? (
+              <Button variant="ghost" size="sm" onClick={clearFilters}>
+                清除筛选
+              </Button>
+            ) : null}
+          </ToolbarGroup>
+          <ToolbarGroup>
+            {isAdmin ? (
+              <SegmentedControl
+                label="按状态筛选"
+                value={status}
+                onChange={setStatus}
+                options={[
+                  { value: "", label: "全部" },
+                  { value: "pending", label: "待处理" },
+                  { value: "confirmed", label: "已确认" },
+                  { value: "rejected", label: "已驳回" },
+                ]}
+              />
+            ) : (
+              <Badge tone="warning">当前范围：待处理发票</Badge>
+            )}
+          </ToolbarGroup>
+        </Toolbar>
       </Card>
 
-      <Card>
-        <h2 className="mb-3 text-lg font-bold">发票列表</h2>
+      <Card padded={false} className="p-4 sm:p-5">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-title font-semibold tracking-tight text-ink">发票记录</h2>
+          <span className="text-meta text-ink-subtle">
+            共 <span className="font-medium tabular text-ink-muted">{total}</span> 张
+          </span>
+        </div>
         {loading ? <SkeletonTable rows={6} columns={6} /> : null}
         {!loading && error ? (
           <EmptyState
@@ -540,72 +605,120 @@ export default function InvoiceListPage() {
           />
         ) : null}
         {!loading && !error && items.length === 0 ? (
-          <EmptyState icon={FileText} title="暂无发票" description="没有符合条件的发票记录。可尝试清除筛选条件，或前往「发票识别」上传第一张发票。" />
+          <EmptyState
+            icon={hasFilters ? SearchX : FileText}
+            title={hasFilters ? "没有符合条件的发票" : "暂无发票"}
+            description={
+              hasFilters
+                ? "试试放宽日期范围或清除筛选条件。"
+                : "前往「发票识别」上传第一张供应商发票。"
+            }
+            action={
+              hasFilters ? (
+                <Button variant="secondary" onClick={clearFilters}>
+                  清除筛选
+                </Button>
+              ) : (
+                <Button leadingIcon={FileSearch} onClick={() => (window.location.href = "/invoices/scan")}>
+                  去识别发票
+                </Button>
+              )
+            }
+          />
         ) : null}
         {!loading && !error && items.length > 0 ? (
-          <Table>
-            <thead>
-              <tr className="bg-slate-50 text-left text-xs text-slate-600">
-                <th className="px-3 py-2">发票号</th>
-                <th className="px-3 py-2">供应商</th>
-                <th className="px-3 py-2">日期</th>
-                <th className="px-3 py-2">总额</th>
-                <th className="px-3 py-2">状态</th>
-                <th className="px-3 py-2">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item) => (
-                <tr key={item.id} className="border-t border-slate-100 hover:bg-surface-inset">
-                  <td className="px-3 py-2 font-medium">{item.invoiceNumber}</td>
-                  <td className="px-3 py-2">{item.supplierName || "-"}</td>
-                  <td className="px-3 py-2">{formatDate(item.invoiceDate)}</td>
-                  <td className="px-3 py-2">{formatCurrency(item.grandTotal)}</td>
-                  <td className="px-3 py-2">
-                    <Badge tone={item.status === "confirmed" ? "success" : item.status === "rejected" ? "danger" : "warning"}>
-                      {item.status === "confirmed" ? "已确认" : item.status === "rejected" ? "已驳回" : "待处理"}
-                    </Badge>
-                  </td>
-                  <td className="px-3 py-2">
-                    <Button variant="ghost" onClick={() => void openDetail(item.id)}>
-                      查看
-                    </Button>
-                  </td>
+          <>
+            <Table>
+              <thead>
+                <tr>
+                  <Th>发票号</Th>
+                  <Th>供应商</Th>
+                  <Th>开票日期</Th>
+                  <Th numeric>总额</Th>
+                  <Th>状态</Th>
+                  <Th className="cell-actions">操作</Th>
                 </tr>
-              ))}
-            </tbody>
-          </Table>
-        ) : null}
-        {!loading && !error && items.length > 0 ? (
-          <div className="mt-3">
-            <Pagination
-              page={page}
-              pageSize={pageSize}
-              total={total}
-              onPageChange={(next) => void load(next)}
-              onPageSizeChange={(size) => {
-                setPageSize(size);
-                void load(1, keyword, size);
-              }}
-            />
-          </div>
+              </thead>
+              <tbody>
+                {items.map((item) => (
+                  <tr key={item.id}>
+                    <Td>
+                      <button
+                        type="button"
+                        onClick={() => void openDetail(item.id)}
+                        className="cell-strong text-left underline-offset-4 hover:text-accent hover:underline"
+                      >
+                        {item.invoiceNumber}
+                      </button>
+                    </Td>
+                    <Td>{item.supplierName || <span className="text-ink-subtle">未匹配供应商</span>}</Td>
+                    <Td className="whitespace-nowrap tabular">{formatDate(item.invoiceDate)}</Td>
+                    <Td numeric className="font-medium text-ink">
+                      {formatCurrency(item.grandTotal)}
+                    </Td>
+                    <Td>
+                      <Badge
+                        tone={
+                          item.status === "confirmed"
+                            ? "success"
+                            : item.status === "rejected"
+                              ? "danger"
+                              : "warning"
+                        }
+                      >
+                        {item.status === "confirmed" ? "已确认" : item.status === "rejected" ? "已驳回" : "待处理"}
+                      </Badge>
+                    </Td>
+                    <Td className="cell-actions">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => void openDetail(item.id)}
+                        trailingIcon={ChevronRight}
+                        aria-label={`查看发票 ${item.invoiceNumber}`}
+                      >
+                        查看
+                      </Button>
+                    </Td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+            <div className="mt-3">
+              <Pagination
+                page={page}
+                pageSize={pageSize}
+                total={total}
+                onPageChange={(next) => void load(next)}
+                onPageSizeChange={(size) => {
+                  setPageSize(size);
+                  void load(1, keyword, size);
+                }}
+              />
+            </div>
+          </>
         ) : null}
       </Card>
 
       <Modal
         open={detail !== null || detailLoading}
-        title={editing ? "发票编辑" : "发票详情"}
+        title={detail ? `发票 ${detail.invoiceNumber}` : editing ? "发票编辑" : "发票详情"}
+        description={
+          detail
+            ? `${detail.supplier?.name || "未匹配供应商"} · ${formatDate(detail.invoiceDate)}`
+            : undefined
+        }
+        size="full"
         onClose={closeDetail}
-        widthClassName="max-w-[1400px]"
       >
         {detailLoading ? (
           <SkeletonTable rows={6} columns={4} />
         ) : detail && source ? (
           <div className="space-y-4 text-sm">
-            {actionMessage ? <p className="rounded-lg bg-emerald-50 px-3 py-2 text-emerald-700">{actionMessage}</p> : null}
+            {actionMessage ? <p className="rounded-lg border border-success/20 bg-success-soft px-3 py-2 text-success">{actionMessage}</p> : null}
             {actionError ? <p className="rounded-lg bg-danger-soft px-3 py-2 text-danger">{actionError}</p> : null}
 
-            <div className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 rounded-lg border border-line bg-surface-muted p-3 sm:grid-cols-2 lg:grid-cols-4">
               <label>
                 发票号
                 <Input
@@ -645,9 +758,9 @@ export default function InvoiceListPage() {
                     </option>
                   ))}
                 </Select>
-                {detail.status === "pending" ? <span className="mt-1 block text-xs text-slate-500">确认入库前必须选择供应商</span> : null}
+                {detail.status === "pending" ? <span className="mt-1 block text-meta text-ink-subtle">确认入库前必须选择供应商</span> : null}
                 {!source.supplierId && suggestedSupplier ? (
-                  <span className="mt-1 block text-xs text-emerald-700">建议匹配: {suggestedSupplier.name}</span>
+                  <span className="mt-1 block text-meta text-success">建议匹配: {suggestedSupplier.name}</span>
                 ) : null}
               </label>
               <label>
@@ -723,8 +836,7 @@ export default function InvoiceListPage() {
               </label>
               <label className="sm:col-span-2 lg:col-span-4">
                 备注
-                <textarea
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-pine focus:ring-2 focus:ring-pine/20"
+                <Textarea
                   rows={2}
                   value={source.notes}
                   disabled={!canEditFields}
@@ -737,7 +849,7 @@ export default function InvoiceListPage() {
               </p>
             </div>
 
-            <div className="grid gap-2 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-2 rounded-lg border border-line bg-surface p-3 sm:grid-cols-2 lg:grid-cols-3">
               <p>
                 商品总数量: <span className="font-semibold">{quantityTotal.toFixed(2)}</span>
               </p>
@@ -764,11 +876,12 @@ export default function InvoiceListPage() {
               </p>
             </div>
 
-            <div className="overflow-x-auto rounded-lg border border-slate-200">
-              <table className="min-w-[1300px] text-sm">
-                <thead className="bg-slate-50 text-left text-xs text-slate-600">
+            <div className="overflow-x-auto rounded-lg border border-line bg-surface-muted p-3">
+              <div className="data-table">
+                <table className="min-w-[1200px] text-sm">
+                <thead>
                   <tr>
-                    <th className="border-b p-2">中文名</th>
+                    <th className="p-2">中文名</th>
                     <th className="border-b p-2">English Name</th>
                     <th className="border-b p-2">Code</th>
                     <th className="border-b p-2">Number</th>
@@ -782,7 +895,7 @@ export default function InvoiceListPage() {
                 </thead>
                 <tbody>
                   {source.items.map((line, index) => (
-                    <tr key={line.id} className="border-b border-slate-100 align-top">
+                    <tr key={line.id} className="align-top">
                       <td className="p-2">
                         {canEditFields ? (
                           <Input value={line.productNameZh} onChange={(e) => updateDraftItem(index, { productNameZh: e.target.value })} />
@@ -794,7 +907,7 @@ export default function InvoiceListPage() {
                         {canEditFields ? (
                           <Input value={line.productNameEn} onChange={(e) => updateDraftItem(index, { productNameEn: e.target.value })} />
                         ) : (
-                          <span className="font-medium text-slate-700">{line.productNameEn || "-"}</span>
+                          <span className="font-medium text-ink">{line.productNameEn || "-"}</span>
                         )}
                       </td>
                       <td className="p-2">
@@ -872,10 +985,11 @@ export default function InvoiceListPage() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+                </table>
+              </div>
             </div>
 
-            <div className="sticky bottom-0 z-10 flex flex-wrap items-center gap-2 rounded-lg border border-line bg-white/95 p-3">
+            <div className="sticky bottom-0 z-10 flex flex-wrap items-center gap-2 rounded-lg border border-line bg-surface/95 p-3 backdrop-blur">
               <Badge tone={detail.status === "confirmed" ? "success" : detail.status === "rejected" ? "danger" : "warning"}>
                 {detail.status === "confirmed" ? "已确认" : detail.status === "rejected" ? "已驳回" : "待处理"}
               </Badge>

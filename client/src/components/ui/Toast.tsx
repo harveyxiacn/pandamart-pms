@@ -1,4 +1,12 @@
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type PropsWithChildren } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+  type PropsWithChildren,
+} from "react";
 import { CheckCircle2, Info, X, XCircle } from "lucide-react";
 import { cn } from "../../utils/classnames";
 
@@ -19,9 +27,9 @@ interface ToastApi {
 const ToastContext = createContext<ToastApi | null>(null);
 
 const toneStyles: Record<ToastTone, string> = {
-  success: "border-emerald-200 bg-emerald-50 text-emerald-800",
-  error: "border-line bg-danger-soft text-danger",
-  info: "border-slate-200 bg-white text-ink",
+  success: "border-success/25 bg-success-soft text-success",
+  error: "border-danger/25 bg-danger-soft text-danger",
+  info: "border-line bg-surface text-ink",
 };
 
 const toneIcon: Record<ToastTone, typeof CheckCircle2> = {
@@ -41,8 +49,9 @@ export function ToastProvider({ children }: PropsWithChildren) {
   const push = useCallback(
     (tone: ToastTone, message: string) => {
       const id = ++idRef.current;
-      setToasts((prev) => [...prev, { id, tone, message }]);
-      window.setTimeout(() => remove(id), 3000);
+      // Cap the stack so a burst of API errors cannot cover the whole screen.
+      setToasts((prev) => [...prev.slice(-3), { id, tone, message }]);
+      window.setTimeout(() => remove(id), tone === "error" ? 5000 : 3500);
     },
     [remove]
   );
@@ -59,27 +68,31 @@ export function ToastProvider({ children }: PropsWithChildren) {
   return (
     <ToastContext.Provider value={api}>
       {children}
-      <div className="pointer-events-none fixed right-3 top-3 z-[200] flex w-[min(92vw,22rem)] flex-col gap-2 sm:right-6 sm:top-6">
+      <div
+        aria-live="polite"
+        aria-atomic="false"
+        className="pointer-events-none fixed inset-x-3 top-3 z-[200] flex flex-col items-end gap-2 sm:inset-x-auto sm:right-6 sm:top-6"
+      >
         {toasts.map((toast) => {
           const Icon = toneIcon[toast.tone];
           return (
             <div
               key={toast.id}
-              role="alert"
+              role={toast.tone === "error" ? "alert" : "status"}
               className={cn(
-                "pointer-events-auto flex items-start gap-2 rounded-lg border px-3 py-2 text-sm font-medium shadow-card animate-rise",
+                "pointer-events-auto flex w-full items-start gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm font-medium shadow-pop animate-rise sm:w-[min(92vw,22rem)]",
                 toneStyles[toast.tone]
               )}
             >
-              <Icon size={18} className="mt-0.5 shrink-0" />
-              <span className="flex-1 break-words">{toast.message}</span>
+              <Icon size={17} className="mt-0.5 shrink-0" aria-hidden="true" />
+              <span className="flex-1 break-words leading-5">{toast.message}</span>
               <button
                 type="button"
-                aria-label="关闭"
-                className="shrink-0 rounded p-0.5 text-current/70 transition hover:bg-black/5"
+                aria-label="关闭通知"
+                className="shrink-0 rounded p-0.5 text-current/70 transition-colors hover:bg-black/5"
                 onClick={() => remove(toast.id)}
               >
-                <X size={16} />
+                <X size={15} aria-hidden="true" />
               </button>
             </div>
           );

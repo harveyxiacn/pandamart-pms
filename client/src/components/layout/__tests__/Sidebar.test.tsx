@@ -33,8 +33,8 @@ describe("Sidebar", () => {
     const scanLink = screen.getByRole("link", { name: "发票识别" });
     const listLink = screen.getByRole("link", { name: "发票列表" });
 
-    expect(scanLink.className).toContain("bg-pine");
-    expect(listLink.className).not.toContain("bg-pine");
+    expect(scanLink.getAttribute("aria-current")).toBe("page");
+    expect(listLink.getAttribute("aria-current")).toBeNull();
   });
 
   it("hides dashboard and ai assistant links for staff", () => {

@@ -1,125 +1,98 @@
-import { useEffect, useRef, type PropsWithChildren } from "react";
-import { Button } from "./Button";
+import { useId, type PropsWithChildren, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { X } from "lucide-react";
 import { cn } from "../../utils/classnames";
+import { useDialogA11y } from "../../hooks/useDialogA11y";
+
+type ModalSize = "sm" | "md" | "lg" | "xl" | "full";
 
 interface ModalProps {
   open: boolean;
-  title: string;
+  title: ReactNode;
+  description?: ReactNode;
   onClose: () => void;
+  size?: ModalSize;
+  /** Legacy escape hatch for one-off widths; prefer `size`. */
   widthClassName?: string;
   bodyClassName?: string;
+  footer?: ReactNode;
 }
 
-// 可聚焦元素选择器（用于焦点陷阱与初始聚焦）
-const FOCUSABLE_SELECTOR =
-  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+const sizeMap: Record<ModalSize, string> = {
+  sm: "max-w-md",
+  md: "max-w-2xl",
+  lg: "max-w-4xl",
+  xl: "max-w-5xl",
+  full: "max-w-[calc(100vw-1.5rem)]",
+};
 
 export function Modal({
   open,
   title,
+  description,
   onClose,
+  size = "xl",
   widthClassName,
   bodyClassName,
+  footer,
   children,
 }: PropsWithChildren<ModalProps>) {
-  // 对话框容器引用：用于焦点陷阱与初始聚焦
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-    const originOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.body.style.overflow = originOverflow;
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open, onClose]);
-
-  // 焦点管理：打开时记录触发元素并将焦点移入对话框，关闭时恢复焦点
-  useEffect(() => {
-    if (!open) return;
-    // 记录打开前的焦点元素（触发者），关闭后用于恢复
-    const trigger = document.activeElement as HTMLElement | null;
-
-    const dialog = dialogRef.current;
-    const focusFirst = () => {
-      if (!dialog) return;
-      const focusable = dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
-      if (focusable.length > 0) {
-        focusable[0].focus();
-      } else {
-        // 无可聚焦元素时聚焦容器本身（容器带 tabIndex=-1）
-        dialog.focus();
-      }
-    };
-    // 等待内容渲染后再聚焦
-    focusFirst();
-
-    // Tab / Shift+Tab 焦点陷阱
-    const onTrapKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Tab" || !dialog) return;
-      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
-      if (focusable.length === 0) {
-        // 没有可聚焦元素，焦点固定在容器上
-        event.preventDefault();
-        dialog.focus();
-        return;
-      }
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      const active = document.activeElement;
-      if (event.shiftKey) {
-        if (active === first || !dialog.contains(active)) {
-          event.preventDefault();
-          last.focus();
-        }
-      } else {
-        if (active === last || !dialog.contains(active)) {
-          event.preventDefault();
-          first.focus();
-        }
-      }
-    };
-    window.addEventListener("keydown", onTrapKeyDown);
-
-    return () => {
-      window.removeEventListener("keydown", onTrapKeyDown);
-      // 关闭（open: true -> false 或卸载）时恢复焦点到触发元素
-      if (trigger && typeof trigger.focus === "function") {
-        trigger.focus();
-      }
-    };
-  }, [open]);
+  const titleId = useId();
+  const descriptionId = useId();
+  const panelRef = useDialogA11y(open, onClose);
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-[100] overflow-y-auto bg-black/45 p-3 backdrop-blur-[1px] sm:p-6"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
+      className="fixed inset-0 z-[100] overflow-y-auto bg-ink/45 p-3 backdrop-blur-[2px] sm:p-6 animate-fade-in"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
     >
       <div
-        ref={dialogRef}
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
-        className={cn("glass mx-auto w-full max-w-5xl overflow-hidden p-0 shadow-2xl outline-none", widthClassName)}
-        onClick={(event) => event.stopPropagation()}
+        className={cn(
+          "mx-auto my-auto flex max-h-[calc(100dvh-1.5rem)] w-full flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-pop outline-none animate-scale-in sm:max-h-[calc(100dvh-3rem)]",
+          sizeMap[size],
+          widthClassName
+        )}
       >
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-white/95 px-4 py-3">
-          <h3 className="text-lg font-bold text-ink">{title}</h3>
-          <Button variant="ghost" onClick={onClose}>
-            关闭
-          </Button>
-        </div>
-        <div className={cn("max-h-[80vh] overflow-y-auto px-4 py-4", bodyClassName)}>{children}</div>
+        <header className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
+          <div className="min-w-0">
+            <h2 id={titleId} className="text-title font-semibold text-ink">
+              {title}
+            </h2>
+            {description ? (
+              <p id={descriptionId} className="mt-0.5 text-meta text-ink-subtle">
+                {description}
+              </p>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="关闭对话框"
+            className="-mr-1.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-ink-subtle transition-colors hover:bg-surface-inset hover:text-ink"
+          >
+            <X size={18} aria-hidden="true" />
+          </button>
+        </header>
+
+        <div className={cn("min-h-0 flex-1 overflow-y-auto px-5 py-4", bodyClassName)}>{children}</div>
+
+        {footer ? (
+          <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-line bg-surface-muted/60 px-5 py-3">
+            {footer}
+          </footer>
+        ) : null}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

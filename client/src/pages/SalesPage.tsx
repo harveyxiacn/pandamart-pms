@@ -1,21 +1,31 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Ban, MoreHorizontal, Plus, Receipt, ShoppingCart, Trash2 } from "lucide-react";
 import { getAllProducts } from "../api/products";
 import { createSale, getSales, voidSale, type SaleSummary } from "../api/sales";
 import type { Product } from "../types";
+import { PageHeader } from "../components/ui/PageHeader";
 import { Card } from "../components/ui/Card";
-import { Table } from "../components/ui/Table";
+import { Table, Td, Th } from "../components/ui/Table";
 import { Input } from "../components/ui/Input";
+import { Field } from "../components/ui/Field";
 import { Select } from "../components/ui/Select";
 import { Button } from "../components/ui/Button";
 import { Badge } from "../components/ui/Badge";
+import { Drawer } from "../components/ui/Drawer";
+import { StatCard } from "../components/ui/StatCard";
+import { Toolbar, ToolbarGroup } from "../components/ui/Toolbar";
+import { SegmentedControl } from "../components/ui/SegmentedControl";
+import { DateRangePicker } from "../components/ui/DatePicker";
 import { SkeletonTable } from "../components/ui/Skeleton";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Pagination } from "../components/ui/Pagination";
+import { DropdownMenu, DropdownMenuItem } from "../components/ui/DropdownMenu";
 import { useToast } from "../components/ui/Toast";
 import { useConfirm } from "../components/ui/ConfirmDialog";
 import { useAuth } from "../hooks/useAuth";
 import { formatCurrency, formatDateTime } from "../utils/formatters";
+import type { DateRange } from "../utils/date";
+import { cn } from "../utils/classnames";
 
 const PAGE_SIZE = 20;
 
@@ -35,8 +45,8 @@ export default function SalesPage() {
   const [draft, setDraft] = useState<DraftLine[]>([]);
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [composerOpen, setComposerOpen] = useState(false);
 
-  // 新增行的临时输入
   const [selProduct, setSelProduct] = useState("");
   const [qty, setQty] = useState("1");
   const [price, setPrice] = useState("");
@@ -46,11 +56,11 @@ export default function SalesPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<"" | "completed" | "voided">("");
+  const [dateRange, setDateRange] = useState<DateRange>({ start: null, end: null });
 
   const loadProducts = async () => {
     try {
-      // 跨页拉取全部商品：服务端 pageSize 上限为 100，直接请求 1000 只会拿到前 100 个，
-      // 导致第 100 个之后的商品无法售卖。
       setProducts(await getAllProducts());
     } catch {
       // 商品加载失败不阻塞页面，提交时再校验
@@ -61,8 +71,13 @@ export default function SalesPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await getSales({ page: targetPage, pageSize: PAGE_SIZE });
-      // 当前页已无数据但不是第一页（如在末页作废了最后一条）→ 回退到上一页
+      const res = await getSales({
+        page: targetPage,
+        pageSize: PAGE_SIZE,
+        status: status || undefined,
+        dateFrom: dateRange.start || undefined,
+        dateTo: dateRange.end || undefined,
+      });
       if (res.items.length === 0 && targetPage > 1) {
         await loadOrders(targetPage - 1);
         return;
@@ -79,19 +94,26 @@ export default function SalesPage() {
 
   useEffect(() => {
     void loadProducts();
-    void loadOrders(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    void loadOrders(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, dateRange.start, dateRange.end]);
 
   const grandTotal = useMemo(
     () => draft.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0),
     [draft]
   );
+  const completedTotal = useMemo(
+    () => orders.filter((o) => o.status === "completed").reduce((sum, o) => sum + o.total, 0),
+    [orders]
+  );
 
   function onSelectProduct(id: string) {
     setSelProduct(id);
     const p = products.find((x) => String(x.id) === id);
-    // 优先用零售售价；未设置时退回进价作为参考
     const suggested = p?.selling_price ?? p?.default_price ?? null;
     if (suggested != null) setPrice(String(suggested));
   }
@@ -146,6 +168,7 @@ export default function SalesPage() {
       toast.success(`销售出库成功，合计 ${formatCurrency(grandTotal)}`);
       setDraft([]);
       setNote("");
+      setComposerOpen(false);
       void loadOrders(1);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "销售出库失败");
@@ -171,146 +194,157 @@ export default function SalesPage() {
     }
   }
 
+  const hasFilters = Boolean(status || dateRange.start || dateRange.end);
+
   return (
-    <div className="space-y-4">
-      {/* 新建销售单 */}
-      <Card>
-        <h2 className="mb-3 text-lg font-bold">新建销售单（收银出库）</h2>
-        <div className="grid gap-2 md:grid-cols-[1fr_auto_auto_auto]">
-          <Select value={selProduct} onChange={(e) => onSelectProduct(e.target.value)} aria-label="选择商品">
-            <option value="">选择商品…</option>
-            {products.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name_en}
-                {p.name_zh ? ` (${p.name_zh})` : ""}
-                {p.sku ? ` · ${p.sku}` : ""}
-              </option>
-            ))}
-          </Select>
-          <Input
-            type="number"
-            min="0"
-            step="0.01"
-            value={qty}
-            onChange={(e) => setQty(e.target.value)}
-            placeholder="数量"
-            className="w-24"
-            aria-label="数量"
-          />
-          <Input
-            type="number"
-            min="0"
-            step="0.01"
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-            placeholder="单价"
-            className="w-28"
-            aria-label="单价"
-          />
-          <Button onClick={addLine}>
-            <Plus size={16} /> 添加
+    <div className="space-y-5">
+      <PageHeader
+        title="销售出库"
+        description="现场收银出库，自动按 FIFO 扣减批次并回写库存。"
+        actions={
+          <Button leadingIcon={Plus} onClick={() => setComposerOpen(true)}>
+            新建销售单
           </Button>
-        </div>
+        }
+      />
 
-        {draft.length > 0 ? (
-          <div className="mt-3 space-y-3">
-            <Table>
-              <thead>
-                <tr className="bg-slate-50 text-left text-xs text-slate-600">
-                  <th className="px-3 py-2">商品</th>
-                  <th className="px-3 py-2">数量</th>
-                  <th className="px-3 py-2">单价</th>
-                  <th className="px-3 py-2">小计</th>
-                  <th className="px-3 py-2"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {draft.map((line) => (
-                  <tr key={line.productId} className="border-t border-slate-100 text-sm">
-                    <td className="px-3 py-2">{line.name}</td>
-                    <td className="px-3 py-2">{line.quantity}</td>
-                    <td className="px-3 py-2">{formatCurrency(line.unitPrice)}</td>
-                    <td className="px-3 py-2">{formatCurrency(line.quantity * line.unitPrice)}</td>
-                    <td className="px-3 py-2 text-right">
-                      <Button variant="ghost" onClick={() => removeLine(line.productId)} aria-label="移除">
-                        <Trash2 size={16} />
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </Table>
+      <section className="grid gap-3 sm:grid-cols-3">
+        <StatCard
+          label="本页销售额"
+          value={formatCurrency(completedTotal)}
+          icon={Receipt}
+          tone="accent"
+          hint={`${orders.filter((o) => o.status === "completed").length} 笔已完成`}
+        />
+        <StatCard label="本页订单" value={orders.length} icon={ShoppingCart} hint="含已作废订单" />
+        <StatCard
+          label="待处理草稿"
+          value={draft.length}
+          icon={Plus}
+          tone={draft.length > 0 ? "warning" : "neutral"}
+          hint={draft.length > 0 ? `合计 ${formatCurrency(grandTotal)}` : "暂无草稿"}
+        />
+      </section>
 
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <Input
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder="备注（可选）"
-                className="max-w-xs"
-              />
-              <div className="flex items-center gap-4">
-                <span className="text-sm text-slate-600">
-                  合计：<span className="text-lg font-bold text-pine">{formatCurrency(grandTotal)}</span>
-                </span>
-                <Button onClick={() => void submitSale()} disabled={submitting}>
-                  {submitting ? "提交中…" : "提交销售"}
-                </Button>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <p className="mt-3 text-sm text-slate-500">选择商品并点「添加」开始一笔销售。</p>
-        )}
+      <Card>
+        <Toolbar>
+          <ToolbarGroup grow>
+            <DateRangePicker
+              value={dateRange}
+              onChange={setDateRange}
+              label="按销售日期筛选"
+              className="w-auto min-w-[13rem]"
+            />
+            {hasFilters ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setStatus("");
+                  setDateRange({ start: null, end: null });
+                }}
+              >
+                清除筛选
+              </Button>
+            ) : null}
+          </ToolbarGroup>
+          <ToolbarGroup>
+            <SegmentedControl
+              label="订单状态"
+              value={status}
+              onChange={setStatus}
+              options={[
+                { value: "", label: "全部" },
+                { value: "completed", label: "已完成" },
+                { value: "voided", label: "已作废" },
+              ]}
+            />
+          </ToolbarGroup>
+        </Toolbar>
       </Card>
 
-      {/* 销售记录 */}
-      <Card>
-        <h2 className="mb-3 text-lg font-bold">销售记录</h2>
+      <Card padded={false} className="p-4 sm:p-5">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-title font-semibold tracking-tight text-ink">销售记录</h2>
+          <span className="text-meta text-ink-subtle">
+            共 <span className="font-medium tabular text-ink-muted">{total}</span> 笔
+          </span>
+        </div>
         {loading ? (
-          <SkeletonTable rows={5} columns={5} />
+          <SkeletonTable rows={5} columns={6} />
         ) : error ? (
-          <div className="space-y-2 text-sm">
-            <p className="text-danger">{error}</p>
-            <Button variant="ghost" onClick={() => void loadOrders(page)}>
-              重试
-            </Button>
-          </div>
+          <EmptyState
+            icon={Receipt}
+            title="加载失败"
+            description={error}
+            action={
+              <Button variant="ghost" onClick={() => void loadOrders(page)}>
+                重试
+              </Button>
+            }
+          />
         ) : orders.length === 0 ? (
-          <EmptyState title="暂无销售记录" description="完成一笔销售后会显示在这里。点击「新增销售」开始第一笔出库。" />
+          <EmptyState
+            icon={Receipt}
+            title={hasFilters ? "没有符合条件的销售单" : "暂无销售记录"}
+            description={hasFilters ? "试试放宽日期范围。" : "完成第一笔销售后，记录会显示在这里。"}
+            action={
+              !hasFilters ? (
+                <Button leadingIcon={Plus} onClick={() => setComposerOpen(true)}>
+                  新建销售单
+                </Button>
+              ) : null
+            }
+          />
         ) : (
           <>
             <Table>
               <thead>
-                <tr className="bg-slate-50 text-left text-xs text-slate-600">
-                  <th className="px-3 py-2">单号</th>
-                  <th className="px-3 py-2">金额</th>
-                  <th className="px-3 py-2">状态</th>
-                  <th className="px-3 py-2">操作员</th>
-                  <th className="px-3 py-2">时间</th>
-                  <th className="px-3 py-2"></th>
+                <tr>
+                  <Th>单号</Th>
+                  <Th>状态</Th>
+                  <Th numeric>金额</Th>
+                  <Th>操作员</Th>
+                  <Th>时间</Th>
+                  {isAdmin ? <Th className="cell-actions">操作</Th> : null}
                 </tr>
               </thead>
               <tbody>
                 {orders.map((o) => (
-                  <tr key={o.id} className="border-t border-slate-100 text-sm">
-                    <td className="px-3 py-2 font-medium">{o.orderNo}</td>
-                    <td className="px-3 py-2">{formatCurrency(o.total)}</td>
-                    <td className="px-3 py-2">
+                  <tr key={o.id}>
+                    <Td className="font-mono text-meta text-ink">{o.orderNo}</Td>
+                    <Td>
                       {o.status === "voided" ? (
                         <Badge tone="danger">已作废</Badge>
                       ) : (
                         <Badge tone="success">已完成</Badge>
                       )}
-                    </td>
-                    <td className="px-3 py-2">{o.soldBy || "-"}</td>
-                    <td className="px-3 py-2">{formatDateTime(o.createdAt)}</td>
-                    <td className="px-3 py-2 text-right">
-                      {isAdmin && o.status === "completed" ? (
-                        <Button variant="ghost" onClick={() => void handleVoid(o)}>
-                          作废
-                        </Button>
-                      ) : null}
-                    </td>
+                    </Td>
+                    <Td numeric className={cn("font-semibold", o.status === "voided" ? "text-ink-subtle line-through" : "text-ink")}>
+                      {formatCurrency(o.total)}
+                    </Td>
+                    <Td>{o.soldBy || <span className="text-ink-subtle">—</span>}</Td>
+                    <Td className="whitespace-nowrap tabular text-meta">{formatDateTime(o.createdAt)}</Td>
+                    {isAdmin ? (
+                      <Td className="cell-actions">
+                        {o.status === "completed" ? (
+                          <DropdownMenu
+                            label={`${o.orderNo} 操作`}
+                            trigger={(props) => (
+                              <Button {...props} variant="ghost" size="sm" iconOnly aria-label="更多操作">
+                                <MoreHorizontal size={16} aria-hidden="true" />
+                              </Button>
+                            )}
+                          >
+                            <DropdownMenuItem icon={Ban} tone="danger" onSelect={() => void handleVoid(o)}>
+                              作废并回补库存
+                            </DropdownMenuItem>
+                          </DropdownMenu>
+                        ) : (
+                          <span className="text-meta text-ink-subtle">—</span>
+                        )}
+                      </Td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>
@@ -321,6 +355,118 @@ export default function SalesPage() {
           </>
         )}
       </Card>
+
+      <Drawer
+        open={composerOpen}
+        onClose={() => setComposerOpen(false)}
+        title="新建销售单"
+        description="选择商品、数量和单价，确认后立即扣减库存。"
+        widthClassName="sm:max-w-[34rem]"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setComposerOpen(false)}>
+              取消
+            </Button>
+            <Button
+              onClick={() => void submitSale()}
+              loading={submitting}
+              disabled={draft.length === 0}
+            >
+              {draft.length > 0 ? `提交销售 · ${formatCurrency(grandTotal)}` : "提交销售"}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-[1fr_4.5rem_5.5rem]">
+            <Field label="商品" htmlFor="sale-product">
+              <Select
+                id="sale-product"
+                value={selProduct}
+                onChange={(e) => onSelectProduct(e.target.value)}
+              >
+                <option value="">选择商品…</option>
+                {products.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name_en}
+                    {p.name_zh ? ` (${p.name_zh})` : ""}
+                    {p.sku ? ` · ${p.sku}` : ""}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="数量" htmlFor="sale-qty">
+              <Input
+                id="sale-qty"
+                type="number"
+                min="0"
+                step="0.01"
+                value={qty}
+                onChange={(e) => setQty(e.target.value)}
+              />
+            </Field>
+            <Field label="单价" htmlFor="sale-price">
+              <Input
+                id="sale-price"
+                type="number"
+                min="0"
+                step="0.01"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+              />
+            </Field>
+          </div>
+
+          <Button variant="secondary" leadingIcon={Plus} onClick={addLine} fullWidth>
+            添加到销售单
+          </Button>
+
+          <div className="rounded-xl border border-line">
+            {draft.length === 0 ? (
+              <p className="px-4 py-8 text-center text-meta text-ink-subtle">
+                还没有商品。选择商品后点「添加到销售单」。
+              </p>
+            ) : (
+              <ul className="divide-y divide-line/70">
+                {draft.map((line) => (
+                  <li key={line.productId} className="flex items-center gap-3 px-4 py-2.5">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-body font-medium text-ink">{line.name}</p>
+                      <p className="text-meta tabular text-ink-subtle">
+                        {line.quantity} × {formatCurrency(line.unitPrice)}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-body font-semibold tabular text-ink">
+                      {formatCurrency(line.quantity * line.unitPrice)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeLine(line.productId)}
+                      aria-label={`移除 ${line.name}`}
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-ink-subtle transition-colors hover:bg-danger-soft hover:text-danger"
+                    >
+                      <Trash2 size={15} aria-hidden="true" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="flex items-center justify-between border-t border-line bg-surface-muted px-4 py-3">
+              <span className="text-meta text-ink-muted">合计</span>
+              <span className="text-title font-semibold tabular text-ink">{formatCurrency(grandTotal)}</span>
+            </div>
+          </div>
+
+          <Field label="备注" htmlFor="sale-note">
+            <Input
+              id="sale-note"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="可选，例如发票号或客户说明"
+            />
+          </Field>
+        </div>
+      </Drawer>
     </div>
   );
 }

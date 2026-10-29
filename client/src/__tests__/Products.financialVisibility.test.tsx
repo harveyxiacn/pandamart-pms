@@ -116,7 +116,8 @@ describe("Products financial visibility", () => {
     );
 
     await screen.findByText("绍菜");
-    await userEvent.click(screen.getByRole("button", { name: "价格趋势" }));
+    await userEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "价格趋势" }));
 
     await waitFor(() => {
       expect(getProductPriceHistoryMock).toHaveBeenCalledWith(11, {

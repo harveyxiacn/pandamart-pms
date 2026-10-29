@@ -13,7 +13,8 @@
 @layer base {
   :root {
     --surface: 255 255 255;
-    --surface-muted: 248 250 252;
+    --surface-raised: 255 255 255;
+    --surface-muted: 247 248 250;
     --surface-inset: 241 245 249;
     --line: 226 232 240;
     --line-strong: 203 213 225;
@@ -23,18 +24,30 @@
     --primary: 15 23 42;
     --primary-hover: 2 6 23;
     --accent: 3 105 161;
+    --accent-hover: 7 89 133;
     --accent-soft: 224 242 254;
     --danger: 185 28 28;
-    --danger-soft: 254 226 226;
+    --danger-soft: 254 242 242;
     --warning: 180 83 9;
-    --warning-soft: 254 243 199;
+    --warning-soft: 255 251 235;
     --success: 4 120 87;
-    --success-soft: 209 250 229;
+    --success-soft: 236 253 245;
     --ring: 3 105 161;
+
+    /* Categorical series. Ordered by how often a series appears; each is
+       contrast-checked on --surface and reads as its own hue. */
+    --chart-1: 3 105 161;
+    --chart-2: 15 118 110;
+    --chart-3: 180 83 9;
+    --chart-4: 109 40 217;
+    --chart-5: 190 24 93;
+    --chart-6: 71 85 105;
+    --grid: 226 232 240;
   }
 
   html {
     -webkit-text-size-adjust: 100%;
+    scrollbar-gutter: stable;
   }
 
   body {
@@ -46,10 +59,15 @@
     font-size: 15px;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
 
   #app {
     min-height: 100dvh;
+  }
+
+  ::selection {
+    background-color: rgb(var(--accent) / 0.18);
   }
 
   /* One focus treatment for the whole app: keyboard users always see where
@@ -57,6 +75,39 @@
   :focus-visible {
     outline: 2px solid rgb(var(--ring));
     outline-offset: 2px;
+  }
+
+  /* Native date/time inputs keep the system picker but match the field look. */
+  input[type="date"],
+  input[type="datetime-local"] {
+    color-scheme: light;
+  }
+
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    opacity: 0.5;
+    cursor: pointer;
+  }
+
+  /* Quiet scrollbars: the data is the content, not the chrome. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--line-strong)) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: rgb(var(--line-strong));
+    border: 3px solid transparent;
+    background-clip: padding-box;
+    border-radius: 999px;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(var(--ink-subtle) / 0.6);
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -84,5 +135,95 @@
   /* Money, counts and deltas must not jitter as digits change. */
   .tabular {
     font-variant-numeric: tabular-nums;
+  }
+
+  /*
+    Data table. Pages keep writing plain <thead>/<tbody> markup; the visual
+    contract (density, hover, header treatment, numeric alignment) lives here
+    so 14 tables cannot drift apart.
+  */
+  .data-table {
+    @apply overflow-x-auto rounded-xl border border-line bg-surface;
+  }
+
+  .data-table table {
+    @apply min-w-full border-separate border-spacing-0 text-body tabular;
+  }
+
+  /* On phones the wrapper scrolls instead of squeezing every column into
+     two-character lines. 44rem keeps SKU, dates and money readable. */
+  @media (max-width: 639px) {
+    .data-table table {
+      min-width: 44rem;
+    }
+  }
+
+  .data-table thead th {
+    @apply sticky top-0 z-[1] whitespace-nowrap border-b border-line bg-surface-muted/95 px-3 py-2.5
+      text-left text-label font-semibold uppercase text-ink-subtle backdrop-blur;
+    letter-spacing: 0.06em;
+  }
+
+  .data-table tbody td {
+    @apply border-b border-line/70 px-3 py-2.5 align-middle text-ink-muted;
+  }
+
+  .data-table tbody tr:last-child td {
+    @apply border-b-0;
+  }
+
+  .data-table tbody tr {
+    @apply transition-colors duration-150;
+  }
+
+  .data-table tbody tr:hover {
+    @apply bg-surface-muted/70;
+  }
+
+  .data-table tbody tr[data-selected="true"] {
+    @apply bg-accent-soft/60;
+  }
+
+  .data-table .cell-strong {
+    @apply font-medium text-ink;
+  }
+
+  .data-table .num {
+    @apply text-right tabular;
+  }
+
+  .data-table .cell-actions {
+    @apply w-px whitespace-nowrap text-right;
+  }
+
+  /* Compact label/value pair used in cards and drawers. */
+  .field-label {
+    @apply block text-meta font-medium text-ink-muted;
+  }
+
+  /* Rendered as generated content so the asterisk stays out of the label's
+     text content — otherwise label queries and accessible names include it. */
+  .field-required::after {
+    content: "*";
+  }
+
+  .page-title {
+    @apply text-display font-semibold tracking-tight text-ink;
+  }
+}
+
+@layer utilities {
+  /* Bottom nav + notes must clear the home indicator on phones. */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
 }

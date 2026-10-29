@@ -1,14 +1,21 @@
 import { useEffect, useState } from "react";
+import { Filter, RotateCcw, ScrollText } from "lucide-react";
 import { getAuditLogs, type AuditLogItem } from "../api/auditLogs";
 import { getUsers } from "../api/users";
+import { PageHeader } from "../components/ui/PageHeader";
 import { Card } from "../components/ui/Card";
 import { SkeletonTable } from "../components/ui/Skeleton";
-import { Table } from "../components/ui/Table";
 import { Input } from "../components/ui/Input";
 import { Select } from "../components/ui/Select";
 import { Button } from "../components/ui/Button";
+import { Table, Td, Th } from "../components/ui/Table";
+import { Badge } from "../components/ui/Badge";
+import { Toolbar, ToolbarGroup } from "../components/ui/Toolbar";
+import { DateRangePicker } from "../components/ui/DatePicker";
 import { Pagination } from "../components/ui/Pagination";
+import { EmptyState } from "../components/ui/EmptyState";
 import { formatDateTime } from "../utils/formatters";
+import type { DateRange } from "../utils/date";
 
 const PAGE_SIZE = 30;
 
@@ -16,6 +23,17 @@ type UserOption = {
   id: number;
   username: string;
   display_name: string;
+};
+
+const actionTone: Record<string, "default" | "info" | "success" | "warning" | "danger"> = {
+  login: "info",
+  logout: "default",
+  create: "success",
+  update: "warning",
+  delete: "danger",
+  confirm: "success",
+  reject: "danger",
+  upload: "info",
 };
 
 export default function AuditLogsPage() {
@@ -26,8 +44,7 @@ export default function AuditLogsPage() {
   const [userId, setUserId] = useState("");
   const [action, setAction] = useState("");
   const [entityType, setEntityType] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const [dateRange, setDateRange] = useState<DateRange>({ start: null, end: null });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,8 +59,8 @@ export default function AuditLogsPage() {
           userId: userId || undefined,
           action: action || undefined,
           entityType: entityType || undefined,
-          dateFrom: dateFrom || undefined,
-          dateTo: dateTo || undefined,
+          dateFrom: dateRange.start || undefined,
+          dateTo: dateRange.end || undefined,
         }),
         getUsers(),
       ]);
@@ -63,108 +80,135 @@ export default function AuditLogsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const reset = () => {
+    setUserId("");
+    setAction("");
+    setEntityType("");
+    setDateRange({ start: null, end: null });
+    void load(1);
+  };
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      <PageHeader
+        title="审计日志"
+        description="记录登录、数据变更与关键业务操作，用于追溯与合规检查。"
+        meta={`共 ${total} 条记录`}
+      />
+
       <Card>
-        <h2 className="mb-3 text-lg font-bold">审计日志</h2>
-        <div className="grid gap-2 md:grid-cols-3">
-          <label className="text-sm">
-            用户
-            <Select value={userId} onChange={(e) => setUserId(e.target.value)}>
-              <option value="">全部</option>
+        <Toolbar stacked>
+          <ToolbarGroup grow>
+            <Select
+              value={userId}
+              onChange={(e) => setUserId(e.target.value)}
+              aria-label="按用户筛选"
+              className="w-auto min-w-[10rem]"
+            >
+              <option value="">全部用户</option>
               {users.map((user) => (
                 <option key={user.id} value={user.id}>
                   {user.display_name} ({user.username})
                 </option>
               ))}
             </Select>
-          </label>
-          <label className="text-sm">
-            操作
-            <Input value={action} onChange={(e) => setAction(e.target.value)} placeholder="如 login / update / delete" />
-          </label>
-          <label className="text-sm">
-            实体
-            <Input value={entityType} onChange={(e) => setEntityType(e.target.value)} placeholder="如 product / invoice" />
-          </label>
-          <label className="text-sm">
-            开始日期
-            <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-          </label>
-          <label className="text-sm">
-            结束日期
-            <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-          </label>
-        </div>
-        <div className="mt-3 flex gap-2">
-          <Button onClick={() => void load(1)}>筛选</Button>
-          <Button
-            variant="ghost"
-            onClick={() => {
-              setUserId("");
-              setAction("");
-              setEntityType("");
-              setDateFrom("");
-              setDateTo("");
-              void load(1);
-            }}
-          >
-            重置
-          </Button>
-        </div>
+            <Input
+              value={action}
+              onChange={(e) => setAction(e.target.value)}
+              placeholder="动作，如 login / update"
+              aria-label="按动作筛选"
+              className="w-auto min-w-[12rem]"
+            />
+            <Input
+              value={entityType}
+              onChange={(e) => setEntityType(e.target.value)}
+              placeholder="实体，如 product / invoice"
+              aria-label="按实体筛选"
+              className="w-auto min-w-[12rem]"
+            />
+            <DateRangePicker
+              value={dateRange}
+              onChange={setDateRange}
+              label="按日期筛选"
+              className="w-auto min-w-[13rem]"
+            />
+          </ToolbarGroup>
+          <ToolbarGroup>
+            <Button leadingIcon={Filter} onClick={() => void load(1)}>
+              筛选
+            </Button>
+            <Button variant="ghost" leadingIcon={RotateCcw} onClick={reset}>
+              重置
+            </Button>
+          </ToolbarGroup>
+        </Toolbar>
       </Card>
 
-      <Card>
-        {loading ? <SkeletonTable rows={6} columns={5} /> : null}
-        {error ? (
-          <div className="flex items-center gap-3">
-            <p className="text-sm text-danger">{error}</p>
-            <Button variant="ghost" onClick={() => void load()}>
-              重试
-            </Button>
-          </div>
+      <Card padded={false} className="p-4 sm:p-5">
+        {loading ? <SkeletonTable rows={8} columns={6} /> : null}
+        {!loading && error ? (
+          <EmptyState
+            icon={ScrollText}
+            title="加载失败"
+            description={error}
+            action={
+              <Button variant="ghost" onClick={() => void load()}>
+                重试
+              </Button>
+            }
+          />
         ) : null}
-        {!loading ? (
+        {!loading && !error && items.length === 0 ? (
+          <EmptyState icon={ScrollText} title="没有匹配的日志" description="调整筛选条件或清除筛选后重试。" />
+        ) : null}
+        {!loading && !error && items.length > 0 ? (
           <>
             <Table>
               <thead>
-                <tr className="bg-slate-50 text-left text-xs text-slate-600">
-                  <th className="px-3 py-2">时间</th>
-                  <th className="px-3 py-2">用户</th>
-                  <th className="px-3 py-2">动作</th>
-                  <th className="px-3 py-2">实体</th>
-                  <th className="px-3 py-2">详情</th>
-                  <th className="px-3 py-2">IP</th>
+                <tr>
+                  <Th>时间</Th>
+                  <Th>用户</Th>
+                  <Th>动作</Th>
+                  <Th>实体</Th>
+                  <Th>详情</Th>
+                  <Th>IP</Th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((item) => (
-                  <tr key={item.id} className="border-t border-slate-100">
-                    <td className="px-3 py-2">{formatDateTime(item.createdAt)}</td>
-                    <td className="px-3 py-2">{item.user ? `${item.user.displayName} (${item.user.username})` : "-"}</td>
-                    <td className="px-3 py-2">{item.action}</td>
-                    <td className="px-3 py-2">
+                  <tr key={item.id}>
+                    <Td className="whitespace-nowrap tabular text-meta">{formatDateTime(item.createdAt)}</Td>
+                    <Td>
+                      {item.user ? (
+                        <span className="text-ink">
+                          {item.user.displayName}
+                          <span className="ml-1 text-meta text-ink-subtle">@{item.user.username}</span>
+                        </span>
+                      ) : (
+                        <span className="text-ink-subtle">系统</span>
+                      )}
+                    </Td>
+                    <Td>
+                      <Badge tone={actionTone[item.action] ?? "default"}>{item.action}</Badge>
+                    </Td>
+                    <Td className="whitespace-nowrap text-meta">
                       {item.entityType}
-                      {item.entityId ? ` #${item.entityId}` : ""}
-                    </td>
-                    <td className="px-3 py-2">
-                      <code className="line-clamp-2 block max-w-xs overflow-hidden rounded bg-slate-100 px-2 py-1 text-xs">
+                      {item.entityId ? <span className="text-ink-subtle"> #{item.entityId}</span> : null}
+                    </Td>
+                    <Td>
+                      <code className="line-clamp-2 block max-w-xs overflow-hidden rounded-md bg-surface-inset px-2 py-1 font-mono text-[11px] text-ink-muted">
                         {typeof item.details === "string" ? item.details : JSON.stringify(item.details)}
                       </code>
-                    </td>
-                    <td className="px-3 py-2">{item.ipAddress || "-"}</td>
+                    </Td>
+                    <Td className="whitespace-nowrap font-mono text-[11px] text-ink-subtle">
+                      {item.ipAddress || "—"}
+                    </Td>
                   </tr>
                 ))}
               </tbody>
             </Table>
-
             <div className="mt-3">
-              <Pagination
-                page={page}
-                pageSize={PAGE_SIZE}
-                total={total}
-                onPageChange={(p) => void load(p)}
-              />
+              <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={(p) => void load(p)} />
             </div>
           </>
         ) : null}

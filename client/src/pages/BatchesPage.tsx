@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CalendarClock } from "lucide-react";
+import { AlertTriangle, CalendarClock, PackagePlus, Boxes } from "lucide-react";
 import { getAllProducts } from "../api/products";
 import {
   createBatch,
@@ -10,19 +10,23 @@ import {
   type ExpiringSummary,
 } from "../api/batches";
 import type { Product } from "../types";
-import { Card } from "../components/ui/Card";
-import { Table } from "../components/ui/Table";
+import { Card, CardHeader } from "../components/ui/Card";
+import { Table, Td, Th } from "../components/ui/Table";
 import { Input } from "../components/ui/Input";
 import { Select } from "../components/ui/Select";
+import { Field } from "../components/ui/Field";
 import { Button } from "../components/ui/Button";
 import { Badge } from "../components/ui/Badge";
+import { StatCard } from "../components/ui/StatCard";
+import { PageHeader } from "../components/ui/PageHeader";
+import { DatePicker } from "../components/ui/DatePicker";
 import { SkeletonTable } from "../components/ui/Skeleton";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Pagination } from "../components/ui/Pagination";
 import { useToast } from "../components/ui/Toast";
 import { useConfirm } from "../components/ui/ConfirmDialog";
 import { usePermission } from "../hooks/usePermission";
-import { formatDate } from "../utils/formatters";
+import { formatISO } from "../utils/date";
 
 function daysUntil(dateStr: string | null): number | null {
   if (!dateStr) return null;
@@ -150,129 +154,173 @@ export default function BatchesPage() {
   }
 
   return (
-    <div className="space-y-4">
-      {/* 临期/过期预警概览 */}
+    <div className="space-y-5">
+      <PageHeader
+        title="批次与保质期"
+        description="按收货批次跟踪库存和到期日，临期商品优先售出，过期批次及时报损。"
+        meta={`当前页 ${batches.length} 个批次 · 共 ${total} 个在库批次`}
+      />
+
       <section className="grid gap-3 sm:grid-cols-3">
-        <Card>
-          <p className="text-xs text-slate-500">已过期批次</p>
-          <p className="text-2xl font-bold text-danger">{expiring?.expiredCount ?? 0}</p>
-        </Card>
-        <Card>
-          <p className="text-xs text-slate-500">7 天内临期</p>
-          <p className="text-2xl font-bold text-amber-600">{expiring?.expiringCount ?? 0}</p>
-        </Card>
-        <Card>
-          <p className="text-xs text-slate-500">在库批次</p>
-          <p className="text-2xl font-bold text-pine">{batches.length}</p>
-        </Card>
+        <StatCard
+          label="已过期批次"
+          value={expiring?.expiredCount ?? 0}
+          icon={AlertTriangle}
+          tone="danger"
+          hint="需要立即报损下架"
+        />
+        <StatCard
+          label="7 天内临期"
+          value={expiring?.expiringCount ?? 0}
+          icon={CalendarClock}
+          tone="warning"
+          hint="建议优先陈列销售"
+        />
+        <StatCard
+          label="在库批次"
+          value={total}
+          icon={Boxes}
+          tone="accent"
+          hint="状态为 active 的批次"
+        />
       </section>
 
       {canEditCatalog ? (
         <Card>
-          <h2 className="mb-3 text-lg font-bold">收货入批次</h2>
-          <div className="grid gap-2 md:grid-cols-[1fr_auto_auto_auto_auto]">
-            <Select value={productId} onChange={(e) => onSelectProduct(e.target.value)} aria-label="选择商品">
-              <option value="">选择商品…</option>
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name_en}
-                  {p.name_zh ? ` (${p.name_zh})` : ""}
-                  {p.sku ? ` · ${p.sku}` : ""}
-                </option>
-              ))}
-            </Select>
-            <Input
-              type="number"
-              min="0"
-              step="0.01"
-              value={qty}
-              onChange={(e) => setQty(e.target.value)}
-              placeholder="数量"
-              className="w-24"
-              aria-label="数量"
-            />
-            <Input
-              type="date"
-              value={expiry}
-              onChange={(e) => setExpiry(e.target.value)}
-              className="w-40"
-              aria-label="到期日"
-            />
-            <Input
-              value={batchNo}
-              onChange={(e) => setBatchNo(e.target.value)}
-              placeholder="批次号(可选)"
-              className="w-32"
-              aria-label="批次号"
-            />
-            <Button onClick={() => void addBatch()} disabled={saving}>
-              {saving ? "提交中…" : "入库"}
+          <CardHeader
+            title="收货入批次"
+            description="选择商品后按货架期自动预填到期日，可手动调整。"
+            action={
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-soft text-accent">
+                <PackagePlus size={16} aria-hidden="true" />
+              </span>
+            }
+          />
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.2fr)_auto] lg:items-end">
+            <Field label="商品" htmlFor="batch-product">
+              <Select id="batch-product" value={productId} onChange={(e) => onSelectProduct(e.target.value)}>
+                <option value="">选择商品…</option>
+                {products.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name_en}
+                    {p.name_zh ? ` (${p.name_zh})` : ""}
+                    {p.sku ? ` · ${p.sku}` : ""}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="数量" htmlFor="batch-qty">
+              <Input
+                id="batch-qty"
+                type="number"
+                min="0"
+                step="0.01"
+                value={qty}
+                onChange={(e) => setQty(e.target.value)}
+                placeholder="0"
+                inputMode="decimal"
+              />
+            </Field>
+            <Field label="到期日" htmlFor="batch-expiry" hint="可留空">
+              <DatePicker
+                id="batch-expiry"
+                value={expiry || null}
+                onChange={(value) => setExpiry(value ?? "")}
+                label="批次到期日"
+                clearable
+              />
+            </Field>
+            <Field label="批次号" htmlFor="batch-no" hint="可选">
+              <Input
+                id="batch-no"
+                value={batchNo}
+                onChange={(e) => setBatchNo(e.target.value)}
+                placeholder="如 LOT-20261029"
+              />
+            </Field>
+            <Button onClick={() => void addBatch()} loading={saving} className="h-9 sm:col-span-2 lg:col-span-1">
+              入库
             </Button>
           </div>
         </Card>
       ) : null}
 
-      <Card>
-        <h2 className="mb-3 text-lg font-bold">在库批次（按到期日排序）</h2>
-        {loading ? (
-          <SkeletonTable rows={6} columns={6} />
-        ) : error ? (
-          <div className="space-y-2 text-sm">
-            <p className="text-danger">{error}</p>
-            <Button variant="ghost" onClick={() => void load()}>
-              重试
-            </Button>
-          </div>
-        ) : batches.length === 0 ? (
-          <EmptyState icon={CalendarClock} title="暂无在库批次" description="收货时录入批次与保质期即可在此跟踪临期。确认入库发票时填写批次信息，系统会自动提醒临期商品。" />
-        ) : (
-          <Table>
-            <thead>
-              <tr className="bg-slate-50 text-left text-xs text-slate-600">
-                <th className="px-3 py-2">商品</th>
-                <th className="px-3 py-2">批次号</th>
-                <th className="px-3 py-2">数量</th>
-                <th className="px-3 py-2">到期日</th>
-                <th className="px-3 py-2">状态</th>
-                {canEditCatalog ? <th className="px-3 py-2"></th> : null}
-              </tr>
-            </thead>
-            <tbody>
-              {batches.map((b) => (
-                <tr key={b.id} className="border-t border-slate-100 text-sm">
-                  <td className="px-3 py-2">
-                    {b.nameZh || b.nameEn}
-                    <div className="text-xs text-slate-500">{b.nameEn}</div>
-                  </td>
-                  <td className="px-3 py-2">{b.batchNo || "-"}</td>
-                  <td className="px-3 py-2">{b.quantity}</td>
-                  <td className="px-3 py-2">{b.expiryDate ? formatDate(b.expiryDate) : "-"}</td>
-                  <td className="px-3 py-2">{expiryBadge(b)}</td>
-                  {canEditCatalog ? (
-                    <td className="px-3 py-2 text-right">
-                      <Button variant="ghost" onClick={() => void handleDispose(b)}>
-                        报损
-                      </Button>
-                    </td>
-                  ) : null}
-                </tr>
-              ))}
-            </tbody>
-          </Table>
-        )}
+      <Card padded={false} className="p-4 sm:p-5">
+        <CardHeader
+          title="在库批次"
+          description="按到期日排序，报损会扣减对应批次的库存。"
+          className="mb-3"
+        />
+        {loading ? <SkeletonTable rows={6} columns={6} /> : null}
+        {!loading && error ? (
+          <EmptyState
+            icon={Boxes}
+            title="加载失败"
+            description={error}
+            action={
+              <Button variant="ghost" onClick={() => void load()}>
+                重试
+              </Button>
+            }
+          />
+        ) : null}
+        {!loading && !error && batches.length === 0 ? (
+          <EmptyState
+            icon={CalendarClock}
+            title="暂无在库批次"
+            description="收货时录入批次与保质期即可在此跟踪临期。确认入库发票时填写批次信息，系统会自动提醒临期商品。"
+          />
+        ) : null}
         {!loading && !error && batches.length > 0 ? (
-          <div className="mt-3">
-            <Pagination
-              page={page}
-              pageSize={pageSize}
-              total={total}
-              onPageChange={(next) => void load(next)}
-              onPageSizeChange={(size) => {
-                setPageSize(size);
-                void load(1, size);
-              }}
-            />
-          </div>
+          <>
+            <Table>
+              <thead>
+                <tr>
+                  <Th>商品</Th>
+                  <Th>批次号</Th>
+                  <Th numeric>数量</Th>
+                  <Th>到期日</Th>
+                  <Th>状态</Th>
+                  {canEditCatalog ? <Th className="cell-actions">操作</Th> : null}
+                </tr>
+              </thead>
+              <tbody>
+                {batches.map((b) => (
+                  <tr key={b.id}>
+                    <Td>
+                      <p className="cell-strong">{b.nameZh || b.nameEn}</p>
+                      <p className="text-meta text-ink-subtle">{b.nameEn}</p>
+                    </Td>
+                    <Td className="font-mono text-meta text-ink-muted">{b.batchNo || "—"}</Td>
+                    <Td numeric className="font-semibold">{b.quantity}</Td>
+                    <Td className="whitespace-nowrap tabular text-meta">
+                      {b.expiryDate ? formatISO(b.expiryDate) : "—"}
+                    </Td>
+                    <Td>{expiryBadge(b)}</Td>
+                    {canEditCatalog ? (
+                      <Td className="cell-actions">
+                        <Button variant="danger-ghost" size="sm" onClick={() => void handleDispose(b)}>
+                          报损
+                        </Button>
+                      </Td>
+                    ) : null}
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+            <div className="mt-3">
+              <Pagination
+                page={page}
+                pageSize={pageSize}
+                total={total}
+                onPageChange={(next) => void load(next)}
+                onPageSizeChange={(size) => {
+                  setPageSize(size);
+                  void load(1, size);
+                }}
+              />
+            </div>
+          </>
         ) : null}
       </Card>
     </div>

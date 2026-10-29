@@ -1,11 +1,26 @@
 import { useEffect, useMemo, useState } from "react";
+import {
+  ArrowUpDown,
+  CheckCircle2,
+  ClipboardCheck,
+  PackageSearch,
+  RotateCcw,
+  Save,
+} from "lucide-react";
 import { getAllInventory, submitStocktake } from "../api/inventory";
 import type { InventoryItem } from "../types";
-import { Card } from "../components/ui/Card";
+import { Card, CardHeader } from "../components/ui/Card";
+import { PageHeader } from "../components/ui/PageHeader";
+import { StatCard } from "../components/ui/StatCard";
 import { SkeletonTable } from "../components/ui/Skeleton";
-import { Input } from "../components/ui/Input";
+import { Input, Textarea } from "../components/ui/Input";
+import { SearchInput } from "../components/ui/SearchInput";
+import { Field } from "../components/ui/Field";
 import { Button } from "../components/ui/Button";
-import { Table } from "../components/ui/Table";
+import { Table, Td, Th } from "../components/ui/Table";
+import { EmptyState } from "../components/ui/EmptyState";
+import { Toolbar, ToolbarGroup } from "../components/ui/Toolbar";
+import { cn } from "../utils/classnames";
 
 type DraftItem = {
   actualQuantity: number;
@@ -68,47 +83,166 @@ export default function StocktakePage() {
       .filter((row) => row.changed);
   }, [inventory, draft]);
 
+  const netDifference = changedItems.reduce(
+    (sum, item) => sum + (item.actualQuantity - item.systemQuantity),
+    0
+  );
+  const surplusCount = changedItems.filter((item) => item.actualQuantity > item.systemQuantity).length;
+  const shortageCount = changedItems.length - surplusCount;
+
+  const resetDraft = () => {
+    const reset: Record<number, DraftItem> = {};
+    for (const item of inventory) {
+      reset[item.product.id] = { actualQuantity: item.quantity, notes: "" };
+    }
+    setDraft(reset);
+    setGlobalNotes("");
+    setMessage("已重置盘点草稿。");
+    setError(null);
+  };
+
+  const submit = async () => {
+    if (changedItems.length === 0) {
+      setMessage("没有变化，无需提交。");
+      return;
+    }
+    setSaving(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const result = await submitStocktake({
+        notes: globalNotes,
+        items: changedItems.map((item) => ({
+          productId: item.productId,
+          actualQuantity: item.actualQuantity,
+          systemQuantity: item.systemQuantity,
+          notes: item.notes,
+        })),
+      });
+      setMessage(`盘点完成：已调整 ${result.adjustedCount} 个产品。`);
+      await load();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "提交盘点失败");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      <PageHeader
+        title="库存盘点"
+        description="逐项录入实际库存，提交后系统会按差异调整库存并记录盘点日志。"
+        meta={loading ? "正在加载盘点明细…" : `本次载入 ${inventory.length} 个商品`}
+        actions={
+          <Button leadingIcon={Save} onClick={() => void submit()} loading={saving} disabled={loading}>
+            提交盘点
+          </Button>
+        }
+      />
+
+      <section className="grid gap-3 sm:grid-cols-3">
+        <StatCard
+          label="变更条目"
+          value={changedItems.length}
+          icon={ClipboardCheck}
+          tone={changedItems.length > 0 ? "accent" : "neutral"}
+          hint={`盘盈 ${surplusCount} · 盘亏 ${shortageCount}`}
+        />
+        <StatCard
+          label="净差异"
+          value={`${netDifference > 0 ? "+" : ""}${netDifference}`}
+          icon={ArrowUpDown}
+          tone={netDifference === 0 ? "neutral" : netDifference > 0 ? "success" : "danger"}
+          hint="实际库存 − 系统库存"
+        />
+        <StatCard
+          label="未变更商品"
+          value={Math.max(inventory.length - changedItems.length, 0)}
+          icon={PackageSearch}
+          tone="neutral"
+          hint="账面与实物一致"
+        />
+      </section>
+
       <Card>
-        <h2 className="text-lg font-bold">库存盘点</h2>
-        <p className="mt-1 text-sm text-slate-600">输入实际库存，提交后会自动记录盘点差异日志。</p>
-        <div className="mt-3 flex flex-wrap items-end gap-2">
-          <label className="w-full text-sm md:w-80">
-            产品关键词
-            <Input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="产品名 / SKU" />
-          </label>
-          <Button onClick={() => void load()}>查询</Button>
-        </div>
+        <Toolbar stacked>
+          <ToolbarGroup grow>
+            <div className="w-full sm:max-w-xs">
+              <SearchInput
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+                onClear={() => setKeyword("")}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void load();
+                }}
+                placeholder="产品名 / SKU"
+                aria-label="按产品关键词查询"
+              />
+            </div>
+            <Button variant="secondary" onClick={() => void load()}>
+              查询
+            </Button>
+          </ToolbarGroup>
+          <ToolbarGroup>
+            <Button variant="ghost" leadingIcon={RotateCcw} onClick={resetDraft} disabled={saving || loading}>
+              重置草稿
+            </Button>
+          </ToolbarGroup>
+        </Toolbar>
       </Card>
 
-      {message ? <Card className="text-emerald-700">{message}</Card> : null}
+      {message ? (
+        <div
+          role="status"
+          className="flex items-center gap-2 rounded-xl border border-success/20 bg-success-soft px-4 py-2.5 text-sm text-success"
+        >
+          <CheckCircle2 size={15} aria-hidden="true" />
+          {message}
+        </div>
+      ) : null}
       {error ? (
-        <Card className="flex items-center gap-3 text-danger">
-          <span>{error}</span>
-          <Button variant="ghost" onClick={() => void load()}>
+        <div
+          role="alert"
+          className="flex flex-wrap items-center gap-3 rounded-xl border border-danger/20 bg-danger-soft px-4 py-2.5 text-sm text-danger"
+        >
+          <span className="flex-1">{error}</span>
+          <Button variant="ghost" size="sm" onClick={() => void load()}>
             重试
           </Button>
-        </Card>
+        </div>
       ) : null}
 
-      <Card>
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-lg font-bold">盘点明细</h3>
-          <div className="text-sm text-slate-600">变更条目: {changedItems.length}</div>
-        </div>
+      <Card padded={false} className="p-4 sm:p-5">
+        <CardHeader
+          title="盘点明细"
+          description="只提交有变化的条目，备注用于说明破损、报损或补记原因。"
+          className="mb-3"
+          action={
+            <span className="text-meta text-ink-subtle">
+              变更条目 <span className="font-semibold tabular text-ink">{changedItems.length}</span>
+            </span>
+          }
+        />
 
-        {loading ? (
-          <SkeletonTable rows={6} columns={5} />
-        ) : (
+        {loading ? <SkeletonTable rows={6} columns={5} /> : null}
+        {!loading && !error && inventory.length === 0 ? (
+          <EmptyState
+            icon={PackageSearch}
+            title="没有匹配的商品"
+            description="调整关键词后重新查询，或先在商品模块中建立商品档案。"
+          />
+        ) : null}
+
+        {!loading && inventory.length > 0 ? (
           <Table>
             <thead>
-              <tr className="bg-slate-50 text-left text-xs text-slate-600">
-                <th className="px-3 py-2">产品</th>
-                <th className="px-3 py-2">系统库存</th>
-                <th className="px-3 py-2">实际库存</th>
-                <th className="px-3 py-2">差异</th>
-                <th className="px-3 py-2">备注</th>
+              <tr>
+                <Th>产品</Th>
+                <Th numeric>系统库存</Th>
+                <Th>实际库存</Th>
+                <Th numeric>差异</Th>
+                <Th>备注</Th>
               </tr>
             </thead>
             <tbody>
@@ -116,18 +250,21 @@ export default function StocktakePage() {
                 const row = draft[item.product.id] || { actualQuantity: item.quantity, notes: "" };
                 const diff = Number(row.actualQuantity) - item.quantity;
                 return (
-                  <tr key={item.id} className="border-t border-slate-100">
-                    <td className="px-3 py-2">
-                      {item.product.nameZh || item.product.nameEn}
-                      <div className="text-xs text-slate-500">{item.product.sku || "-"}</div>
-                    </td>
-                    <td className="px-3 py-2">
+                  <tr key={item.id}>
+                    <Td>
+                      <p className="cell-strong">{item.product.nameZh || item.product.nameEn}</p>
+                      <p className="font-mono text-meta text-ink-subtle">{item.product.sku || "—"}</p>
+                    </Td>
+                    <Td numeric className="text-ink-muted">
                       {item.quantity} {item.unit}
-                    </td>
-                    <td className="px-3 py-2">
+                    </Td>
+                    <Td className="w-32">
                       <Input
                         type="number"
+                        min="0"
+                        step="0.01"
                         value={row.actualQuantity}
+                        aria-label={`${item.product.nameZh || item.product.nameEn} 实际库存`}
                         onChange={(e) =>
                           setDraft((prev) => ({
                             ...prev,
@@ -137,84 +274,61 @@ export default function StocktakePage() {
                             },
                           }))
                         }
+                        className="h-8 w-28 text-right tabular"
                       />
-                    </td>
-                    <td className={`px-3 py-2 font-semibold ${diff === 0 ? "text-slate-500" : diff > 0 ? "text-emerald-700" : "text-danger"}`}>
-                      {diff > 0 ? "+" : ""}
-                      {diff}
-                    </td>
-                    <td className="px-3 py-2">
+                    </Td>
+                    <Td numeric>
+                      <span
+                        className={cn(
+                          "font-semibold",
+                          diff === 0 ? "text-ink-subtle" : diff > 0 ? "text-success" : "text-danger"
+                        )}
+                      >
+                        {diff > 0 ? "+" : ""}
+                        {diff}
+                      </span>
+                    </Td>
+                    <Td className="min-w-[12rem]">
                       <Input
                         value={row.notes}
+                        aria-label={`${item.product.nameZh || item.product.nameEn} 盘点备注`}
                         onChange={(e) =>
                           setDraft((prev) => ({
                             ...prev,
                             [item.product.id]: { ...row, notes: e.target.value },
                           }))
                         }
-                        placeholder="例如：破损/报损/补记"
+                        placeholder="例如：破损 / 报损 / 补记"
+                        className="h-8"
                       />
-                    </td>
+                    </Td>
                   </tr>
                 );
               })}
             </tbody>
           </Table>
-        )}
+        ) : null}
 
-        <label className="mt-3 block text-sm">
-          全局备注
-          <Input value={globalNotes} onChange={(e) => setGlobalNotes(e.target.value)} />
-        </label>
-
-        <div className="mt-3 flex gap-2">
-          <Button
-            onClick={async () => {
-              if (changedItems.length === 0) {
-                setMessage("没有变化，无需提交。");
-                return;
-              }
-              setSaving(true);
-              setMessage(null);
-              setError(null);
-              try {
-                const payload = {
-                  notes: globalNotes,
-                  items: changedItems.map((item) => ({
-                    productId: item.productId,
-                    actualQuantity: item.actualQuantity,
-                    systemQuantity: item.systemQuantity,
-                    notes: item.notes,
-                  })),
-                };
-                const result = await submitStocktake(payload);
-                setMessage(`盘点完成：已调整 ${result.adjustedCount} 个产品。`);
-                await load();
-              } catch (err: unknown) {
-                setError(err instanceof Error ? err.message : "提交盘点失败");
-              } finally {
-                setSaving(false);
-              }
-            }}
-            disabled={saving || loading}
-          >
-            {saving ? "提交中..." : "提交盘点"}
-          </Button>
-          <Button
-            variant="ghost"
-            onClick={() => {
-              const resetDraft: Record<number, DraftItem> = {};
-              for (const item of inventory) {
-                resetDraft[item.product.id] = { actualQuantity: item.quantity, notes: "" };
-              }
-              setDraft(resetDraft);
-              setGlobalNotes("");
-              setMessage("已重置盘点草稿。");
-            }}
-            disabled={saving || loading}
-          >
-            重置草稿
-          </Button>
+        <div className="mt-4 grid gap-3 border-t border-line pt-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+          <Field label="全局备注" htmlFor="stocktake-notes" hint="本次盘点的整体说明，会写入盘点日志。">
+            <Textarea
+              id="stocktake-notes"
+              value={globalNotes}
+              onChange={(e) => setGlobalNotes(e.target.value)}
+              rows={2}
+              placeholder="例如：10 月月末盘点，冷藏区温度异常已单独记录"
+            />
+          </Field>
+          <div className="flex gap-2 sm:pb-0">
+            <Button
+              onClick={() => void submit()}
+              loading={saving}
+              disabled={loading || changedItems.length === 0}
+              leadingIcon={Save}
+            >
+              {saving ? "提交中…" : `提交盘点${changedItems.length ? ` (${changedItems.length})` : ""}`}
+            </Button>
+          </div>
         </div>
       </Card>
     </div>

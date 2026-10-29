@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import InventoryPage from "../pages/InventoryPage";
 import { useAuthStore } from "../store/authStore";
 
@@ -62,7 +63,11 @@ describe("Inventory permissions", () => {
   });
 
   it("does not show inventory adjustment action for staff users", async () => {
-    render(<InventoryPage />);
+    render(
+      <MemoryRouter>
+        <InventoryPage />
+      </MemoryRouter>
+    );
 
     await screen.findByText("绍菜");
     expect(screen.queryByRole("button", { name: "调整" })).not.toBeInTheDocument();

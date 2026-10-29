@@ -1,13 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
-import { UploadCloud } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ClipboardCheck,
+  FileText,
+  ScanLine,
+  UploadCloud,
+} from "lucide-react";
 import { getCategoryFlat } from "../api/categories";
 import { uploadInvoice, confirmInvoice, rejectInvoice } from "../api/invoices";
 import { getAllSuppliers } from "../api/suppliers";
 import type { Category, Supplier } from "../types";
-import { Card } from "../components/ui/Card";
+import { Card, CardHeader } from "../components/ui/Card";
+import { PageHeader } from "../components/ui/PageHeader";
 import { Button } from "../components/ui/Button";
+import { Badge } from "../components/ui/Badge";
+import { Field } from "../components/ui/Field";
 import { Input } from "../components/ui/Input";
 import { Select } from "../components/ui/Select";
+import { DatePicker } from "../components/ui/DatePicker";
+import { Table, Td, Th } from "../components/ui/Table";
 import { formatCurrency } from "../utils/formatters";
 import { cn } from "../utils/classnames";
 
@@ -37,6 +49,12 @@ type RecognizedItem = {
   matchedProduct?: { id: number; nameEn: string; nameZh: string | null; confidence: number } | null;
 };
 
+const steps = [
+  { title: "上传文件", description: "PDF、图片或 Excel，单文件建议不超过 20MB。" },
+  { title: "校对结果", description: "核对供应商、日期、金额与商品明细。" },
+  { title: "确认入库", description: "写入库存与应付；未匹配的商品会新建档案。" },
+];
+
 export default function InvoiceScanPage() {
   const [file, setFile] = useState<File | null>(null);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -49,6 +67,7 @@ export default function InvoiceScanPage() {
   const [uploadStage, setUploadStage] = useState<UploadStage>("idle");
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadLogs, setUploadLogs] = useState<string[]>([]);
+  const [dragActive, setDragActive] = useState(false);
   const [recognized, setRecognized] = useState<{
     supplierName: string | null;
     supplierCode: string | null;
@@ -138,6 +157,15 @@ export default function InvoiceScanPage() {
   const appendUploadLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString("zh-CN", { hour12: false });
     setUploadLogs((prev) => [...prev, `[${timestamp}] ${message}`].slice(-6));
+  };
+
+  const acceptFile = (next: File | null) => {
+    setFile(next);
+    setUploadStage("idle");
+    setUploadProgress(0);
+    setUploadLogs([]);
+    setError(null);
+    setSuccess(null);
   };
 
   const handleUpload = async () => {
@@ -261,6 +289,8 @@ export default function InvoiceScanPage() {
       setRecognized(null);
       setSupplierId(null);
       setFile(null);
+      setUploadStage("idle");
+      setUploadProgress(0);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "确认入库失败");
     } finally {
@@ -283,104 +313,206 @@ export default function InvoiceScanPage() {
     }
   };
 
+  const newProductCount = recognized?.items.filter((item) => !item.matchedProduct).length ?? 0;
+
   return (
-    <div className="space-y-4">
-      <Card>
-        <h2 className="text-lg font-bold">发票识别与入库</h2>
-        <p className="mt-1 text-sm text-slate-600">支持 PDF / 图片 / Excel，上传后可人工校对再确认入库。</p>
+    <div className="space-y-5">
+      <PageHeader
+        title="发票识别与入库"
+        description="上传采购发票，系统自动识别供应商、金额与商品明细；校对无误后确认入库。"
+        meta={
+          recognized
+            ? `识别到 ${recognized.items.length} 条明细 · ${newProductCount} 个新产品待创建`
+            : "支持 PDF / 图片 / Excel"
+        }
+      />
 
-        <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
-          <label
-            className={cn(
-              "block cursor-pointer rounded-xl border-2 border-dashed p-4 transition",
-              loading
-                ? "border-warning bg-warning-soft/60"
-                : "border-line-strong bg-surface-muted hover:border-accent hover:bg-accent-soft/40"
-            )}
-          >
-            <input
-              className="hidden"
-              type="file"
-              accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls"
-              onChange={(event) => {
-                setFile(event.target.files?.[0] ?? null);
-                setUploadStage("idle");
-                setUploadProgress(0);
-                setUploadLogs([]);
-              }}
-            />
-            <div className="space-y-1">
-              <p className="text-sm font-semibold text-ink">选择发票文件</p>
-              <p className="text-xs text-slate-600">点击此区域选择文件，支持 PDF / PNG / JPG / Excel。</p>
-              {file ? (
-                <p className="text-xs text-emerald-700">
-                  已选择: {file.name} ({formatFileSize(file.size)})
-                </p>
-              ) : (
-                <p className="text-xs text-slate-500">未选择文件</p>
-              )}
-            </div>
-          </label>
-
-          <Button onClick={handleUpload} disabled={!file || loading} className="h-full min-h-[78px] w-full lg:min-h-0">
-            <UploadCloud size={16} className="mr-1" />
-            {loading ? "上传并分析中..." : "上传并分析"}
-          </Button>
+      {success ? (
+        <div
+          role="status"
+          className="flex items-start gap-2 rounded-xl border border-success/20 bg-success-soft px-4 py-2.5 text-sm text-success"
+        >
+          <CheckCircle2 size={15} aria-hidden="true" className="mt-0.5 shrink-0" />
+          <span className="flex-1">{success}</span>
         </div>
+      ) : null}
+      {error ? (
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-xl border border-danger/20 bg-danger-soft px-4 py-2.5 text-sm text-danger"
+        >
+          <AlertTriangle size={15} aria-hidden="true" className="mt-0.5 shrink-0" />
+          <span className="flex-1">{error}</span>
+        </div>
+      ) : null}
 
-        <div className="mt-4 rounded-xl border border-line bg-white p-3">
-          <div className="flex items-center justify-between text-xs text-slate-600">
-            <span>{uploadStageText}</span>
-            <span>{uploadProgress}%</span>
-          </div>
-          <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-surface-inset">
-            <div
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_19rem]">
+        <Card>
+          <CardHeader
+            title="上传发票"
+            description="选择或拖入文件，上传后自动开始 OCR 识别。"
+            action={
+              loading ? (
+                <Badge tone="info">处理中</Badge>
+              ) : uploadStage === "done" ? (
+                <Badge tone="success">已识别</Badge>
+              ) : uploadStage === "error" ? (
+                <Badge tone="danger">失败</Badge>
+              ) : null
+            }
+          />
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-stretch">
+            <label
+              onDragOver={(event) => {
+                event.preventDefault();
+                setDragActive(true);
+              }}
+              onDragLeave={() => setDragActive(false)}
+              onDrop={(event) => {
+                event.preventDefault();
+                setDragActive(false);
+                const dropped = event.dataTransfer.files?.[0];
+                if (dropped) acceptFile(dropped);
+              }}
               className={cn(
-                "h-full rounded-full bg-accent transition-[width] duration-500",
-                loading ? "animate-pulse" : ""
+                "flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed px-4 py-6 text-center transition-colors",
+                dragActive
+                  ? "border-accent bg-accent-soft/50"
+                  : loading
+                    ? "border-warning/60 bg-warning-soft/40"
+                    : "border-line-strong bg-surface-muted hover:border-accent hover:bg-accent-soft/30"
               )}
-              style={{ width: `${uploadProgress}%` }}
-            />
+            >
+              <input
+                className="sr-only"
+                type="file"
+                accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls"
+                onChange={(event) => acceptFile(event.target.files?.[0] ?? null)}
+              />
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-surface text-accent ring-1 ring-line">
+                <UploadCloud size={19} aria-hidden="true" />
+              </span>
+              <span className="text-body font-medium text-ink">
+                {file ? file.name : "点击选择或拖入发票文件"}
+              </span>
+              <span className="text-meta text-ink-subtle">
+                {file ? formatFileSize(file.size) : "PDF / PNG / JPG / Excel · 建议不超过 20MB"}
+              </span>
+            </label>
+
+            <Button
+              onClick={() => void handleUpload()}
+              disabled={!file || loading}
+              loading={loading}
+              leadingIcon={ScanLine}
+              className="sm:h-full sm:min-h-[7.5rem] sm:w-32"
+            >
+              {loading ? "分析中…" : "上传并分析"}
+            </Button>
           </div>
-          <p className="mt-2 text-xs text-slate-600">{uploadStageDesc}</p>
-          {uploadLogs.length > 0 ? (
-            <div className="mt-2 rounded-lg bg-slate-50 p-2">
-              <p className="text-xs font-semibold text-slate-700">变动信息</p>
-              <ul className="mt-1 space-y-1 text-xs text-slate-600">
-                {uploadLogs.map((log, index) => (
-                  <li key={`${log}-${index}`}>{log}</li>
-                ))}
-              </ul>
+
+          {uploadStage !== "idle" ? (
+            <div className="mt-4 rounded-xl border border-line bg-surface p-3.5">
+              <div className="flex items-center justify-between text-meta">
+                <span className="font-medium text-ink-muted">{uploadStageText}</span>
+                <span className="tabular text-ink-subtle">{uploadProgress}%</span>
+              </div>
+              <div
+                role="progressbar"
+                aria-label="发票处理进度"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={uploadProgress}
+                className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-surface-inset"
+              >
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-[width] duration-500",
+                    uploadStage === "error" ? "bg-danger" : uploadStage === "done" ? "bg-success" : "bg-accent",
+                    loading && "animate-pulse"
+                  )}
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+              <p className="mt-2 text-meta text-ink-subtle">{uploadStageDesc}</p>
+              {uploadLogs.length > 0 ? (
+                <div className="mt-3 rounded-lg border border-line bg-surface-muted p-2.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">处理记录</p>
+                  <ul className="mt-1 space-y-0.5 font-mono text-[11px] leading-5 text-ink-muted">
+                    {uploadLogs.map((log, index) => (
+                      <li key={`${log}-${index}`}>{log}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </div>
           ) : null}
-        </div>
-      </Card>
+        </Card>
 
-      {error ? <Card className="text-danger">错误: {error}</Card> : null}
-      {success ? <Card className="text-emerald-700">{success}</Card> : null}
+        <Card>
+          <CardHeader title="处理流程" description="每一步都可以回退修改。" />
+          <ol className="mt-4 space-y-4">
+            {steps.map((step, index) => (
+              <li key={step.title} className="flex gap-3">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-inset text-meta font-semibold text-ink-muted">
+                  {index + 1}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-body font-medium text-ink">{step.title}</p>
+                  <p className="mt-0.5 text-meta leading-5 text-ink-subtle">{step.description}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+          <div className="mt-4 rounded-lg border border-line bg-surface-muted px-3 py-2.5 text-meta leading-5 text-ink-muted">
+            <p className="flex items-center gap-1.5 font-medium text-ink">
+              <FileText size={13} aria-hidden="true" />
+              识别不准确时
+            </p>
+            <p className="mt-1">优先上传清晰、摆正的整张发票；Excel 请确认表头与金额列完整。</p>
+          </div>
+        </Card>
+      </div>
 
       {recognized ? (
-        <Card>
-          <h3 className="text-lg font-bold">识别结果校对</h3>
-          <div className="mt-3 grid gap-3 md:grid-cols-3">
-            <label className="text-sm">
-              发票编号
+        <Card padded={false} className="p-4 sm:p-5">
+          <CardHeader
+            title="识别结果校对"
+            description="核对供应商、日期和明细后再确认入库；未匹配的商品会按新产品创建。"
+            action={
+              <Badge tone="warning">
+                <ClipboardCheck size={12} aria-hidden="true" />
+                待确认
+              </Badge>
+            }
+            className="mb-4"
+          />
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <Field label="发票编号" htmlFor="scan-invoice-number">
               <Input
+                id="scan-invoice-number"
                 value={recognized.invoiceNumber}
                 onChange={(e) => setRecognized({ ...recognized, invoiceNumber: e.target.value })}
               />
-            </label>
-            <label className="text-sm">
-              发票日期
-              <Input
-                type="date"
-                value={recognized.invoiceDate}
-                onChange={(e) => setRecognized({ ...recognized, invoiceDate: e.target.value })}
+            </Field>
+            <Field label="发票日期" htmlFor="scan-invoice-date">
+              <DatePicker
+                id="scan-invoice-date"
+                value={recognized.invoiceDate || null}
+                onChange={(value) => setRecognized({ ...recognized, invoiceDate: value ?? "" })}
+                label="发票日期"
+                clearable
               />
-            </label>
-            <label className="text-sm">
-              供应商
-              <Select value={supplierId ?? ""} onChange={(e) => setSupplierId(Number(e.target.value) || null)}>
+            </Field>
+            <Field label="供应商" htmlFor="scan-supplier" required error={supplierId ? undefined : "请选择供应商后才能确认入库"}>
+              <Select
+                id="scan-supplier"
+                value={supplierId ?? ""}
+                onChange={(e) => setSupplierId(Number(e.target.value) || null)}
+                aria-invalid={!supplierId}
+              >
                 <option value="">请选择供应商</option>
                 {suppliers.map((supplier) => (
                   <option key={supplier.id} value={supplier.id}>
@@ -388,31 +520,17 @@ export default function InvoiceScanPage() {
                   </option>
                 ))}
               </Select>
-            </label>
-            <label className="text-sm md:col-span-2">
-              客户编号
+            </Field>
+            <Field label="客户编号" htmlFor="scan-customer-code">
               <Input
+                id="scan-customer-code"
                 value={recognized.customerCode || ""}
                 onChange={(e) => setRecognized({ ...recognized, customerCode: e.target.value || null })}
               />
-            </label>
-            <label className="text-sm md:col-span-3">
-              供应商地址
-              <Input
-                value={recognized.supplierAddress || ""}
-                onChange={(e) => setRecognized({ ...recognized, supplierAddress: e.target.value || null })}
-              />
-            </label>
-            <label className="text-sm md:col-span-3">
-              供应商联系方式
-              <Input
-                value={recognized.supplierContact || ""}
-                onChange={(e) => setRecognized({ ...recognized, supplierContact: e.target.value || null })}
-              />
-            </label>
-            <label className="text-sm">
-              新产品默认分类
+            </Field>
+            <Field label="新产品默认分类" htmlFor="scan-category" hint="仅应用于未匹配的商品。">
               <Select
+                id="scan-category"
                 value={defaultCategoryId ?? ""}
                 onChange={(e) => setDefaultCategoryId(Number(e.target.value) || null)}
               >
@@ -423,57 +541,92 @@ export default function InvoiceScanPage() {
                   </option>
                 ))}
               </Select>
-            </label>
+            </Field>
+            <Field label="备注" htmlFor="scan-notes">
+              <Input
+                id="scan-notes"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="可选，例如快递单号或收货说明"
+              />
+            </Field>
+            <Field label="供应商地址" htmlFor="scan-supplier-address" className="sm:col-span-2">
+              <Input
+                id="scan-supplier-address"
+                value={recognized.supplierAddress || ""}
+                onChange={(e) => setRecognized({ ...recognized, supplierAddress: e.target.value || null })}
+              />
+            </Field>
+            <Field label="供应商联系方式" htmlFor="scan-supplier-contact">
+              <Input
+                id="scan-supplier-contact"
+                value={recognized.supplierContact || ""}
+                onChange={(e) => setRecognized({ ...recognized, supplierContact: e.target.value || null })}
+              />
+            </Field>
           </div>
 
-          <div className="mt-4 overflow-x-auto">
-            <table className="min-w-full text-sm">
+          <div className="mt-5">
+            <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+              <h3 className="text-body-lg font-semibold text-ink">商品明细</h3>
+              <span className="text-meta text-ink-subtle">
+                共 {recognized.items.length} 条 · 新产品 {newProductCount} 条
+              </span>
+            </div>
+            <Table maxHeight="28rem">
               <thead>
-                <tr className="border-b border-slate-200 text-left text-slate-500">
-                  <th className="py-2">产品</th>
-                  <th>编码</th>
-                  <th>编号</th>
-                  <th>UN</th>
-                  <th>Tax</th>
-                  <th>数量</th>
-                  <th>单位</th>
-                  <th>单价</th>
-                  <th>小计</th>
-                  <th>匹配</th>
+                <tr>
+                  <Th>产品</Th>
+                  <Th>编码</Th>
+                  <Th>编号</Th>
+                  <Th>UN</Th>
+                  <Th>Tax</Th>
+                  <Th numeric>数量</Th>
+                  <Th>单位</Th>
+                  <Th numeric>单价</Th>
+                  <Th numeric>小计</Th>
+                  <Th>匹配</Th>
                 </tr>
               </thead>
               <tbody>
                 {recognized.items.map((item, index) => (
-                  <tr key={index} className="border-b border-slate-100">
-                    <td className="py-2">
-                      {(item.productNameZh || item.productNameEn || "未命名").trim()}
-                    </td>
-                    <td>{item.productCode || "-"}</td>
-                    <td>{item.productNumber || "-"}</td>
-                    <td>{item.un || "-"}</td>
-                    <td>{item.taxCode || (recognized.hasTax ? "H" : "E")}</td>
-                    <td>{item.quantity}</td>
-                    <td>{item.unit}</td>
-                    <td>{formatCurrency(item.unitPrice)}</td>
-                    <td>{formatCurrency(item.lineTotal)}</td>
-                    <td>
-                      {item.matchedProduct
-                        ? `${item.matchedProduct.nameZh || item.matchedProduct.nameEn} (${Math.round(
-                            item.matchedProduct.confidence * 100
-                          )}%)`
-                        : "新产品"}
-                    </td>
+                  <tr key={index}>
+                    <Td>
+                      <p className="cell-strong">{(item.productNameZh || item.productNameEn || "未命名").trim()}</p>
+                      {item.productNameZh && item.productNameEn ? (
+                        <p className="truncate text-meta text-ink-subtle">{item.productNameEn}</p>
+                      ) : null}
+                    </Td>
+                    <Td className="font-mono text-meta">{item.productCode || "—"}</Td>
+                    <Td className="font-mono text-meta">{item.productNumber || "—"}</Td>
+                    <Td className="text-meta">{item.un || "—"}</Td>
+                    <Td className="text-meta">{item.taxCode || (recognized.hasTax ? "H" : "E")}</Td>
+                    <Td numeric>{item.quantity}</Td>
+                    <Td className="text-meta text-ink-muted">{item.unit}</Td>
+                    <Td numeric>{formatCurrency(item.unitPrice)}</Td>
+                    <Td numeric className="font-semibold">{formatCurrency(item.lineTotal)}</Td>
+                    <Td>
+                      {item.matchedProduct ? (
+                        <Badge tone={item.matchedProduct.confidence >= 0.8 ? "success" : "warning"}>
+                          {item.matchedProduct.confidence >= 0.8 ? "已匹配" : "待复核"} ·{" "}
+                          {Math.round(item.matchedProduct.confidence * 100)}%
+                        </Badge>
+                      ) : (
+                        <Badge tone="info">新产品</Badge>
+                      )}
+                    </Td>
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </Table>
           </div>
 
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <label className="text-sm">
-              Sales Total
+          <div className="mt-4 grid gap-3 rounded-xl border border-line bg-surface-muted p-3.5 sm:grid-cols-3">
+            <Field label="Sales Total" htmlFor="scan-sales-total">
               <Input
+                id="scan-sales-total"
                 type="number"
+                step="0.01"
                 value={recognized.salesTotal ?? recognized.subtotal ?? 0}
                 onChange={(e) =>
                   setRecognized({
@@ -482,12 +635,14 @@ export default function InvoiceScanPage() {
                     subtotal: Number(e.target.value),
                   })
                 }
+                className="tabular"
               />
-            </label>
-            <label className="text-sm">
-              Tax Total
+            </Field>
+            <Field label="Tax Total" htmlFor="scan-tax-total">
               <Input
+                id="scan-tax-total"
                 type="number"
+                step="0.01"
                 value={recognized.taxTotal ?? recognized.taxAmount ?? 0}
                 onChange={(e) =>
                   setRecognized({
@@ -497,12 +652,14 @@ export default function InvoiceScanPage() {
                     hasTax: Number(e.target.value) > 0,
                   })
                 }
+                className="tabular"
               />
-            </label>
-            <label className="text-sm">
-              Total
+            </Field>
+            <Field label="Total" htmlFor="scan-grand-total">
               <Input
+                id="scan-grand-total"
                 type="number"
+                step="0.01"
                 value={recognized.total || recognized.grandTotal}
                 onChange={(e) =>
                   setRecognized({
@@ -511,22 +668,30 @@ export default function InvoiceScanPage() {
                     grandTotal: Number(e.target.value),
                   })
                 }
+                className="tabular font-semibold"
               />
-            </label>
+            </Field>
           </div>
 
-          <label className="mt-3 block text-sm">
-            备注
-            <Input value={notes} onChange={(e) => setNotes(e.target.value)} />
-          </label>
-
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button onClick={handleConfirm} disabled={!canSubmit || submitting}>
-              {submitting ? "处理中..." : "确认入库"}
-            </Button>
-            <Button variant="danger" onClick={handleReject} disabled={!invoiceId || submitting}>
-              驳回发票
-            </Button>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
+            <p className="text-meta text-ink-subtle">
+              {canSubmit
+                ? `确认后将为 ${recognized.items.length} 条明细入库${newProductCount ? `，并新建 ${newProductCount} 个商品` : ""}。`
+                : "请选择供应商后确认入库。"}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="danger-ghost" onClick={() => void handleReject()} disabled={!invoiceId || submitting}>
+                驳回发票
+              </Button>
+              <Button
+                onClick={() => void handleConfirm()}
+                disabled={!canSubmit || submitting}
+                loading={submitting}
+                leadingIcon={CheckCircle2}
+              >
+                确认入库
+              </Button>
+            </div>
           </div>
         </Card>
       ) : null}

@@ -1,13 +1,35 @@
-import { Bell, Building2, FileText, LogOut, Package, Search, X } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import {
+  Bell,
+  Building2,
+  ChevronDown,
+  FileText,
+  LogOut,
+  Package,
+  Search,
+  Settings,
+  Users,
+  X,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { getUnreadCount } from "../../api/notifications";
 import { globalSearch } from "../../api/analytics";
 import { useAuth } from "../../hooks/useAuth";
-import { Button } from "../ui/Button";
-import { Badge } from "../ui/Badge";
+import { cn } from "../../utils/classnames";
+import { APP_NAME } from "../../utils/constants";
 import type { GlobalSearchResult } from "../../types";
+import { Popover } from "../ui/Popover";
+import { DropdownMenu, DropdownMenuItem, DropdownMenuSeparator } from "../ui/DropdownMenu";
+
+interface FlatResult {
+  id: string;
+  section: string;
+  icon: LucideIcon;
+  label: string;
+  sub?: string;
+  to: string;
+}
 
 export function Header() {
   const [unreadCount, setUnreadCount] = useState(0);
@@ -19,225 +41,332 @@ export function Header() {
   const [results, setResults] = useState<GlobalSearchResult | null>(null);
   const [searching, setSearching] = useState(false);
   const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const anchorRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
     let mounted = true;
     getUnreadCount()
-      .then((res) => { if (mounted) setUnreadCount(res.count); })
-      .catch(() => { if (mounted) setUnreadCount(0); });
-    return () => { mounted = false; };
+      .then((res) => {
+        if (mounted) setUnreadCount(res.count);
+      })
+      .catch(() => {
+        if (mounted) setUnreadCount(0);
+      });
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  /* ── keyboard shortcut: Ctrl+K or / ─────────────────────── */
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+      if ((e.ctrlKey || e.metaKey) && e.key === "k" && isAdmin) {
         e.preventDefault();
         inputRef.current?.focus();
         setOpen(true);
       }
-      if (e.key === "Escape") {
-        setOpen(false);
-        inputRef.current?.blur();
-      }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  /* ── close dropdown on outside click ────────────────────── */
-  useEffect(() => {
-    function onClick(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, []);
+  }, [isAdmin]);
 
   const doSearch = useCallback((q: string) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (!q.trim()) { setResults(null); setSearching(false); return; }
+    if (!q.trim()) {
+      setResults(null);
+      setSearching(false);
+      return;
+    }
     setSearching(true);
     debounceRef.current = setTimeout(async () => {
       try {
-        const data = await globalSearch(q);
-        setResults(data);
-      } catch { setResults(null); }
-      finally { setSearching(false); }
+        setResults(await globalSearch(q));
+      } catch {
+        setResults(null);
+      } finally {
+        setSearching(false);
+      }
     }, 300);
   }, []);
 
-  const totalHits = results
-    ? results.products.length + results.invoices.length + results.suppliers.length
-    : 0;
+  useEffect(() => () => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+  }, []);
+
+  const flatResults = useMemo<FlatResult[]>(() => {
+    if (!results) return [];
+    const items: FlatResult[] = [];
+    results.products.slice(0, 5).forEach((p) =>
+      items.push({
+        id: `p-${p.id}`,
+        section: "产品",
+        icon: Package,
+        label: p.nameZh || p.nameEn,
+        sub: p.sku || p.barcode || undefined,
+        to: `/products?id=${p.id}`,
+      })
+    );
+    results.invoices.slice(0, 5).forEach((inv) =>
+      items.push({
+        id: `i-${inv.id}`,
+        section: "发票",
+        icon: FileText,
+        label: inv.invoiceNumber,
+        sub: inv.supplierName || undefined,
+        to: `/invoices?id=${inv.id}`,
+      })
+    );
+    results.suppliers.slice(0, 5).forEach((s) =>
+      items.push({
+        id: `s-${s.id}`,
+        section: "供应商",
+        icon: Building2,
+        label: s.name,
+        sub: s.code || s.phone || undefined,
+        to: `/suppliers?id=${s.id}`,
+      })
+    );
+    return items;
+  }, [results]);
+
+  const selectResult = useCallback(
+    (item: FlatResult) => {
+      setOpen(false);
+      setQuery("");
+      setResults(null);
+      navigate(item.to);
+    },
+    [navigate]
+  );
+
+  const onSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!open) return;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveIndex((index) => (flatResults.length === 0 ? -1 : (index + 1) % flatResults.length));
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveIndex((index) =>
+        flatResults.length === 0 ? -1 : (index - 1 + flatResults.length) % flatResults.length
+      );
+    } else if (event.key === "Enter") {
+      if (activeIndex >= 0 && flatResults[activeIndex]) {
+        event.preventDefault();
+        selectResult(flatResults[activeIndex]);
+      }
+    } else if (event.key === "Escape") {
+      setOpen(false);
+      inputRef.current?.blur();
+    }
+  };
+
+  const showPanel = open && Boolean(query.trim());
+  const sections = Array.from(new Set(flatResults.map((item) => item.section)));
+  let runningIndex = -1;
 
   return (
-    <header className="sticky top-0 z-20 mb-4 flex items-center justify-between gap-3 rounded-xl border border-line bg-surface/95 px-4 py-3 backdrop-blur-md">
-      {/* ── left: brand ─────────────────────────────────── */}
-      <div className="flex items-center gap-3">
-        <img
-          src="/logo-300x292.png"
-          alt=""
-          className="h-9 w-9 rounded-lg bg-surface object-contain p-1 ring-1 ring-line"
-        />
-        <div className="hidden sm:block">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-subtle">
-            PandaMart
-          </p>
-          <p className="text-sm font-semibold text-ink">
-            {user?.displayName || user?.username} · {user?.role === "admin" ? "管理员" : "店员"}
-          </p>
-        </div>
-      </div>
-
-      {/* ── center: search bar（后端 /analytics/search 为 adminOnly，店员不展示搜索框）── */}
-      {isAdmin ? (
-      <div className="relative flex-1 max-w-md" ref={dropdownRef}>
-        <div className="relative">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            ref={inputRef}
-            type="text"
-            value={query}
-            onChange={(e) => { setQuery(e.target.value); doSearch(e.target.value); setOpen(true); }}
-            onFocus={() => setOpen(true)}
-            placeholder="搜索产品、发票、供应商…"
-            aria-label="全局搜索"
-            className="w-full rounded-lg border border-line bg-surface-muted py-2 pl-9 pr-16 text-sm text-ink outline-none transition-colors placeholder:text-ink-subtle focus:border-accent focus:bg-surface focus:ring-2 focus:ring-accent/25"
+    <header className="sticky top-0 z-30 border-b border-line bg-surface/85 backdrop-blur-md">
+      <div className="flex h-14 items-center gap-3 px-4 lg:px-7">
+        {/* Mobile identity — the sidebar carries this on desktop. */}
+        <div className="flex items-center gap-2 lg:hidden">
+          <img
+            src="/logo-300x292.png"
+            alt=""
+            className="h-7 w-7 rounded-md bg-surface object-contain ring-1 ring-line"
           />
-          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-            {query && (
-              <button
-                type="button"
-                onClick={() => { setQuery(""); setResults(null); setOpen(false); }}
-                className="rounded p-0.5 text-slate-400 hover:text-slate-600"
-                aria-label="清除搜索"
+          <span className="hidden text-sm font-semibold text-ink sm:inline">{APP_NAME}</span>
+        </div>
+
+        {/* Search */}
+        {isAdmin ? (
+          <div ref={anchorRef} className="relative ml-0 min-w-0 flex-1 lg:ml-0 lg:max-w-md">
+            <Search
+              size={15}
+              aria-hidden="true"
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle"
+            />
+            <input
+              ref={inputRef}
+              type="text"
+              value={query}
+              role="combobox"
+              aria-expanded={showPanel}
+              aria-controls="global-search-results"
+              aria-autocomplete="list"
+              aria-activedescendant={
+                activeIndex >= 0 && flatResults[activeIndex]
+                  ? `search-option-${flatResults[activeIndex].id}`
+                  : undefined
+              }
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setActiveIndex(-1);
+                doSearch(e.target.value);
+                setOpen(true);
+              }}
+              onFocus={() => setOpen(true)}
+              onKeyDown={onSearchKeyDown}
+              placeholder="搜索产品、发票、供应商…"
+              aria-label="全局搜索"
+              className="h-9 w-full rounded-lg border border-line bg-surface-muted pl-9 pr-16 text-sm text-ink outline-none transition-colors placeholder:text-ink-subtle focus:border-accent focus:bg-surface focus:ring-2 focus:ring-accent/20"
+            />
+            <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
+              {query ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuery("");
+                    setResults(null);
+                    setOpen(false);
+                    inputRef.current?.focus();
+                  }}
+                  className="flex h-6 w-6 items-center justify-center rounded text-ink-subtle hover:bg-surface-inset hover:text-ink"
+                  aria-label="清除搜索"
+                >
+                  <X size={14} aria-hidden="true" />
+                </button>
+              ) : (
+                <kbd className="hidden rounded border border-line bg-surface px-1.5 py-0.5 font-mono text-[10px] font-medium text-ink-subtle sm:inline-flex">
+                  Ctrl K
+                </kbd>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1" />
+        )}
+
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => navigate("/notifications")}
+            title="通知"
+            aria-label={unreadCount > 0 ? `通知，${unreadCount} 条未读` : "通知"}
+            className="relative flex h-9 w-9 items-center justify-center rounded-lg border border-line bg-surface text-ink-muted transition-colors hover:bg-surface-inset hover:text-ink"
+          >
+            <Bell size={17} aria-hidden="true" />
+            {unreadCount > 0 ? (
+              <span
+                aria-hidden="true"
+                className="absolute -right-1 -top-1 min-w-[18px] rounded-full bg-danger px-1 text-center text-[10px] font-bold leading-[18px] text-white ring-2 ring-surface"
               >
-                <X size={14} />
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </span>
+            ) : null}
+          </button>
+
+          <div className="mx-1 hidden h-6 w-px bg-line sm:block" aria-hidden="true" />
+
+          <DropdownMenu
+            label="账户菜单"
+            trigger={(props) => (
+              <button
+                {...props}
+                type="button"
+                className="flex h-9 items-center gap-2 rounded-lg px-1.5 pr-2 text-left transition-colors hover:bg-surface-inset"
+              >
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-ink text-meta font-semibold text-white">
+                  {(user?.displayName || user?.username || "?").slice(0, 1).toUpperCase()}
+                </span>
+                <span className="hidden min-w-0 sm:block">
+                  <span className="block max-w-[9rem] truncate text-body font-medium leading-tight text-ink">
+                    {user?.displayName || user?.username}
+                  </span>
+                  <span className="block text-[10px] leading-tight text-ink-subtle">
+                    {user?.role === "admin" ? "管理员" : "店员"}
+                  </span>
+                </span>
+                <ChevronDown size={13} aria-hidden="true" className="hidden text-ink-subtle sm:block" />
               </button>
             )}
-            <kbd className="hidden sm:inline-flex rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-400">
-              Ctrl+K
-            </kbd>
-          </div>
-        </div>
-
-        {/* ── dropdown ──────────────────────────────────── */}
-        {open && (query.trim() || searching) && (
-          <div className="absolute left-0 right-0 top-full mt-1 max-h-80 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
-            {searching && (
-              <p className="px-4 py-3 text-xs text-slate-400">搜索中…</p>
-            )}
-            {!searching && results && totalHits === 0 && (
-              <p className="px-4 py-3 text-xs text-slate-400">未找到匹配结果</p>
-            )}
-            {!searching && results && totalHits > 0 && (
-              <div className="py-1">
-                {results.products.length > 0 && (
-                  <SearchSection title="产品" icon={Package}>
-                    {results.products.slice(0, 5).map((p) => (
-                      <SearchItem
-                        key={`p-${p.id}`}
-                        label={p.nameZh || p.nameEn}
-                        sub={p.sku || p.barcode || undefined}
-                        onClick={() => { setOpen(false); navigate(`/products?id=${p.id}`); }}
-                      />
-                    ))}
-                  </SearchSection>
-                )}
-                {results.invoices.length > 0 && (
-                  <SearchSection title="发票" icon={FileText}>
-                    {results.invoices.slice(0, 5).map((inv) => (
-                      <SearchItem
-                        key={`i-${inv.id}`}
-                        label={inv.invoiceNumber}
-                        sub={inv.supplierName || undefined}
-                        onClick={() => { setOpen(false); navigate(`/invoices?id=${inv.id}`); }}
-                      />
-                    ))}
-                  </SearchSection>
-                )}
-                {results.suppliers.length > 0 && (
-                  <SearchSection title="供应商" icon={Building2}>
-                    {results.suppliers.slice(0, 5).map((s) => (
-                      <SearchItem
-                        key={`s-${s.id}`}
-                        label={s.name}
-                        sub={s.code || s.phone || undefined}
-                        onClick={() => { setOpen(false); navigate(`/suppliers?id=${s.id}`); }}
-                      />
-                    ))}
-                  </SearchSection>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-      ) : (
-        <div className="flex-1" />
-      )}
-
-      {/* ── right: actions ──────────────────────────────── */}
-      <div className="flex items-center gap-2 shrink-0">
-        <button
-          className="relative rounded-lg border border-line bg-surface p-2 text-ink-muted transition-colors hover:bg-surface-inset hover:text-ink"
-          onClick={() => navigate("/notifications")}
-          type="button"
-          title="通知"
-          aria-label={unreadCount > 0 ? `通知，${unreadCount} 条未读` : "通知"}
-        >
-          <Bell size={18} aria-hidden="true" />
-          {unreadCount > 0 && (
-            <span
-              aria-hidden="true"
-              className="absolute -right-1 -top-1 min-w-5 rounded-full bg-danger px-1 text-center text-[10px] font-bold text-white"
+          >
+            <DropdownMenuItem icon={Bell} onSelect={() => navigate("/notifications")}>
+              通知中心
+            </DropdownMenuItem>
+            {isAdmin ? (
+              <>
+                <DropdownMenuItem icon={Settings} onSelect={() => navigate("/settings")}>
+                  系统设置
+                </DropdownMenuItem>
+                <DropdownMenuItem icon={Users} onSelect={() => navigate("/users")}>
+                  用户管理
+                </DropdownMenuItem>
+              </>
+            ) : null}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              icon={LogOut}
+              tone="danger"
+              onSelect={async () => {
+                await logout();
+                navigate("/login");
+              }}
             >
-              {unreadCount > 99 ? "99+" : unreadCount}
-            </span>
-          )}
-        </button>
-        <Badge tone="default" className="hidden sm:inline-flex">{user?.username}</Badge>
-        <Button
-          variant="ghost"
-          onClick={async () => { await logout(); navigate("/login"); }}
-        >
-          <LogOut size={16} className="mr-1" />
-          <span className="hidden sm:inline">退出</span>
-        </Button>
+              退出登录
+            </DropdownMenuItem>
+          </DropdownMenu>
+        </div>
       </div>
+
+      <Popover
+        open={showPanel}
+        onClose={() => setOpen(false)}
+        anchorRef={anchorRef}
+        matchWidth
+        ariaLabel="搜索结果"
+        className="p-1.5"
+        role="listbox"
+      >
+        <div id="global-search-results">
+          {searching && flatResults.length === 0 ? (
+            <p className="px-3 py-4 text-meta text-ink-subtle">搜索中…</p>
+          ) : null}
+          {!searching && results && flatResults.length === 0 ? (
+            <p className="px-3 py-4 text-meta text-ink-subtle">未找到匹配结果</p>
+          ) : null}
+
+          {sections.map((section) => {
+            const items = flatResults.filter((item) => item.section === section);
+            return (
+              <div key={section} className="py-0.5">
+                <p className="px-2 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-ink-subtle">
+                  {section}
+                </p>
+                {items.map((item) => {
+                  runningIndex += 1;
+                  const index = runningIndex;
+                  const Icon = item.icon;
+                  return (
+                    <button
+                      key={item.id}
+                      id={`search-option-${item.id}`}
+                      type="button"
+                      role="option"
+                      aria-selected={index === activeIndex}
+                      onMouseEnter={() => setActiveIndex(index)}
+                      onClick={() => selectResult(item)}
+                      className={cn(
+                        "flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors",
+                        index === activeIndex ? "bg-surface-inset" : "hover:bg-surface-muted"
+                      )}
+                    >
+                      <Icon size={15} aria-hidden="true" className="shrink-0 text-ink-subtle" />
+                      <span className="min-w-0 flex-1 truncate text-body font-medium text-ink">
+                        {item.label}
+                      </span>
+                      {item.sub ? (
+                        <span className="max-w-[45%] truncate text-meta text-ink-subtle">{item.sub}</span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      </Popover>
     </header>
-  );
-}
-
-/* ── sub-components ──────────────────────────────────────── */
-
-function SearchSection({ title, icon: Icon, children }: { title: string; icon: LucideIcon; children: React.ReactNode }) {
-  return (
-    <div>
-      <p className="flex items-center gap-1.5 px-4 py-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-        <Icon size={12} aria-hidden="true" />
-        {title}
-      </p>
-      <div className="space-y-0.5">{children}</div>
-    </div>
-  );
-}
-
-function SearchItem({ label, sub, onClick }: { label: string; sub?: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm transition hover:bg-slate-50"
-    >
-      <span className="truncate font-medium">{label}</span>
-      {sub && <span className="truncate text-xs text-slate-400">{sub}</span>}
-    </button>
   );
 }

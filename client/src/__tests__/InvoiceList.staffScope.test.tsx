@@ -138,9 +138,9 @@ describe("Invoice list staff scope", () => {
     renderPage();
 
     await screen.findByText("INV-42");
-    await user.click(screen.getAllByRole("button", { name: "查看" })[0]);
+    await user.click(screen.getAllByRole("button", { name: /^查看发票/ })[0]);
 
-    await screen.findByText("发票详情");
+    await screen.findByRole("heading", { name: "发票 INV-42" });
     expect(screen.getByRole("button", { name: "确认入库" })).toBeInTheDocument();
   });
 });

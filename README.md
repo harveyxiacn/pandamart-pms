@@ -1,6 +1,6 @@
 # PandaMart PMS — AI-Powered Supermarket Inventory & Procurement System
 
-> 熊猫超市智能库存管理系统 · A full-stack inventory/procurement platform where an LLM agent and an OCR pipeline do the busywork — turning supplier invoices into structured stock data and answering operational questions in natural language.
+> 熊猫超市智能库存管理系统 · A full-stack inventory/procurement platform where a **local-first assistant**, an optional LLM agent and an OCR pipeline do the busywork — turning supplier invoices into structured stock data and answering operational questions over live warehouse data.
 
 <!-- A hero screenshot/GIF of the dashboard and the AI chat panel would go here. -->
 
@@ -8,7 +8,9 @@
 
 **<https://harveyxiacn.github.io/pandamart-pms/>**
 
-A static GitHub Pages build of the client with an **in-browser mock backend** — no server or database required. The mock implements every API the UI calls, so all modules are interactive: invoice upload + OCR review + confirm, inventory, batches, sales, stocktake, products, suppliers, payables, analytics, AI assistant, notifications, settings, users, audit logs, and CSV/JSON exports.
+A static GitHub Pages build of the client with an **in-browser mock backend** — no server or database required. The mock implements every API the UI calls, so all modules are interactive: invoice upload + OCR review + confirm, inventory, batches, sales, stocktake, products, suppliers, payables, analytics, smart assistant, notifications, settings, users, audit logs, and CSV/JSON exports.
+
+The smart assistant runs **for real** in the demo: the same local rule engine is reimplemented against the in-browser demo database, so questions like *“哪些商品需要补货？”* or *“生姜还有多少库存？”* are answered from the demo stock, sales and expiry data — no API key involved.
 
 Data is generated deterministically in the browser and persisted to `localStorage`. Use **重置演示数据** in the top banner to restore the seeded dataset.
 
@@ -21,7 +23,7 @@ Rebuild the demo locally with `cd client && npm run build:demo`; the output in `
 
 ## Why this is interesting (engineering)
 
-The two hard parts of this system are both about **making LLM output trustworthy in a real business workflow**:
+The hard parts of this system are about **making automation trustworthy in a real business workflow** — and making it work even when no LLM is configured:
 
 ### 1. A hybrid invoice OCR pipeline that doesn't trust the model blindly
 `server/src/services/ocr.service.ts` (~780 lines) routes each upload to the right extractor and then **validates the model's output deterministically**:
@@ -36,24 +38,36 @@ The two hard parts of this system are both about **making LLM output trustworthy
 - Bounded loop (`MAX_ROUNDS = 5`) with a **forced final no-tool round** so the agent always returns an answer instead of looping.
 - Tool-call/tool messages are orchestrated **per request and not persisted**, avoiding cross-round `tool_call`/`tool` pairing bugs.
 - The response reports exactly **which tools were used** for transparency.
+- Every request injects a compact **knowledge-base snapshot** into the system prompt, so the agent starts with a reliable floor instead of guessing.
 
 Ask *"what should I reorder this week?"* and the agent calls `get_reorder_suggestions` + `get_low_stock` against live data and explains the answer.
+
+### 3. A local-first assistant that needs no LLM at all
+`server/src/services/knowledge.service.ts` turns the live database into a **cached knowledge snapshot** (inventory, low stock, expiring batches, 1/7/30/90-day sales & purchases, supplier concentration, price movement, payables, reorder suggestions). `server/src/services/assistant-engine.ts` is a pure, unit-tested rule engine on top of it:
+
+- **Intent + entity parsing** for Chinese and English questions, including fuzzy product lookup (`苹果` → `红富士苹果`) and SKU/barcode matching.
+- **Deterministic answers** with real numbers: reorder quantities, expiry countdowns, margin breakdowns, supplier balances, per-product stock status.
+- **Inventory alerts** derived from the same snapshot: stockout risk, expired/expiring batches, pending invoices, price spikes, slow movers and payables.
+- **Automatic invalidation** on invoice confirm / sales / stock adjustments; otherwise a 60-second cache.
+- **Graceful LLM fallback:** if `llm` or `auto` mode fails (no provider, timeout, rate limit), the request is answered by the local engine instead of erroring.
+
+The default mode is `local`, so a fresh install has a working assistant with no API key, no network dependency and no per-question cost.
 
 ## Tech stack
 
 - **Frontend:** React 18 + TypeScript + Vite + TailwindCSS (custom tokens) + Lucide + Recharts
 - **Backend:** Node.js + Express + TypeScript
 - **Database:** MariaDB/MySQL 10.x via Knex.js (migrations + seeds)
-- **AI:** OpenAI-compatible API (multi-provider), Vision for scanned invoices
+- **AI:** local rule engine (default) + optional OpenAI-compatible API (multi-provider), Vision for scanned invoices
 
 ## Features
 
 1. **Smart invoice OCR** — PDF text extraction / AI Vision / direct Excel parsing, with deterministic validation.
 2. **Inventory management** — inbound / outbound / stock-take / low-stock alerts.
 3. **Analytics** — dashboards for purchasing trends, fast/slow movers, price movement.
-4. **AI chat** — natural-language Q&A over inventory and procurement (the agent loop above).
-5. **AI business insights** — anomaly detection, periodic reports, reorder suggestions.
-6. **Supplier management** — CRUD + per-supplier invoice-template memory.
+4. **Local smart assistant** — a live knowledge base plus deterministic Q&A and inventory alerts; no LLM required.
+5. **LLM agent (optional)** — tool-calling Q&A, business insights and narrative reorder advice when a provider is configured.
+6. **Supplier management** — CRUD + per-supplier product-alias learning.
 7. **Roles** — Admin / Staff permission tiers.
 
 ## Project structure
@@ -107,6 +121,8 @@ npm run dev
 npm run test:e2e           # E2E (MySQL)
 ```
 
+> **No AI key required:** the assistant defaults to `local` mode and works straight from the database. To enable LLM mode, add a provider in **系统设置 → AI 提供商** and switch **智能助手模式** to `llm` (or `auto`).
+
 > **Secrets:** no credentials are committed — only `.env.example` templates are tracked; `JWT_SECRET`, `AI_ENCRYPTION_KEY` and the demo account passwords are supplied via `server/.env`. The seed data is **fictional**.
 
 ## Notes
@@ -120,4 +136,4 @@ Private — All Rights Reserved.
 
 ---
 
-*中文说明：基于 AI 的超市库存管理系统，支持发票 OCR 识别、智能库存管理、数据分析与 AI 对话。前端 React 18，后端 Express + TypeScript，数据库 MariaDB。核心亮点是混合 OCR 流水线（PDF 文本/Vision/Excel 分流 + 确定性校验）与 8 工具的 function-calling agent loop。*
+*中文说明：基于 AI 的超市库存管理系统，支持发票 OCR 识别、智能库存管理、数据分析与智能助手。前端 React 18，后端 Express + TypeScript，数据库 MariaDB。智能助手默认使用**本地资料库 + 规则引擎**（无需 LLM、无外部调用、结果可复现），可回答问题并生成库存/保质期/应付预警；配置 AI 提供商后可切换 LLM 增强模式，失败会自动降级到本地。核心亮点还包括混合 OCR 流水线（PDF 文本/Vision/Excel 分流 + 确定性校验）与 8 工具的 function-calling agent loop。*

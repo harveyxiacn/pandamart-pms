@@ -346,6 +346,37 @@ export default function SettingsPage() {
                   <option value="false">关闭</option>
                 </Select>
               </Field>
+              <Field
+                label="智能助手模式"
+                htmlFor="setting-assistant-mode"
+                hint="local 完全离线；llm 需要先在上方配置 AI 提供商；auto 有提供商时用 LLM。"
+              >
+                <Select
+                  id="setting-assistant-mode"
+                  value={settings.assistant_mode || "local"}
+                  onChange={(e) => setSettings({ ...settings, assistant_mode: e.target.value })}
+                >
+                  <option value="local">本地资料库（推荐，无需 LLM）</option>
+                  <option value="llm">LLM 增强</option>
+                  <option value="auto">自动（有 LLM 时优先）</option>
+                </Select>
+              </Field>
+              <Field
+                label="资料库缓存（秒）"
+                htmlFor="setting-assistant-ttl"
+                hint="本地助手快照缓存时间；发票确认/销售出库后会立即失效。"
+              >
+                <Input
+                  id="setting-assistant-ttl"
+                  type="number"
+                  min="15"
+                  max="600"
+                  value={settings.assistant_snapshot_ttl_seconds || "60"}
+                  onChange={(e) =>
+                    setSettings({ ...settings, assistant_snapshot_ttl_seconds: e.target.value })
+                  }
+                />
+              </Field>
             </div>
             <div className="mt-4 flex justify-end border-t border-line pt-4">
               <Button onClick={() => void saveSettings()} loading={savingSettings}>

@@ -1,6 +1,7 @@
 import { llmService } from './llm.service';
 import { analyticsService } from './analytics.service';
 import { batchService } from './batch.service';
+import { knowledgeService } from './knowledge.service';
 import db from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -235,8 +236,21 @@ export const aiChatService = {
       history = [{ role: 'system', content: SYSTEM_PROMPT }];
     }
 
-    // 单次请求内的工作消息（含工具中间消息），不污染持久化历史
-    const working: any[] = [...history, { role: 'user', content: message }];
+    // 单次请求内的工作消息（含工具中间消息），不污染持久化历史。
+    // 每轮把最新资料库快照注入 system prompt：既给模型一个可靠的"底稿"，
+    // 又保留工具调用用于追问更细的数据；快照失败时静默退回纯工具模式。
+    const knowledgeContext = await knowledgeService.getCompactContext();
+    const systemMessage = {
+      role: 'system',
+      content: knowledgeContext
+        ? `${SYSTEM_PROMPT}\n\n当前资料库快照（由系统实时整理，可作为回答底稿；工具返回更细数据时以工具为准）：\n${knowledgeContext}`
+        : SYSTEM_PROMPT,
+    };
+    const working: any[] = [
+      systemMessage,
+      ...history.slice(1),
+      { role: 'user', content: message },
+    ];
     const usedTools: string[] = [];
     let reply = '';
 
@@ -298,7 +312,13 @@ export const aiChatService = {
     return {
       conversationId: convId,
       reply,
-      dataUsed: { tools: [...new Set(usedTools)] },
+      dataUsed: {
+        tools: [...new Set(usedTools)],
+        tables: ['live-db', 'knowledge_snapshot'],
+        dateRange: '近 30 天',
+        recordCount: 0,
+        knowledgeInjected: Boolean(knowledgeContext),
+      },
     };
   },
 };

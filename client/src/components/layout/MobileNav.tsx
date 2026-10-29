@@ -42,7 +42,7 @@ const overflowItems = [
   { to: "/notifications", label: "通知", icon: Bell },
   { to: "/stocktake", label: "库存盘点", icon: ClipboardCheck, adminOnly: true },
   { to: "/payables", label: "应付账款", icon: Wallet, adminOnly: true },
-  { to: "/ai-assistant", label: "AI 助手", icon: Sparkles, adminOnly: true },
+  { to: "/ai-assistant", label: "智能助手", icon: Sparkles, adminOnly: true },
   { to: "/exports", label: "数据导出", icon: Download, adminOnly: true },
   { to: "/audit-logs", label: "审计日志", icon: ScrollText, adminOnly: true },
   { to: "/users", label: "用户管理", icon: Users, adminOnly: true },

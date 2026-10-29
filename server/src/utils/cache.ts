@@ -72,7 +72,10 @@ export function invalidateCache(prefix?: string): void {
 }
 
 export function invalidateAnalyticsCache(): void {
+  // 分析缓存与智能助手资料库快照一起失效：发票确认/销售出库/库存调整后，
+  // 助手必须立即看到最新库存，而不是等 60 秒 TTL 过期。
   invalidateCache('analytics:');
+  invalidateCache('assistant:');
 }
 
 /** 仅供测试/诊断：当前缓存条目数。 */

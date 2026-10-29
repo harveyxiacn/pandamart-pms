@@ -413,3 +413,58 @@
 - 构建：两侧 `npm run build` 通过。
 - 端到端（本地真实 MySQL，migration 024）：`E2E_BATCH_FIFO_TEST=true npm run test:e2e` → 只读链路 / 财务可见性边界 / 安全加固回归 / **批次 FIFO（发票建批→FIFO 扣减→作废回补→回滚清批，全程断言批次合计=库存）** / **别名学习（确认即学习 + 货号回查命中）** 全部通过。
 - 说明：`npm run format:check` 仍因历史文件格式状态失败，本轮未做全仓格式化以避免大规模无关 diff。
+
+## 2026-10-30 — 本地智能助手（无需 LLM）+ 可选 LLM 模式
+
+### 0. 本轮目标
+
+新增一个**不依赖 LLM 的智能助手**：把最新仓库数据整理成资料库，直接回答库存/销售/采购/保质期/应付问题并生成库存预警；同时完整保留原有 LLM function-calling 能力，管理员可随时切换，LLM 失败自动降级到本地。迁移基线由 024 推进到 **025**。
+
+### 1. 服务端：资料库 + 规则引擎
+
+- 新增 `server/src/services/knowledge.service.ts`
+  - 并行聚合库存总览、商品索引（含模糊匹配所需的名称/SKU/条码）、近 1/7/30/90 天销售与采购、畅销/滞销、采购量与供应商集中度、价格波动、临期批次、补货建议、应付账款、待确认发票。
+  - 快照缓存 60 秒（可由 `assistant_snapshot_ttl_seconds` 调整）；`invalidateAnalyticsCache()` 现在同时清 `assistant:` 前缀，发票确认/销售/库存调整后立即刷新。
+  - 每段查询独立 `catch` 回退，单表缺失不会让整个助手不可用。
+- 新增 `server/src/services/assistant-engine.ts`（纯函数，无数据库依赖）
+  - 中英文意图识别：补货、低库存、临期、销售、毛利、采购、价格、供应商、应付、滞销、待确认发票、预警、单品查询、问候/帮助/概览。
+  - 时间窗口解析（今天/本周/本月/近 N 天/last N days）并映射到预计算的 1/7/30/90 天窗口。
+  - 单品实体识别：精确名称/SKU/条码 + 中文 2–6 字 n-gram 模糊匹配（「苹果」可命中「红富士苹果」）。
+  - 确定性答案编排：补货量/成本、批次倒计时、毛利拆解、供应商欠款、单品库存与价格变化。
+  - 预警规则：库存不足、过期/临期、待确认发票、采购涨价、应付未结、滞销。
+  - 本地周报/月报 + 给 LLM 的紧凑快照上下文。
+- 新增 `server/src/services/assistant.service.ts`
+  - 统一模式选择 `local | llm | auto`（缺省读 `assistant_mode`，默认 local）。
+  - LLM 未配置/超时/限流/异常时自动回退本地，响应带 `fallback` 原因。
+- `ai-chat.service.ts`：每轮把最新资料库快照注入 system prompt，工具调用仍保留用于追问细节；返回值补充 `knowledgeInjected`。
+
+### 2. 路由与设置
+
+- `POST /api/v1/ai/chat` 新增可选 `mode`，返回 `engine / intent / confidence / windowDays / suggestions / sources / snapshotAt`。
+- 新增 `GET /api/v1/ai/status`、`GET /api/v1/ai/knowledge?refresh=1`、`GET /api/v1/ai/alerts`、`GET /api/v1/ai/report?period=week|month`。
+- 迁移 025 补齐 `assistant_mode`、`assistant_snapshot_ttl_seconds`；`04_default_settings.ts` 改为逐 key 补齐，避免迁移先插入新 key 后 seed 整体跳过默认值。
+- 系统设置页新增「智能助手模式」「资料库缓存（秒）」。
+
+### 3. 前端
+
+- 重构「智能助手」页（原 AI 助手）：
+  - 顶部「本地智能 / LLM 增强」切换；未配置 LLM 时禁用并给出配置提示。
+  - 对话区展示引擎徽章、识别意图、追问建议；LLM 失败时展示降级原因。
+  - 右侧「资料库」面板：商品/低库存/缺货/临期/待确认发票/应付未结，近 7/30 天销售、近 30 天采购、补货 TOP 3，支持手动刷新。
+  - 「库存预警」面板：按紧急程度排序并链接到对应模块。
+  - 「经营简报」按模式走本地 `/ai/report` 或 LLM `/ai/insights`；「补货清单」本地模式直接展示资料库计算结果，LLM 模式可额外生成解读。
+- `SegmentedControl` 支持 `disabled` 选项（带 title 提示），用于未配置 LLM 的模式切换。
+- 导航「AI 助手」统一改名为「智能助手」。
+
+### 4. 公开演示（E:\Project\pandamart-pms）
+
+- 新增 `client/src/demo/assistant.ts`：在浏览器内基于演示数据集复刻资料库快照、意图识别、答案编排、预警与周报，GitHub Pages 无需后端即可演示本地助手。
+- mock 后端新增 `/ai/status`、`/ai/knowledge`、`/ai/alerts`、`/ai/report`，并替换原固定话术 `/ai/chat`；`mode=llm` 时返回降级提示。
+- 新增演示助手单测（4 条），`npm run build:demo` 通过。
+
+### 5. 验证
+
+- 后端：`tsc --noEmit` 0 错；`vitest` **81 通过**（新增 `assistant-engine.test.ts` 18 条）。
+- 前端：`tsc --noEmit` 0 错；`vitest` 23 通过。
+- 真实 MySQL（migration 025）冒烟：资料库生成 42 商品 / 16 低库存 / 3 过期批次 / 18 临期 / 5 待确认发票 / 应付 $38,702.21；补货、预警、临期、销售、应付回答均返回真实数字。
+- 公开演示：demo 构建成功，本地助手单测 4 条通过。

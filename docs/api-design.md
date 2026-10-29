@@ -1171,7 +1171,9 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
 ---
 
-## 13. AI 智能对话模块 (AI Chat)
+## 13. 智能助手模块 (Assistant)
+
+> 默认 `local` 模式：不调用任何 LLM，直接读取实时资料库回答与预警。管理员可在系统设置切换 `llm`（需要 AI 提供商）或 `auto`（有提供商时优先 LLM）。任何 LLM 失败都会自动降级到本地引擎。
 
 ### 13.1 发送智能对话
 🔒 `POST /api/v1/ai/chat`
@@ -1179,78 +1181,136 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 **请求体：**
 ```json
 {
-  "message": "最近一个月哪些蔬菜涨价最多？",
-  "conversationId": null
+  "message": "哪些商品需要补货？",
+  "conversationId": null,
+  "mode": "local"
 }
 ```
 
-> `conversationId` 可选，传入则继续上次对话上下文。
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| message | 是 | 1–2000 字符 |
+| conversationId | 否 | LLM 模式的多轮上下文；本地模式无状态 |
+| mode | 否 | `local` / `llm` / `auto`；缺省读取 `assistant_mode` 设置（默认 local） |
 
 **成功响应 (200)：**
 ```json
 {
   "success": true,
   "data": {
-    "conversationId": "conv_abc123",
-    "reply": "根据最近一个月的采购数据分析，涨价幅度最大的蔬菜如下：\n\n1. **蓒芯 (蓒芯)** — 从 $80/箱 涨到 $95/箱，涨幅 18.8%\n2. **绍菜 (NAPA)** — 从 $45/箱 涨到 $50/箱，涨幅 11.1%\n3. **莲藕 (LOTUS ROOT)** — 从 $35/箱 涨到 $39/箱，涨幅 11.4%\n\n建议关注蓒芯的价格走势，可考虑寻找替代供应商。",
+    "conversationId": "local_m1x2y3",
+    "reply": "补货建议（按缺口与近 4 周消耗估算，共 16 项）：
+1. 生姜（Ginger Root）：现有 0 / 安全线 15 LB，周均消耗 6.80，建议进 15 LB（约 $59.85），供应商 CBS Wholesale
+...",
+    "engine": "local",
+    "mode": "local",
+    "llmConfigured": false,
+    "intent": "reorder",
+    "confidence": 0.93,
+    "windowDays": 30,
+    "suggestions": ["这些商品分别找哪个供应商？", "当前库存预警有哪些？"],
+    "sources": ["inventory", "inventory_logs"],
+    "snapshotAt": "2026-10-30T00:15:00.000Z",
+    "alertsCount": 19,
     "dataUsed": {
-      "tables": ["invoice_items", "products", "invoices"],
-      "dateRange": "2026-02-04 ~ 2026-03-04",
-      "recordCount": 342
+      "tools": [],
+      "tables": ["inventory", "inventory_logs"],
+      "dateRange": "近 30 天",
+      "recordCount": 58
     }
   }
 }
 ```
 
-### 13.2 获取 AI 订货建议（LLM 增强版）
+LLM 失败时响应仍为 200，`engine` 为 `local` 并附带：
+```json
+{ "fallback": { "from": "llm", "reason": "未找到可用的 AI 提供商 (用途: chat)" } }
+```
+
+### 13.2 助手状态
+🔒 `GET /api/v1/ai/status`
+
+返回当前模式、是否已配置 LLM 提供商（不含密钥）与快照缓存秒数：
+```json
+{
+  "success": true,
+  "data": {
+    "mode": "local",
+    "llmConfigured": false,
+    "provider": null,
+    "localReady": true,
+    "snapshotTtlSeconds": 60
+  }
+}
+```
+
+### 13.3 资料库快照
+🔒 `GET /api/v1/ai/knowledge?refresh=1`
+
+把实时库存、批次、销售、采购、供应商、应付与补货建议整理为一个结构化快照，同时返回预警和 LLM 用的紧凑文本。
+
+| 参数 | 说明 |
+|------|------|
+| refresh | `1`/`true` 时立即失效缓存并重建 |
+
+主要字段：`snapshot.inventory`（商品索引、低库存 TOP、库存成本/零售价值）、`snapshot.windows[]`（1/7/30/90 天销售与采购）、`snapshot.sales.topProducts`、`snapshot.expiring`、`snapshot.reorder`、`snapshot.payables`、`alerts[]`、`knowledgeText`、`summary`。
+
+```json
+{
+  "success": true,
+  "data": {
+    "summary": {
+      "productCount": 42,
+      "lowStockCount": 16,
+      "zeroStockCount": 9,
+      "expiringCount": 18,
+      "expiredCount": 3,
+      "pendingInvoices": 5,
+      "payablesOutstanding": 38702.21,
+      "sales7": { "revenue": 12187.42, "margin": 27.2, "orderCount": 44 },
+      "sales30": { "revenue": 63265.56, "margin": 26.9, "orderCount": 210 },
+      "purchase30": { "totalAmount": 46528.69, "invoiceCount": 27 }
+    },
+    "alerts": [
+      { "id": "low-stock", "type": "stockout_risk", "severity": "high", "title": "库存不足", "message": "16 个商品低于安全库存，其中 9 个已缺货", "link": "/inventory", "count": 16 }
+    ],
+    "snapshot": { "generatedAt": "2026-10-30T00:15:00.000Z", "source": "live-db" }
+  }
+}
+```
+
+### 13.4 库存 / 经营预警
+🔒 `GET /api/v1/ai/alerts?refresh=1`
+
+返回与资料库同源的预警列表（库存不足、过期/临期批次、待确认发票、采购价上涨、应付未结、滞销商品），按 `high → medium → low` 排序。
+
+### 13.5 本地经营简报
+🔒 `GET /api/v1/ai/report?period=week|month`
+
+不调用 LLM，由规则引擎生成销售、采购、库存、应付摘要与需要优先处理的风险项。返回结构：
+```json
+{
+  "period": "week",
+  "summary": "周度经营简报（2026-10-30 08:15）：...",
+  "alerts": [{ "type": "stockout_risk", "message": "库存不足：16 个商品低于安全库存..." }],
+  "generatedAt": "2026-10-30T00:15:00.000Z"
+}
+```
+
+### 13.6 LLM 订货建议（需 AI 提供商）
 🔒 `POST /api/v1/ai/reorder-advice`
 
 **请求体：**
 ```json
-{
-  "categoryId": 1,
-  "context": "下周是春节"
-}
+{ "categoryId": 1, "context": "下周是春节" }
 ```
 
-> 与 `analytics/reorder-suggestions`（统计计算版）不同，这个接口会调用 LLM 生成带推理分析的自然语言建议。
+> 与 `analytics/reorder-suggestions`（统计计算版）不同，这个接口调用 LLM 生成带推理分析的自然语言建议。
 
-**成功响应 (200)：**
-```json
-{
-  "success": true,
-  "data": {
-    "advice": "✅ **本周蔬菜类订货建议**（考虑春节因素）\n\n春节前一周通常需求量会增加 30-50%，建议提前备货：\n\n**需要加量的产品：**\n- 绍菜 (NAPA): 建议订 8 箱（平时 4 箱），春节汤料需求大\n- 韭菜 (CHIVE): 建议订 4 箱（平时 2 箱），包饺子需求\n- 莲藕 (LOTUS ROOT): 建议订 3 箱（平时 1 箱）\n\n**可适当减少的产品：**\n- 生菜类可保持正常量\n\n**预估采购总额：** ~$1,850",
-    "suggestedItems": [
-      { "productId": 15, "nameZh": "绍菜", "suggestedQty": 8, "normalQty": 4, "reason": "春节汤料需求" }
-    ]
-  }
-}
-```
+### 13.7 LLM 经营洞察报告（需 AI 提供商）
+🔒 `GET /api/v1/ai/insights?period=week|month`
 
-### 13.3 AI 经营洞察报告
-🔒 `GET /api/v1/ai/insights`
-
-**查询参数：**
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| period | string | week / month（默认 week） |
-
-**成功响应 (200)：**
-```json
-{
-  "success": true,
-  "data": {
-    "period": "2026-02-24 ~ 2026-03-04",
-    "summary": "本周采购总额 $18,500，较上周增长 12%。CBS 供应商的蔬菜普遍涨价 5-10%，建议关注。蓒芯持续涨价已达 3 周，可考虑联系备用供应商。",
-    "alerts": [
-      { "type": "price_spike", "message": "蓒芯连续 3 周涨价，累计涨幅 18.8%" },
-      { "type": "stockout_risk", "message": "油菜苗库存仅剩 1 箱，下次送货日为周二" }
-    ],
-    "generatedAt": "2026-03-04T15:30:00.000Z"
-  }
-}
-```
+调用 LLM 汇总采购、价格波动、低库存、供应商占比等数据，返回 `summary` 与 `alerts[]`。本地模式下请使用 13.5 的 `/ai/report`。
 
 ---
 
@@ -1274,12 +1334,12 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
 ## 15. 数据导出模块 (Export)
 
-### 13.1 导出库存数据
+### 15.1 导出库存数据
 🔒 `GET /api/v1/export/inventory`
 
 > 返回 Excel 文件，包含所有产品的当前库存信息。
 
-### 13.2 导出采购记录
+### 15.2 导出采购记录
 🔒 `GET /api/v1/export/purchases`
 
 **查询参数：**
@@ -1290,7 +1350,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 | supplierId | number | 按供应商筛选 |
 | format | string | xlsx（默认）|
 
-### 13.3 导出全量数据备份
+### 15.3 导出全量数据备份
 🔒 `GET /api/v1/export/full-backup`
 
 > 返回 JSON 文件，包含所有业务数据。

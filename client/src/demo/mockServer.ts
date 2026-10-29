@@ -6,6 +6,7 @@ import type {
 } from "axios";
 import { STORAGE_KEYS } from "../utils/constants";
 import { loadDemoDb, localDateKey, saveDemoDb, type DemoDb } from "./seed";
+import { demoAnswer, demoAssistantStatus, demoKnowledge, demoReport } from "./assistant";
 
 /* ------------------------------------------------------------------ */
 /* In-browser demo backend.                                           */
@@ -3140,19 +3141,37 @@ async function handleRequest(
   if (method === "POST" && p === "/ai/chat") {
     const row = asRow(payload);
     const message = String(row.message ?? "");
-    await wait(750);
-    return ok(
-      {
-        conversationId: String(row.conversationId || `demo-conv-${Date.now()}`),
-        reply: buildChatReply(message),
-        dataUsed: {
-          tables: ["invoices", "invoice_items", "inventory", "sales_orders", "batches"],
-          dateRange: "近 30 天",
-          recordCount: db.invoices.length + db.inventory.length + db.salesOrders.length,
+    await wait(350);
+    const result = demoAnswer(db, message);
+    if (row.mode === "llm") {
+      return ok(
+        {
+          ...result,
+          mode: "llm",
+          fallback: { from: "llm", reason: "GitHub Pages 演示环境没有连接任何 LLM" },
         },
-      },
-      config
-    );
+        config
+      );
+    }
+    return ok(result, config);
+  }
+
+  if (method === "GET" && p === "/ai/status") {
+    return ok(demoAssistantStatus(), config);
+  }
+
+  if (method === "GET" && p === "/ai/knowledge") {
+    await wait(220);
+    return ok(demoKnowledge(db), config);
+  }
+
+  if (method === "GET" && p === "/ai/alerts") {
+    return ok(demoKnowledge(db).alerts, config);
+  }
+
+  if (method === "GET" && p === "/ai/report") {
+    await wait(180);
+    return ok(demoReport(db, qStr(q, "period") === "month" ? "month" : "week"), config);
   }
 
   if (method === "GET" && p === "/ai/insights") {
@@ -3349,84 +3368,13 @@ async function handleRequest(
 /* ── AI replies ────────────────────────────────────────────────── */
 
 function formatMoney(value: number): string {
-  return `$${value.toFixed(2)}`;
+  return `$${Number(value).toFixed(2)}`;
 }
 
 function maskKey(key: string): string {
   const trimmed = key.trim();
   if (!trimmed) return "sk-••••••••";
   return `${trimmed.slice(0, 3)}${"•".repeat(8)}${trimmed.slice(-4)}`;
-}
-
-function buildChatReply(message: string): string {
-  const text = message.toLowerCase();
-  const overview = dashboardData();
-
-  if (/库存|补货|缺货|stock/.test(text)) {
-    const rows = reorderRows().slice(0, 5);
-    if (rows.length === 0) {
-      return "目前所有商品都高于安全库存，暂时不需要补货。可以继续关注临期批次，优先售出即将到期的商品。";
-    }
-    return `根据当前库存与安全库存，以下商品需要优先补货：\n${rows
-      .map(
-        (row, index) =>
-          `${index + 1}. ${row.nameZh || row.nameEn}：现有 ${row.currentStock} ${row.unit}，安全库存 ${row.safeStock}，建议进货 ${row.suggestedQty} ${row.unit}${row.urgency === "high" ? "（紧急）" : ""}。`
-      )
-      .join("\n")}\n\n建议先联系默认供应商确认到货周期，再安排下一次收货。`;
-  }
-
-  if (/价格|涨价|降价|price|pricing/.test(text)) {
-    const rows = priceChangeRows({
-      threshold: 5,
-      dateFrom: keyShift(-30),
-      dateTo: todayKey(),
-      limit: 5,
-    });
-    if (rows.length === 0) {
-      return "近 30 天没有检测到超过 5% 的采购价波动，价格整体平稳。";
-    }
-    return `近 30 天价格波动较大的商品：\n${rows
-      .map(
-        (row, index) =>
-          `${index + 1}. ${row.nameZh || row.nameEn}：${row.previousPrice.toFixed(2)} → ${row.currentPrice.toFixed(2)}（${row.changePercent > 0 ? "+" : ""}${row.changePercent}%）`
-      )
-      .join("\n")}\n\n对涨价商品建议核对供应商报价，必要时比较替代货源。`;
-  }
-
-  if (/毛利|利润|profit|margin/.test(text)) {
-    const profit = profitData({ dateFrom: keyShift(-30), dateTo: todayKey() });
-    return `近 30 天销售毛利概览：\n- 销售额：${formatMoney(profit.revenue)}\n- 销售成本：${formatMoney(profit.cost)}\n- 毛利：${formatMoney(profit.grossProfit)}\n- 毛利率：${(profit.margin * 100).toFixed(1)}%\n- 完成订单：${profit.orderCount} 单\n\n毛利贡献最高的商品是 ${profit.topProducts[0]?.nameZh || profit.topProducts[0]?.nameEn || "暂无数据"}。建议保持高毛利商品的库存，同时关注滞销商品的促销。`;
-  }
-
-  if (/销售|营业额|sales|收入/.test(text)) {
-    const trend = salesTrend({ period: "day" }).slice(-7);
-    const total = sumBy(trend, (row) => Number(row.amount));
-    const orders = sumBy(trend, (row) => Number(row.orderCount));
-    return `近 7 天销售：${orders} 单，合计 ${formatMoney(total)}。\n${trend
-      .map((row) => `- ${row.date}：${formatMoney(Number(row.amount))}，${row.orderCount} 单`)
-      .join("\n")}\n\n周末客流通常更高，可以提前准备畅销品库存。`;
-  }
-
-  if (/供应商|supplier/.test(text)) {
-    const rows = supplierDistribution({
-      dateFrom: keyShift(-90),
-      dateTo: todayKey(),
-    }).slice(0, 5);
-    if (rows.length === 0) return "近 90 天没有采购记录。";
-    return `近 90 天采购金额最高的供应商：\n${rows
-      .map(
-        (row, index) =>
-          `${index + 1}. ${row.supplierName}：${formatMoney(row.totalAmount)}（${row.percentage}%，${row.invoiceCount} 张发票）`
-      )
-      .join("\n")}\n\n建议与占比最高的供应商确认账期和价格条款。`;
-  }
-
-  if (/发票|invoice|审核/.test(text)) {
-    const pending = db.invoices.filter((invoice) => invoice.status === "pending").length;
-    return `当前有 ${pending} 张发票待审核；本月已确认 ${overview.thisMonth.invoiceCount} 张，采购金额 ${formatMoney(overview.thisMonth.totalAmount)}。\n待审核发票确认后才会更新库存和应付账款，建议优先处理金额较大的单据。`;
-  }
-
-  return `当前经营概览：\n- 今日采购：${overview.today.invoiceCount} 张发票，${formatMoney(overview.today.totalAmount)}\n- 本周采购：${formatMoney(overview.thisWeek.totalAmount)}\n- 本月采购：${formatMoney(overview.thisMonth.totalAmount)}\n- 待审核发票：${overview.today.pendingInvoices} 张\n- 低库存商品：${overview.today.lowStockAlerts} 个\n- 临期/过期批次：${overview.expiringBatches.length} 个\n\n你可以问我「哪些商品需要补货」「最近哪些商品涨价最多」「这个月毛利如何」。`;
 }
 
 function aiInsightsData(period: string) {

@@ -72,7 +72,7 @@ const navGroups: NavGroup[] = [
     label: "经营分析",
     items: [
       { to: "/analytics", label: "数据分析", icon: BarChart3, adminOnly: true },
-      { to: "/ai-assistant", label: "AI 助手", icon: MessageSquare, adminOnly: true },
+      { to: "/ai-assistant", label: "智能助手", icon: MessageSquare, adminOnly: true },
       { to: "/exports", label: "数据导出", icon: Database, adminOnly: true },
     ],
   },

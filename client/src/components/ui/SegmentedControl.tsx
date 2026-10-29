@@ -6,6 +6,9 @@ export interface SegmentedOption<T extends string> {
   label: string;
   count?: number;
   icon?: LucideIcon;
+  /** Shown but not selectable — use when a mode needs configuration first. */
+  disabled?: boolean;
+  title?: string;
 }
 
 interface SegmentedControlProps<T extends string> {
@@ -47,13 +50,19 @@ export function SegmentedControl<T extends string>({
             key={option.value}
             type="button"
             aria-pressed={active}
-            onClick={() => onChange(option.value)}
+            aria-disabled={option.disabled || undefined}
+            title={option.title}
+            disabled={option.disabled}
+            onClick={() => {
+              if (!option.disabled) onChange(option.value);
+            }}
             className={cn(
               "inline-flex items-center gap-1.5 rounded-md font-medium transition-colors",
               size === "sm" ? "h-7 px-2 text-meta" : "h-8 px-2.5 text-body",
               active
                 ? "bg-surface text-ink shadow-card"
-                : "text-ink-muted hover:text-ink"
+                : "text-ink-muted hover:text-ink",
+              option.disabled && "cursor-not-allowed opacity-45 hover:text-ink-muted"
             )}
           >
             {Icon ? <Icon size={14} aria-hidden="true" /> : null}

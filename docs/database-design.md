@@ -455,6 +455,8 @@
 | `invoice_require_approval` | `false` | 入库是否需要审批 |
 | `slow_moving_days` | `30` | 滞销产品判定天数 |
 | `price_alert_threshold` | `0.1` | 价格异常波动告警阈值(10%) |
+| `assistant_mode` | `local` | 智能助手默认模式：local / llm / auto（迁移 025） |
+| `assistant_snapshot_ttl_seconds` | `60` | 本地资料库快照缓存秒数；写操作会立即失效缓存 |
 | `ai_encryption_key` | 环境变量 | AI API Key 的 AES-256 加密密钥（从环境变量加载，不存库） |
 
 > 注意：AI 提供商配置（Base URL / API Key / 模型等）已移至独立的 `ai_providers` 表管理，不再使用 settings 表存储。
@@ -500,6 +502,18 @@ migrations/
 ├── 011_create_ai_providers_table.ts
 ├── 012_create_settings_table.ts
 ├── 013_create_notifications_table.ts
+├── 014_add_ocr_fields_to_invoice_items.ts
+├── 015_add_analytics_composite_indexes.ts
+├── 016_create_stores_and_store_id.ts
+├── 017_create_sales_tables.ts
+├── 018_add_selling_price_to_products.ts
+├── 019_create_inventory_batches.ts
+├── 020_create_supplier_payments.ts
+├── 021_add_barcode_and_sales_indexes.ts
+├── 022_add_token_version_to_users.ts
+├── 023_create_sales_item_batches.ts
+├── 024_create_supplier_product_aliases.ts
+├── 025_add_assistant_settings.ts   # assistant_mode / 快照 TTL（默认 local）
 ```
 
 ---
@@ -511,7 +525,7 @@ seeds/
 ├── 01_admin_user.ts            # 默认管理员账号（用户名 admin，密码由 SEED_ADMIN_PASSWORD 提供）
 ├── 02_categories.ts            # 预设产品分类
 ├── 03_default_ai_providers.ts   # 默认 AI 提供商配置（仅在提供 SEED_DEFAULT_AI_PROVIDER_API_KEY 时创建）
-├── 04_default_settings.ts      # 默认系统设置
+├── 04_default_settings.ts      # 默认系统设置（逐 key 补齐，不覆盖已改值）
 ```
 
 ---

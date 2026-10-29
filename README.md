@@ -84,15 +84,15 @@ npm run build              # production bundle
 **Backend**
 ```bash
 cd server
-cp .env.example .env       # set DB_*, JWT_SECRET, AI_ENCRYPTION_KEY, SEED_ADMIN_PASSWORD
+cp .env.example .env       # set DB_*, JWT_SECRET, AI_ENCRYPTION_KEY, SEED_ADMIN_PASSWORD, SEED_STAFF_PASSWORD
 npm install
 npm run migrate            # database schema
-npm run seed               # demo data (admin password from SEED_ADMIN_PASSWORD)
+npm run seed               # demo data: suppliers, products, invoices, sales, batches, payables, aliases
 npm run dev
 npm run test:e2e           # E2E (MySQL)
 ```
 
-> **Secrets:** no credentials are committed — only `.env.example` templates are tracked; `JWT_SECRET`, `AI_ENCRYPTION_KEY` and the admin password are supplied via `server/.env`. The seed data is **fictional**.
+> **Secrets:** no credentials are committed — only `.env.example` templates are tracked; `JWT_SECRET`, `AI_ENCRYPTION_KEY` and the demo account passwords are supplied via `server/.env`. The seed data is **fictional**.
 
 ## Notes
 

@@ -180,7 +180,8 @@ export async function seed(knex: Knex): Promise<void> {
 
   // 已确认发票 — 分散在过去 90 天
   for (let i = 0; i < 60; i++) {
-    const dayOffset = rand(1, 90);
+    // 前 8 张落在最近一周（含今天），让「今日 / 本周」统计有数据可看
+    const dayOffset = i < 8 ? rand(0, 6) : rand(7, 90);
     const invDate = daysAgo(dayOffset);
     const supplier = pick(suppliers);
     const itemCount = rand(3, 12);

@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import { authenticate } from '../middleware/auth';
 import { notificationService } from '../services/notification.service';
 import { AuthRequest } from '../types';
-import { sendSuccess, parsePagination } from '../utils/helpers';
+import { sendSuccess, parsePagination, buildPagination } from '../utils/helpers';
 import { sendRouteError } from '../utils/routeError';
 
 const router = Router();
@@ -16,7 +16,12 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
       pageSize,
       isRead: req.query.isRead !== undefined ? req.query.isRead === 'true' : undefined,
     });
-    sendSuccess(res, result);
+    // 与其他列表接口统一分页结构（保留 total 兼容旧调用方）
+    sendSuccess(res, {
+      items: result.items,
+      total: result.total,
+      pagination: buildPagination(page, pageSize, result.total),
+    });
   } catch (err: any) {
     sendRouteError(res, err);
   }

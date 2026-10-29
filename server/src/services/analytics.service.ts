@@ -2,21 +2,21 @@ import db from '../config/database';
 import { SettingModel } from '../models/Setting';
 import { parseBoundedInt } from '../utils/helpers';
 import { batchService } from './batch.service';
+import { toDateKey } from './batch-fifo';
 
 export const analyticsService = {
   async getDashboard() {
     // 所有日期边界都是纯 JS 计算、查询间无数据依赖，先一次性算好再并发发起
     // 全部查询，把约 11 次串行往返压缩为约 3 个连接池批次（PERF-N1）。
+    // 日期一律取本地日历日：toISOString() 会把东八区零点回退到前一天。
     const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-      .toISOString()
-      .split('T')[0];
+    const todayStart = toDateKey(new Date(now.getFullYear(), now.getMonth(), now.getDate()))!;
 
     // 计算本周起始（周一）
     const dayOfWeek = now.getDay();
     const weekStart = new Date(now);
     weekStart.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
-    const weekStartStr = weekStart.toISOString().split('T')[0];
+    const weekStartStr = toDateKey(weekStart)!;
 
     // 本月起始
     const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
@@ -24,13 +24,14 @@ export const analyticsService = {
     // 昨日起始（今日同比）
     const yesterday = new Date(now);
     yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStart = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate())
-      .toISOString().split('T')[0];
+    const yesterdayStart = toDateKey(
+      new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate())
+    )!;
 
     // 上周起始（本周同比）
     const prevWeekStart = new Date(weekStart);
     prevWeekStart.setDate(prevWeekStart.getDate() - 7);
-    const prevWeekStartStr = prevWeekStart.toISOString().split('T')[0];
+    const prevWeekStartStr = toDateKey(prevWeekStart)!;
 
     // 上月起始（本月同比）
     const prevMonth = new Date(now);

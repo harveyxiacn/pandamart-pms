@@ -49,7 +49,7 @@ PandaMartPMS/
 ├── server/    Express + TypeScript API
 │   └── src/{config,middleware,models,routes,services,database,types,utils}
 ├── docs/      api-design.md, deployment guide and design notes
-└── logo-300x292.png
+└── LICENSE
 ```
 
 Sample invoices are deliberately not shipped: the ones used to develop the OCR

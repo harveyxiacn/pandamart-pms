@@ -54,7 +54,11 @@ ROOT_DIR="$(dirname "$APP")"
 echo "  [backup] -> $ROOT_DIR/backup-app-$TS.tar.gz"
 cd "$ROOT_DIR"
 tar czf backup-app-$TS.tar.gz --exclude='server/node_modules' --exclude='server/uploads' --exclude='server/logs' server
-echo "  [extract] overlay -> $APP"
+echo "  [extract] clean sources then overlay -> $APP"
+# The tarball is an overlay: files deleted from the repo would otherwise stay
+# behind and break tsc (e.g. a removed model still importing a removed type).
+# uploads/logs/.env/node_modules are never touched.
+rm -rf "$APP/src" "$APP/public" "$APP/dist"
 tar xzf /tmp/$TARBALL -C $APP
 cd $APP
 echo "  [install] npm install --include=dev"

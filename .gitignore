@@ -30,3 +30,6 @@ toPandaMart/
 
 .DS_Store
 Thumbs.db
+
+# Deployment tarball produced by scripts/deploy.sh
+pandapms-deploy.tar.gz

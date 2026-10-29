@@ -9,6 +9,8 @@ server/public/
 **/.env.*
 !.env.example
 !**/.env.example
+# The GitHub Pages demo build is intentionally committed config (no secrets).
+!client/.env.demo
 
 # Runtime/generated data
 *.log
@@ -17,6 +19,7 @@ server/logs/
 uploads/
 server/uploads/
 client/dist/
+client/dist-demo/
 server/dist/
 
 # Real customer/supplier documents used to test the OCR pipeline stay local

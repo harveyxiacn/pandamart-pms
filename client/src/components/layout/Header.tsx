@@ -18,6 +18,7 @@ import { globalSearch } from "../../api/analytics";
 import { useAuth } from "../../hooks/useAuth";
 import { cn } from "../../utils/classnames";
 import { APP_NAME } from "../../utils/constants";
+import { demoAsset } from "../../demo/constants";
 import type { GlobalSearchResult } from "../../types";
 import { Popover } from "../ui/Popover";
 import { DropdownMenu, DropdownMenuItem, DropdownMenuSeparator } from "../ui/DropdownMenu";
@@ -172,7 +173,7 @@ export function Header() {
         {/* Mobile identity — the sidebar carries this on desktop. */}
         <div className="flex items-center gap-2 lg:hidden">
           <img
-            src="/logo-300x292.png"
+            src={demoAsset("logo-300x292.png")}
             alt=""
             className="h-7 w-7 rounded-md bg-surface object-contain ring-1 ring-line"
           />

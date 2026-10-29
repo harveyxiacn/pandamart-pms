@@ -4,6 +4,21 @@
 
 <!-- A hero screenshot/GIF of the dashboard and the AI chat panel would go here. -->
 
+## Live demo
+
+**<https://harveyxiacn.github.io/pandamart-pms/>**
+
+A static GitHub Pages build of the client with an **in-browser mock backend** — no server or database required. The mock implements every API the UI calls, so all modules are interactive: invoice upload + OCR review + confirm, inventory, batches, sales, stocktake, products, suppliers, payables, analytics, AI assistant, notifications, settings, users, audit logs, and CSV/JSON exports.
+
+Data is generated deterministically in the browser and persisted to `localStorage`. Use **重置演示数据** in the top banner to restore the seeded dataset.
+
+| Role | Username | Password | Access |
+| --- | --- | --- | --- |
+| Admin | `admin` | `demo1234` | All modules |
+| Staff | `staff01` | `demo1234` | Invoices, sales, inventory, batches, products, suppliers, notifications |
+
+Rebuild the demo locally with `cd client && npm run build:demo`; the output in `client/dist-demo/` is deployed by `.github/workflows/deploy-pages.yml`.
+
 ## Why this is interesting (engineering)
 
 The two hard parts of this system are both about **making LLM output trustworthy in a real business workflow**:

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ChevronRight, FileSearch, FileText, SearchX } from "lucide-react";
 import { confirmInvoice, deleteInvoice, getInvoiceById, getInvoices, rollbackInvoiceConfirm, updateInvoice } from "../api/invoices";
 import { getAllSuppliers } from "../api/suppliers";
@@ -148,6 +148,7 @@ function guessSupplierByOcrName(ocrSupplierName: string, suppliers: Supplier[]):
 }
 
 export default function InvoiceListPage() {
+  const navigate = useNavigate();
   const { isAdmin } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
@@ -517,7 +518,7 @@ export default function InvoiceListPage() {
         title="发票列表"
         description="查看、校对并确认供应商发票；确认后自动入库并更新批次。"
         actions={
-          <Button leadingIcon={FileSearch} onClick={() => (window.location.href = "/invoices/scan")}>
+          <Button leadingIcon={FileSearch} onClick={() => navigate("/invoices/scan")}>
             识别新发票
           </Button>
         }
@@ -619,7 +620,7 @@ export default function InvoiceListPage() {
                   清除筛选
                 </Button>
               ) : (
-                <Button leadingIcon={FileSearch} onClick={() => (window.location.href = "/invoices/scan")}>
+                <Button leadingIcon={FileSearch} onClick={() => navigate("/invoices/scan")}>
                   去识别发票
                 </Button>
               )

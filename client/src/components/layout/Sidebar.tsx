@@ -23,6 +23,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { cn } from "../../utils/classnames";
 import { APP_NAME } from "../../utils/constants";
+import { demoAsset } from "../../demo/constants";
 import { useAuth } from "../../hooks/useAuth";
 
 interface NavItem {
@@ -103,7 +104,7 @@ export function Sidebar() {
     <aside className="sticky top-0 hidden h-dvh w-[15.5rem] shrink-0 flex-col border-r border-line bg-surface lg:flex">
       <div className="flex h-16 items-center gap-2.5 border-b border-line px-4">
         <img
-          src="/logo-300x292.png"
+          src={demoAsset("logo-300x292.png")}
           alt=""
           className="h-9 w-9 rounded-lg bg-surface object-contain p-0.5 ring-1 ring-line"
         />

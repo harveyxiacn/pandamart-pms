@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Boxes, ClipboardCheck, PackageSearch, AlertTriangle, CalendarClock } from "lucide-react";
 import { adjustInventory, getInventory, getInventoryLogs, setSafeStock } from "../api/inventory";
 import type { InventoryItem, InventorySummary } from "../types";
@@ -47,6 +47,7 @@ const logTypeLabels: Record<string, string> = {
 };
 
 export default function InventoryPage() {
+  const navigate = useNavigate();
   const { canAdjustInventory, canAdjustSafeStock } = usePermission();
   const toast = useToast();
   const [keyword, setKeyword] = useState("");
@@ -139,11 +140,11 @@ export default function InventoryPage() {
         description="查看实时库存与安全库存线，处理补货和盘亏盘盈。"
         actions={
           <>
-            <Button variant="secondary" leadingIcon={CalendarClock} onClick={() => (window.location.href = "/batches")}>
+            <Button variant="secondary" leadingIcon={CalendarClock} onClick={() => navigate("/batches")}>
               批次保质期
             </Button>
             {canAdjustInventory ? (
-              <Button leadingIcon={ClipboardCheck} onClick={() => (window.location.href = "/stocktake")}>
+              <Button leadingIcon={ClipboardCheck} onClick={() => navigate("/stocktake")}>
                 库存盘点
               </Button>
             ) : null}

@@ -1,6 +1,7 @@
 import axios from "axios";
 import type { ApiResponse } from "../types";
 import { API_BASE_URL, STORAGE_KEYS } from "../utils/constants";
+import { DEMO_MODE } from "../demo/constants";
 
 function extractErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
@@ -50,7 +51,13 @@ apiClient.interceptors.response.use(
       // 同时清除 zustand persist 的鉴权快照，避免下次挂载从 'pandamart-auth'
       // 重新水合出失效的 token/user，导致"看似已登录却每次 401"的循环。
       localStorage.removeItem("pandamart-auth");
-      if (!window.location.pathname.includes("/login")) {
+      if (DEMO_MODE) {
+        // HashRouter keeps the route after '#', so a plain href="/login" would
+        // leave the GitHub Pages sub-path and 404.
+        if (!window.location.hash.includes("/login")) {
+          window.location.hash = "#/login";
+        }
+      } else if (!window.location.pathname.includes("/login")) {
         window.location.href = "/login";
       }
     }

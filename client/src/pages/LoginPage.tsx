@@ -15,6 +15,7 @@ import { useAuth } from "../hooks/useAuth";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Field } from "../components/ui/Field";
+import { DEMO_ACCOUNTS, DEMO_MODE, demoAsset } from "../demo/constants";
 
 const highlights = [
   {
@@ -37,8 +38,8 @@ const highlights = [
 export default function LoginPage() {
   const navigate = useNavigate();
   const { login } = useAuth();
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  const [username, setUsername] = useState(DEMO_MODE ? "admin" : "");
+  const [password, setPassword] = useState(DEMO_MODE ? "demo1234" : "");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,7 +76,7 @@ export default function LoginPage() {
 
         <div className="relative flex items-center gap-3">
           <img
-            src="/logo-300x292.png"
+            src={demoAsset("logo-300x292.png")}
             alt=""
             className="h-11 w-11 rounded-xl bg-white/95 object-contain p-1.5"
           />
@@ -124,7 +125,7 @@ export default function LoginPage() {
         <div className="mx-auto w-full max-w-sm animate-rise">
           <div className="mb-8 flex items-center gap-3 lg:hidden">
             <img
-              src="/logo-300x292.png"
+              src={demoAsset("logo-300x292.png")}
               alt=""
               className="h-10 w-10 rounded-lg bg-surface object-contain p-1 ring-1 ring-line"
             />
@@ -202,6 +203,32 @@ export default function LoginPage() {
               登录系统
             </Button>
           </form>
+
+          {DEMO_MODE ? (
+            <div className="mt-5 rounded-xl border border-line bg-surface-muted p-3">
+              <p className="text-meta font-medium text-ink-muted">演示账号 · 点击自动填入</p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                {DEMO_ACCOUNTS.map((account) => (
+                  <button
+                    key={account.username}
+                    type="button"
+                    onClick={() => {
+                      setUsername(account.username);
+                      setPassword(account.password);
+                      setError(null);
+                    }}
+                    className="rounded-lg border border-line bg-surface px-3 py-2 text-left transition-colors hover:border-accent/50 hover:bg-accent-soft/40"
+                  >
+                    <span className="block text-meta font-semibold text-ink">
+                      {account.label} · {account.username}
+                    </span>
+                    <span className="block text-meta text-ink-subtle">{account.hint}</span>
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-meta text-ink-subtle">密码统一为 demo1234，数据仅保存在当前浏览器。</p>
+            </div>
+          ) : null}
 
           <p className="mt-8 text-meta leading-5 text-ink-subtle">
             PandaMart PMS 仅限授权门店员工使用。所有登录与数据变更都会写入审计日志。

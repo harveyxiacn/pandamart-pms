@@ -1,4 +1,5 @@
 import type { PropsWithChildren } from "react";
+import { DemoBanner } from "./DemoBanner";
 import { Header } from "./Header";
 import { MobileNav } from "./MobileNav";
 import { Sidebar } from "./Sidebar";
@@ -15,6 +16,7 @@ export function MainLayout({ children }: PropsWithChildren) {
       </a>
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
+        <DemoBanner />
         <Header />
         <main
           id="main-content"

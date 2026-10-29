@@ -17,7 +17,8 @@ async function downloadFile(
   document.body.appendChild(a);
   a.click();
   a.remove();
-  window.URL.revokeObjectURL(url);
+  // Revoking synchronously can cancel the download before Chromium starts it.
+  window.setTimeout(() => window.URL.revokeObjectURL(url), 1500);
 }
 
 export function exportInvoices(params?: {

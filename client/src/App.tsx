@@ -1,9 +1,10 @@
 import { lazy, Suspense } from "react";
-import { BrowserRouter, Navigate, Outlet, Route, Routes } from "react-router-dom";
+import { BrowserRouter, HashRouter, Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { MainLayout } from "./components/layout/MainLayout";
 import { ToastProvider } from "./components/ui/Toast";
 import { ConfirmProvider } from "./components/ui/ConfirmDialog";
 import { useAuth } from "./hooks/useAuth";
+import { DEMO_MODE } from "./demo/constants";
 
 const LoginPage = lazy(() => import("./pages/LoginPage"));
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
@@ -68,10 +69,14 @@ function NotFoundRoute() {
 }
 
 export default function App() {
+  // GitHub Pages serves static files only; hash routing keeps deep links working
+  // without a server-side rewrite. Local/dev builds keep clean browser URLs.
+  const Router = DEMO_MODE ? HashRouter : BrowserRouter;
+
   return (
     <ToastProvider>
       <ConfirmProvider>
-        <BrowserRouter>
+        <Router>
           <Suspense fallback={<PageFallback />}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
@@ -102,7 +107,7 @@ export default function App() {
               <Route path="*" element={<NotFoundRoute />} />
             </Routes>
           </Suspense>
-        </BrowserRouter>
+        </Router>
       </ConfirmProvider>
     </ToastProvider>
   );

@@ -297,7 +297,8 @@ function extractAddressAndContact(text: string): { address: string | null; conta
   for (let i = 0; i < lines.length && addresses.length < 2; i++) {
     const line = lines[i];
     if (!/\d+/.test(line)) continue;
-    if (!/(ave|avenue|rd|road|st|street|blvd|drive|dr|lane|ln|way|court|ct|unit|suite|highway|hwy)/i.test(line)) continue;
+    // 短街名缩写必须整词匹配，否则 HST 里的 "ST" 会被当成 Street。
+    if (!/\b(?:ave|avenue|rd|road|st|street|blvd|drive|dr|lane|ln|way|court|ct|unit|suite|highway|hwy)\b/i.test(line)) continue;
     let combined = line;
     const next = lines[i + 1] || '';
     if (next && /[A-Za-z].*,\s*[A-Z]{2}\s*[A-Z0-9]{3,}/.test(next)) combined = `${line}, ${next}`;

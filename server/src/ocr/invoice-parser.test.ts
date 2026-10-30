@@ -48,6 +48,18 @@ Total 158.09`;
     expect(result.confidence).toBeGreaterThanOrEqual(0.7);
   });
 
+  it('地址解析不会把 HST 里的 ST 当成 Street', () => {
+    const text = `CBS Wholesale
+123 Market Street
+Toronto, ON M5V 2T6
+HST 13% 12.74
+Subtotal 98.00
+Total 110.74`;
+
+    const result = parseInvoiceText(text);
+    expect(result.recognized.supplierAddress).toBe('123 Market Street, Toronto, ON M5V 2T6');
+  });
+
   it('解析名称与数量分两行的发票，并保留条码', () => {
     const text = `CBS Wholesale
 Invoice #: 778899

@@ -10,6 +10,8 @@
 
 A static GitHub Pages build of the client with an **in-browser mock backend** — no server or database required. The mock implements every API the UI calls, so all modules are interactive: invoice upload + OCR review + confirm, inventory, batches, sales, stocktake, products, suppliers, payables, analytics, smart assistant, notifications, settings, users, audit logs, and CSV/JSON exports.
 
+**Invoice OCR in the demo is real, not mocked.** Upload a PNG/JPG or PDF and **Tesseract.js (WASM)** runs entirely in your browser, then the same deterministic parser used by the server extracts the supplier, invoice number/date, line items and totals; unmatched products are created on confirm. No server, no API key. The first recognition downloads the `eng+chi_sim` language packs from jsDelivr (~20 MB, cached by the browser afterwards), so give it a few seconds; Excel uploads fall back to mock data.
+
 The smart assistant runs **for real** in the demo: the same local rule engine is reimplemented against the in-browser demo database, so questions like *“哪些商品需要补货？”* or *“生姜还有多少库存？”* are answered from the demo stock, sales and expiry data — no API key involved.
 
 Data is generated deterministically in the browser and persisted to `localStorage`. Use **重置演示数据** in the top banner to restore the seeded dataset.

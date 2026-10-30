@@ -7,6 +7,8 @@ import type {
 import { STORAGE_KEYS } from "../utils/constants";
 import { loadDemoDb, localDateKey, saveDemoDb, type DemoDb } from "./seed";
 import { demoAnswer, demoAssistantStatus, demoKnowledge, demoReport } from "./assistant";
+import { demoOcrSupported, recognizeInvoiceInBrowser } from "./ocr/browser-ocr";
+import type { DemoOcrOutcome } from "./ocr/browser-ocr";
 
 /* ------------------------------------------------------------------ */
 /* In-browser demo backend.                                           */
@@ -1608,6 +1610,191 @@ function nextInvoiceNumber(invoiceId: number): string {
   return number;
 }
 
+function normalizeMatch(value: unknown): string {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/[\s\p{P}\p{S}]/gu, "");
+}
+
+function matchDemoSupplier(name: string | null | undefined): Row | null {
+  const needle = normalizeMatch(name);
+  if (!needle) return null;
+  const exact = db.suppliers.find((supplier) => normalizeMatch(supplier.name) === needle);
+  if (exact) return exact;
+  return (
+    db.suppliers.find((supplier) => {
+      const hay = normalizeMatch(supplier.name);
+      return hay.length >= 3 && (hay.includes(needle) || needle.includes(hay));
+    }) ?? null
+  );
+}
+
+function matchDemoProduct(item: Row): Row | null {
+  const code = String(item.productCode ?? "").trim().toLowerCase();
+  if (code) {
+    const byCode = db.products.find(
+      (product) => !product.deleted_at && String(product.sku ?? "").toLowerCase() === code
+    );
+    if (byCode) return byCode;
+  }
+  const needles = [item.productNameEn, item.productNameZh]
+    .map(normalizeMatch)
+    .filter((value) => value.length >= 2);
+  if (needles.length === 0) return null;
+  for (const product of db.products) {
+    if (product.deleted_at) continue;
+    const candidates = [product.name_en, product.name_zh, product.sku]
+      .map(normalizeMatch)
+      .filter(Boolean);
+    if (
+      needles.some((needle) =>
+        candidates.some((candidate) => candidate.includes(needle) || needle.includes(candidate))
+      )
+    ) {
+      return product;
+    }
+  }
+  return null;
+}
+
+/**
+ * Build a pending invoice from real in-browser OCR output. Product names are
+ * matched against the demo catalogue; anything not found stays as a raw name
+ * and is created as a new product when the invoice is confirmed — the same
+ * behaviour as the production API.
+ */
+function buildUploadedInvoiceFromOcr(fileName: string, outcome: DemoOcrOutcome) {
+  const source = outcome.parsed.recognized;
+  const supplier = matchDemoSupplier(source.supplierName);
+  const invoiceId = nextRowId(db.invoices);
+  const invoiceNumber = String(source.invoiceNumber ?? "").trim() || nextInvoiceNumber(invoiceId);
+
+  const lineItems: Row[] = source.items
+    .filter((item) => Number(item.quantity) > 0)
+    .map((item) => {
+      const product = matchDemoProduct(item);
+      const quantity = Number(item.quantity) || 1;
+      const unitPrice = Number(item.unitPrice) || 0;
+      const lineTotal =
+        Number(item.lineTotal) > 0 ? round2(Number(item.lineTotal)) : round2(quantity * unitPrice);
+      return {
+        productId: product ? Number(product.id) : null,
+        matchedProduct: product
+          ? {
+              id: Number(product.id),
+              nameEn: product.name_en,
+              nameZh: product.name_zh ?? null,
+              confidence: 0.9,
+            }
+          : null,
+        productNameEn: item.productNameEn || product?.name_en || null,
+        productNameZh: item.productNameZh ?? product?.name_zh ?? null,
+        productCode: item.productCode || product?.sku || null,
+        productNumber: item.productNumber ?? null,
+        un: item.un ?? null,
+        taxCode: item.taxCode ?? null,
+        quantity,
+        unit: item.unit || product?.default_unit || "Case",
+        unitPrice,
+        lineTotal,
+      };
+    });
+
+  if (lineItems.length === 0) return buildUploadedInvoice(fileName);
+
+  const subtotal =
+    source.salesTotal ?? round2(sumBy(lineItems, (item) => Number(item.lineTotal)));
+  const taxAmount = source.taxTotal ?? source.taxAmount ?? 0;
+  const grandTotal =
+    source.total && source.total > 0 ? source.total : round2(subtotal + taxAmount);
+  const hasTax = taxAmount > 0;
+  const invoiceDate = /^\d{4}-\d{2}-\d{2}$/.test(source.invoiceDate)
+    ? source.invoiceDate
+    : todayKey();
+  const fileType = fileTypeFromName(fileName);
+
+  const recognized = {
+    ...source,
+    supplierName: supplier?.name ?? source.supplierName,
+    supplierCode: supplier?.code ?? source.supplierCode ?? null,
+    supplierAddress: source.supplierAddress ?? supplier?.address ?? null,
+    supplierContact:
+      source.supplierContact ??
+      (supplier ? `${supplier.contact_name} · ${supplier.phone}` : null),
+    invoiceNumber,
+    invoiceDate,
+    items: lineItems,
+    salesTotal: subtotal,
+    taxTotal: taxAmount,
+    total: grandTotal,
+    subtotal,
+    hasTax,
+    taxAmount,
+    grandTotal,
+  };
+
+  const invoice = {
+    id: invoiceId,
+    supplier_id: supplier ? Number(supplier.id) : null,
+    supplier_name: supplier?.name ?? source.supplierName ?? null,
+    invoice_number: invoiceNumber,
+    invoice_date: invoiceDate,
+    customer_code: source.customerCode ?? null,
+    subtotal,
+    has_tax: hasTax ? 1 : 0,
+    tax_amount: taxAmount,
+    grand_total: grandTotal,
+    file_path: `demo/${fileName}`,
+    file_type: fileType,
+    ocr_method: "local_ocr",
+    status: "pending",
+    uploaded_by: currentUserId(),
+    confirmed_by: null,
+    confirmed_at: null,
+    notes: null,
+    ocr_raw_result: JSON.stringify({
+      ...recognized,
+      _ocr: {
+        engine: outcome.engine,
+        confidence: outcome.parsed.confidence,
+        warnings: outcome.parsed.diagnostics.warnings,
+        durationMs: outcome.durationMs,
+      },
+    }),
+    created_at: nowIso(),
+    updated_at: nowIso(),
+  };
+
+  db.invoices.push(invoice);
+  for (const item of lineItems) {
+    db.invoiceItems.push({
+      id: nextId("invoiceItem"),
+      invoice_id: invoiceId,
+      product_id: item.productId,
+      raw_name_en: item.productNameEn,
+      raw_name_zh: item.productNameZh,
+      raw_product_code: item.productCode,
+      raw_product_number: item.productNumber,
+      raw_un: item.un,
+      raw_tax_code: item.taxCode,
+      quantity: item.quantity,
+      unit: item.unit,
+      unit_price: item.unitPrice,
+      line_total: item.lineTotal,
+    });
+  }
+
+  return {
+    invoice,
+    recognized,
+    fileType,
+    fileName,
+    ocrConfidence: outcome.parsed.confidence,
+    ocrWarnings: outcome.parsed.diagnostics.warnings,
+    ocrEngine: outcome.engine,
+  };
+}
+
 function buildUploadedInvoice(fileName: string) {
   const fileType = fileTypeFromName(fileName);
   const hash = hashText(fileName);
@@ -2364,6 +2551,30 @@ async function handleRequest(
     return ok(paginate(rows, q), config);
   }
 
+  if (method === "GET" && p === "/invoices/ocr/status") {
+    const wasm = typeof WebAssembly === "object";
+    return ok(
+      {
+        mode: db.settings.invoice_ocr_mode ?? "auto",
+        llmConfigured: db.aiProviders.length > 0,
+        local: {
+          available: wasm,
+          engine: "tesseract.js",
+          binary: "tesseract.js",
+          version: "7.0.0",
+          languages: ["chi_sim", "eng"],
+          requestedLanguages: "eng+chi_sim",
+          pdfRenderer: { available: true, binary: "pdf.js" },
+          message: wasm
+            ? "浏览器内 OCR 可用（Tesseract.js；首次识别需下载 eng+chi_sim 语言包）"
+            : "当前浏览器不支持 WebAssembly，无法运行本地 OCR",
+          installHint: "演示站无需安装依赖；生产环境由服务器端 Tesseract 提供 OCR。",
+        },
+      },
+      config
+    );
+  }
+
   if (method === "POST" && p === "/invoices/upload") {
     const form =
       typeof FormData !== "undefined" && payload instanceof FormData ? payload : null;
@@ -2371,12 +2582,34 @@ async function handleRequest(
     const fileName = file?.name ?? "invoice-demo.pdf";
     for (let percent = 10; percent <= 100; percent += 15) {
       emitProgress(config, Math.min(100, percent));
-      await wait(70);
+      await wait(50);
     }
     emitProgress(config, 100);
-    await wait(550);
+    await wait(250);
 
-    const result = buildUploadedInvoice(fileName);
+    // 图片与 PDF 走真实浏览器 OCR；Excel 或 OCR 失败时回退到演示数据。
+    let ocrOutcome: DemoOcrOutcome | null = null;
+    if (file && demoOcrSupported(file)) {
+      try {
+        ocrOutcome = await recognizeInvoiceInBrowser(
+          file,
+          db.suppliers.map((supplier) => ({
+            id: Number(supplier.id),
+            name: String(supplier.name),
+            code: supplier.code ?? null,
+          }))
+        );
+      } catch (error) {
+        const detail =
+          error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+        console.warn("[demo-ocr] 浏览器 OCR 失败，回退演示数据", detail);
+      }
+    }
+
+    const result = ocrOutcome
+      ? buildUploadedInvoiceFromOcr(fileName, ocrOutcome)
+      : buildUploadedInvoice(fileName);
+    const resultRow = result as Row;
     addAudit("upload_invoice", "invoice", Number(result.invoice.id), {
       invoiceNumber: result.invoice.invoice_number,
       fileName,
@@ -2389,6 +2622,9 @@ async function handleRequest(
         recognized: result.recognized,
         filePath: result.invoice.file_path,
         fileType: result.fileType,
+        ocrConfidence: resultRow.ocrConfidence ?? null,
+        ocrWarnings: resultRow.ocrWarnings ?? [],
+        ocrEngine: resultRow.ocrEngine ?? "demo",
       },
       config
     );

@@ -858,6 +858,7 @@ export function createDemoDb(): DemoDb {
     email_notification_enabled: "false",
     notification_email: "ops@pandamart.demo",
     invoice_require_approval: "false",
+    invoice_ocr_mode: "auto",
     slow_moving_days: "30",
     price_alert_threshold: "0.1",
   };

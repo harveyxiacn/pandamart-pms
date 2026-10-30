@@ -71,6 +71,20 @@ grep -iE 'Batch|already|run:' /tmp/deploy-migrate.log | tail -2
 echo "  [perms] chown $APP_OWNER + chmod 600 .env"
 chown -R "$APP_OWNER:$APP_OWNER" $APP
 chmod 600 $APP/.env
+echo "  [ocr] local OCR dependency check"
+if command -v tesseract >/dev/null 2>&1; then
+  echo "    tesseract: $(tesseract --version 2>&1 | head -1)"
+  tesseract --list-langs 2>/dev/null | tail -n +2 | tr '\n' ' ' | sed 's/^/    languages: /'
+  echo
+else
+  echo "    WARNING: tesseract not installed; local image/scanned-PDF OCR will fall back to LLM or report OCR_UNAVAILABLE."
+  echo "    Install: bash scripts/install-ocr-deps.sh (on the server)"
+fi
+if command -v pdftoppm >/dev/null 2>&1; then
+  echo "    pdftoppm: available"
+else
+  echo "    WARNING: pdftoppm not installed; scanned PDFs cannot be rendered for local OCR."
+fi
 echo "  [restart] systemctl restart $APP_NAME"
 systemctl restart "$APP_NAME"
 sleep 3

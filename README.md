@@ -1,6 +1,6 @@
 # PandaMart PMS — AI-Powered Supermarket Inventory & Procurement System
 
-> 熊猫超市智能库存管理系统 · A full-stack inventory/procurement platform where a **local-first assistant**, an optional LLM agent and an OCR pipeline do the busywork — turning supplier invoices into structured stock data and answering operational questions over live warehouse data.
+> 熊猫超市智能库存管理系统 · A full-stack inventory/procurement platform where a **local-first assistant**, **local invoice OCR**, and optional LLM do the busywork — turning supplier invoices into structured stock data and answering operational questions over live warehouse data.
 
 <!-- A hero screenshot/GIF of the dashboard and the AI chat panel would go here. -->
 
@@ -25,12 +25,14 @@ Rebuild the demo locally with `cd client && npm run build:demo`; the output in `
 
 The hard parts of this system are about **making automation trustworthy in a real business workflow** — and making it work even when no LLM is configured:
 
-### 1. A hybrid invoice OCR pipeline that doesn't trust the model blindly
-`server/src/services/ocr.service.ts` (~780 lines) routes each upload to the right extractor and then **validates the model's output deterministically**:
+### 1. Invoice OCR that works without an AI API
+`server/src/ocr/` is a self-contained plugin. The deterministic parser does the semantic work; the OCR engine only supplies words and coordinates:
 
-- **Routing:** PDF → text-extraction first; Excel → direct structured parse; image → Vision.
-- **Graceful fallback:** a text-PDF is parsed by template, then by LLM; if that fails it **degrades to rendering the page and using Vision** — so scanned and digital invoices both work.
-- **Deterministic post-processing of LLM output:** supplier address/contact extraction, **CAD total reconciliation** (the line items must add up), barcode-line hints, and **fuzzy product matching with a confidence score** per item. The model proposes; regex/heuristics verify.
+- **Routing:** Excel → structured parse; digital PDF → `pdf-parse` text + rule parser; image / scanned PDF → Tesseract TSV; hard cases → optional LLM/Vision.
+- **Local OCR:** Tesseract CLI (`eng+chi_sim`) plus `pdftoppm` for scanned PDFs, invoked as child processes so an OCR failure cannot take down Node and memory stays bounded on a 1 GB VPS. `apt-get install tesseract-ocr tesseract-ocr-chi-sim poppler-utils` is all it needs.
+- **Deterministic parsing:** line-item extraction from trailing numeric tokens (works even when table columns drift), two-line item layouts, barcodes, units, `E/H` tax codes, `Subtotal/HST/Total` and `小计/税额/总计`, with **line-item totals reconciled against the invoice subtotal**.
+- **Supplier calibration:** OCR text is matched against supplier names already in the database, so a slightly misread `CBS Wholesale` still lands on the right supplier.
+- **LLM stays optional:** `invoice_ocr_mode` = `auto` (local first, LLM only when confidence is low), `local` (never call AI) or `llm` (AI first). Any LLM failure falls back to the local result.
 
 ### 2. A real tool-calling agent, not a chat wrapper
 `server/src/services/ai-chat.service.ts` implements a proper **function-calling loop** over **8 database-backed tools** (`get_low_stock`, `search_inventory`, `get_price_changes`, `get_purchase_ranking`, `get_supplier_summary`, `get_sales_summary`, `get_reorder_suggestions`, `get_expiring_batches`):
@@ -58,11 +60,12 @@ The default mode is `local`, so a fresh install has a working assistant with no 
 - **Frontend:** React 18 + TypeScript + Vite + TailwindCSS (custom tokens) + Lucide + Recharts
 - **Backend:** Node.js + Express + TypeScript
 - **Database:** MariaDB/MySQL 10.x via Knex.js (migrations + seeds)
-- **AI:** local rule engine (default) + optional OpenAI-compatible API (multi-provider), Vision for scanned invoices
+- **AI:** local rule engine (default) + optional OpenAI-compatible API (multi-provider)
+- **OCR:** PDF text parser + Tesseract CLI (local, default) + optional Vision LLM
 
 ## Features
 
-1. **Smart invoice OCR** — PDF text extraction / AI Vision / direct Excel parsing, with deterministic validation.
+1. **Invoice OCR** — Excel / text PDF / scanned image, with a **local Tesseract engine** and deterministic parsing; no AI API required.
 2. **Inventory management** — inbound / outbound / stock-take / low-stock alerts.
 3. **Analytics** — dashboards for purchasing trends, fast/slow movers, price movement.
 4. **Local smart assistant** — a live knowledge base plus deterministic Q&A and inventory alerts; no LLM required.
@@ -76,8 +79,9 @@ The default mode is `local`, so a fresh install has a working assistant with no 
 PandaMartPMS/
 ├── client/    React 18 + Vite admin UI
 ├── server/    Express + TypeScript API
-│   └── src/{config,middleware,models,routes,services,database,types,utils}
-├── docs/      api-design.md, deployment guide and design notes
+│   ├── src/{config,middleware,models,routes,services,database,types,utils}
+│   └── src/ocr/   local invoice OCR plugin (Tesseract + deterministic parser)
+├── docs/      api-design.md, local-ocr.md, deployment guide and design notes
 └── LICENSE
 ```
 
@@ -121,7 +125,7 @@ npm run dev
 npm run test:e2e           # E2E (MySQL)
 ```
 
-> **No AI key required:** the assistant defaults to `local` mode and works straight from the database. To enable LLM mode, add a provider in **系统设置 → AI 提供商** and switch **智能助手模式** to `llm` (or `auto`).
+> **No AI key required:** the assistant defaults to `local` mode and works straight from the database; invoice OCR falls back to the local Tesseract engine. Install the OCR packages with `sudo bash scripts/install-ocr-deps.sh` (Ubuntu/Debian) or see `docs/local-ocr.md`. To enable LLM mode, add a provider in **系统设置 → AI 提供商** and switch **智能助手模式** / **发票识别模式** to `llm` (or `auto`).
 
 > **Secrets:** no credentials are committed — only `.env.example` templates are tracked; `JWT_SECRET`, `AI_ENCRYPTION_KEY` and the demo account passwords are supplied via `server/.env`. The seed data is **fictional**.
 
@@ -136,4 +140,4 @@ Private — All Rights Reserved.
 
 ---
 
-*中文说明：基于 AI 的超市库存管理系统，支持发票 OCR 识别、智能库存管理、数据分析与智能助手。前端 React 18，后端 Express + TypeScript，数据库 MariaDB。智能助手默认使用**本地资料库 + 规则引擎**（无需 LLM、无外部调用、结果可复现），可回答问题并生成库存/保质期/应付预警；配置 AI 提供商后可切换 LLM 增强模式，失败会自动降级到本地。核心亮点还包括混合 OCR 流水线（PDF 文本/Vision/Excel 分流 + 确定性校验）与 8 工具的 function-calling agent loop。*
+*中文说明：基于 AI 的超市库存管理系统，支持发票 OCR 识别、智能库存管理、数据分析与智能助手。前端 React 18，后端 Express + TypeScript，数据库 MariaDB。发票识别默认**本地优先**：文本 PDF 用规则解析，图片/扫描件用 Tesseract（eng+chi_sim）本地 OCR，结果由确定性解析器整理后入库，无需 AI API；配置提供商后可切换 LLM/Vision 兜底。智能助手默认使用**本地资料库 + 规则引擎**（无需 LLM、无外部调用、结果可复现），可回答问题并生成库存/保质期/应付预警；配置 AI 提供商后可切换 LLM 增强模式，失败会自动降级到本地。核心亮点还包括混合 OCR 流水线、金额勾稽校验与 8 工具的 function-calling agent loop。*

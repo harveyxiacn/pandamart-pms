@@ -26,6 +26,11 @@ export async function seed(knex: Knex): Promise<void> {
       value: '60',
       description: '本地资料库快照缓存秒数，写操作会立即失效缓存',
     },
+    {
+      key: 'invoice_ocr_mode',
+      value: 'auto',
+      description: '发票识别模式：auto（本地优先）/ local（仅本地，不调用 AI）/ llm（AI 优先）',
+    },
   ];
 
   for (const item of defaults) {

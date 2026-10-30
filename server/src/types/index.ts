@@ -82,7 +82,7 @@ export interface ProductRow {
 // ==================== 发票相关 ====================
 export type InvoiceStatus = 'pending' | 'confirmed' | 'rejected';
 export type FileType = 'pdf' | 'image' | 'excel';
-export type OcrMethod = 'text_extract' | 'ai_vision' | 'excel_parse' | 'manual';
+export type OcrMethod = 'text_extract' | 'local_ocr' | 'ai_vision' | 'excel_parse' | 'manual';
 
 export interface InvoiceRow {
   id: number;

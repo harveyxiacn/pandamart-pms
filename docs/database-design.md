@@ -242,7 +242,7 @@
 | grand_total | DECIMAL(12,2) | NOT NULL | 含税总价 |
 | file_path | VARCHAR(500) | NOT NULL | 原件文件路径 |
 | file_type | ENUM('pdf','image','excel') | NOT NULL | 文件类型 |
-| ocr_method | ENUM('text_extract','ai_vision','excel_parse','manual') | NOT NULL | OCR方式 |
+| ocr_method | ENUM('text_extract','local_ocr','ai_vision','excel_parse','manual') | NOT NULL | OCR方式（local_ocr=本地Tesseract，迁移026） |
 | ocr_raw_result | JSON | NULLABLE | OCR 原始识别结果 |
 | status | ENUM('pending','confirmed','rejected') | NOT NULL, DEFAULT 'pending' | 状态 |
 | uploaded_by | INT UNSIGNED | NOT NULL, FK → users.id | 上传用户 |
@@ -457,6 +457,7 @@
 | `price_alert_threshold` | `0.1` | 价格异常波动告警阈值(10%) |
 | `assistant_mode` | `local` | 智能助手默认模式：local / llm / auto（迁移 025） |
 | `assistant_snapshot_ttl_seconds` | `60` | 本地资料库快照缓存秒数；写操作会立即失效缓存 |
+| `invoice_ocr_mode` | `auto` | 发票识别模式：auto / local / llm（迁移 026） |
 | `ai_encryption_key` | 环境变量 | AI API Key 的 AES-256 加密密钥（从环境变量加载，不存库） |
 
 > 注意：AI 提供商配置（Base URL / API Key / 模型等）已移至独立的 `ai_providers` 表管理，不再使用 settings 表存储。
@@ -514,6 +515,7 @@ migrations/
 ├── 023_create_sales_item_batches.ts
 ├── 024_create_supplier_product_aliases.ts
 ├── 025_add_assistant_settings.ts   # assistant_mode / 快照 TTL（默认 local）
+├── 026_add_local_ocr.ts            # invoices.ocr_method 增加 local_ocr / invoice_ocr_mode
 ```
 
 ---

@@ -79,6 +79,21 @@ GRANT ALL PRIVILEGES ON pandamart_pms.* TO 'pandamart'@'localhost';
 FLUSH PRIVILEGES;
 ```
 
+### 2.4 安装本地发票 OCR（可选，但推荐）
+
+不配置 AI API 时，图片和扫描版 PDF 依赖本机 OCR。Ubuntu / Debian：
+
+```bash
+sudo bash scripts/install-ocr-deps.sh
+```
+
+该脚本安装 `tesseract-ocr`、英文/简体中文语言包和 `poppler-utils`，合计约十余 MB。
+Windows：安装 [Tesseract](https://github.com/UB-Mannheim/tesseract/wiki) 与 Poppler，并把可执行文件目录加入 `PATH`；
+也可通过 `TESSERACT_BIN`、`PDFTOPPM_BIN` 环境变量指定路径。
+
+安装后登录系统，在 **系统设置 → 发票识别模式** 下方应显示「本地 OCR：Tesseract x.x · eng+chi_sim」。
+未安装不影响启动，Excel 和带文字层的 PDF 仍可识别，只是图片/扫描件会退回 AI 或提示 `OCR_UNAVAILABLE`。
+
 ---
 
 ## 3. 部署步骤
@@ -433,6 +448,7 @@ PandaMartPMS/
 - [ ] 安装 MariaDB 并创建数据库 `pandamart_pms`
 - [ ] 复制项目文件到目标目录
 - [ ] 安装依赖：`cd server && npm install` + `cd client && npm install`
+- [ ] （可选）安装本地 OCR：`sudo bash scripts/install-ocr-deps.sh`
 - [ ] 配置文件：复制 `server/.env.production` 为 `server/.env` 并修改
 - [ ] 初始化数据库：运行 `scripts\setup-db.bat`
 - [ ] 构建系统：运行 `scripts\build.bat`

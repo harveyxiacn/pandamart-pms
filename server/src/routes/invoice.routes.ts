@@ -44,6 +44,15 @@ router.post(
   }
 );
 
+// GET /api/v1/invoices/ocr/status
+router.get('/ocr/status', authenticate, adminOnly, async (_req: AuthRequest, res: Response) => {
+  try {
+    sendSuccess(res, await ocrService.getStatus());
+  } catch (err: any) {
+    sendRouteError(res, err);
+  }
+});
+
 // POST /api/v1/invoices/:id/confirm
 router.post(
   '/:id/confirm',

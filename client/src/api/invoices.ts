@@ -15,9 +15,32 @@ interface UploadInvoiceOptions {
   onUploadProgress?: (progressPercent: number) => void;
 }
 
+export interface OcrStatus {
+  mode: "local" | "auto" | "llm";
+  llmConfigured: boolean;
+  local: {
+    available: boolean;
+    engine: "tesseract";
+    binary: string;
+    version: string | null;
+    languages: string[];
+    requestedLanguages: string;
+    pdfRenderer: { available: boolean; binary: string };
+    message: string;
+    installHint: string;
+  };
+}
+
+export function getOcrStatus(): Promise<OcrStatus> {
+  return unwrap<OcrStatus>(apiClient.get("/invoices/ocr/status"));
+}
+
 export async function uploadInvoice(file: File, options?: UploadInvoiceOptions): Promise<{
   invoiceId: number;
   ocrMethod: string;
+  ocrConfidence?: number;
+  ocrWarnings?: string[];
+  ocrEngine?: string;
   recognized: {
     supplierName: string | null;
     supplierCode: string | null;

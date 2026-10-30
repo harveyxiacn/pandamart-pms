@@ -25,6 +25,18 @@ import { cn } from "../utils/classnames";
 
 type UploadStage = "idle" | "uploading" | "analyzing" | "finalizing" | "done" | "error";
 
+const OCR_METHOD_LABELS: Record<string, string> = {
+  text_extract: "PDF 文本解析",
+  local_ocr: "本地 OCR（无需 AI）",
+  ai_vision: "AI 视觉识别",
+  excel_parse: "Excel 解析",
+  manual: "手动录入",
+};
+
+function ocrMethodLabel(method: string): string {
+  return OCR_METHOD_LABELS[method] || method;
+}
+
 function formatFileSize(size: number): string {
   if (size >= 1024 * 1024) {
     return `${(size / (1024 * 1024)).toFixed(2)} MB`;
@@ -231,8 +243,16 @@ export default function InvoiceScanPage() {
       setSupplierId(matched?.id ?? null);
       setUploadStage("done");
       setUploadProgress(100);
-      appendUploadLog(`识别完成：${result.ocrMethod}，共 ${result.recognized.items.length} 条明细`);
-      setSuccess(`发票上传成功，识别方式：${result.ocrMethod}`);
+      const methodLabel = ocrMethodLabel(result.ocrMethod);
+      const confidenceText =
+        typeof result.ocrConfidence === "number"
+          ? `，置信度 ${Math.round(result.ocrConfidence * 100)}%`
+          : "";
+      appendUploadLog(`识别完成：${methodLabel}${confidenceText}，共 ${result.recognized.items.length} 条明细`);
+      for (const warning of result.ocrWarnings || []) {
+        appendUploadLog(`提示：${warning}`);
+      }
+      setSuccess(`发票上传成功，识别方式：${methodLabel}${confidenceText}`);
     } catch (err: unknown) {
       setUploadStage("error");
       const rawMessage = err instanceof Error ? err.message : "上传失败";

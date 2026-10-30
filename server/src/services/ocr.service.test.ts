@@ -76,3 +76,27 @@ describe('ocrService.detectFileType 魔数校验', () => {
     }
   });
 });
+
+describe('ocrService 本地文本解析入口', () => {
+  it('不调用 LLM 也能得到可落库的明细与金额', () => {
+    const outcome = ocrService.buildLocalTextOutcome(
+      `CBS Wholesale Inc.
+Invoice No: LOCAL-1
+Invoice Date: 2026-10-30
+Description Qty Price Amount
+Ginger Root 10 3.99 39.90
+Apple Fuji 5 20.00 100.00
+Subtotal 139.90
+HST 18.19
+Total 158.09`,
+      [{ name: 'CBS Wholesale' }]
+    );
+
+    expect(outcome.ocrMethod).toBe('text_extract');
+    expect(outcome.engine).toBe('local_text');
+    expect(outcome.recognized.items).toHaveLength(2);
+    expect(outcome.recognized.taxAmount).toBe(18.19);
+    expect(outcome.recognized.grandTotal).toBe(158.09);
+    expect(outcome.confidence).toBeGreaterThan(0.7);
+  });
+});

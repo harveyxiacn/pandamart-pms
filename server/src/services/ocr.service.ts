@@ -7,11 +7,31 @@ import { llmService } from './llm.service';
 import { aliasService } from './alias.service';
 import { ProductModel } from '../models/Product';
 import { SupplierModel } from '../models/Supplier';
+import { SettingModel } from '../models/Setting';
 import { InvoiceModel } from '../models/Invoice';
 import { InvoiceItemModel } from '../models/InvoiceItem';
+import { localInvoiceOcr } from '../ocr';
+import type { KnownSupplier } from '../ocr';
 import { OcrRecognizedResult, OcrRecognizedItem, OcrMethod, FileType } from '../types';
 import { AppError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
+
+type InvoiceOcrMode = 'local' | 'auto' | 'llm';
+
+interface OcrOutcome {
+  ocrMethod: OcrMethod;
+  recognized: OcrRecognizedResult;
+  confidence?: number;
+  warnings?: string[];
+  engine?: 'local_text' | 'local_tesseract' | 'llm' | 'excel';
+}
+
+// 本地解析达到该分数就不再调用 LLM；分数综合了字段完整度、金额勾稽和 OCR 置信度。
+const LOCAL_TEXT_ACCEPT_CONFIDENCE = 0.72;
+const LOCAL_OCR_ACCEPT_CONFIDENCE = 0.62;
+const OCR_MODE_SETTING_KEY = 'invoice_ocr_mode';
+
+let supplierCache: { at: number; value: KnownSupplier[] } | null = null;
 
 // 魔数（文件签名）校验：仅凭扩展名/MIME 不可信，磁盘落地后读取首字节核对真实类型，
 // 阻止伪造扩展名的恶意字节流到达 pdf-parse / sharp / xlsx 解析器。
@@ -184,6 +204,100 @@ export const ocrService = {
     }
   },
 
+  async getOcrMode(): Promise<InvoiceOcrMode> {
+    try {
+      const value = (await SettingModel.get(OCR_MODE_SETTING_KEY))?.trim().toLowerCase();
+      if (value === 'local' || value === 'auto' || value === 'llm') return value;
+    } catch (err) {
+      logger.warn('读取发票 OCR 模式失败，使用 auto:', err);
+    }
+    return 'auto';
+  },
+
+  async getKnownSuppliers(): Promise<KnownSupplier[]> {
+    if (supplierCache && Date.now() - supplierCache.at < 60_000) return supplierCache.value;
+    try {
+      const { items } = await SupplierModel.findAll({ isActive: true, pageSize: 1000 });
+      const value = items.map((supplier) => ({
+        id: supplier.id,
+        name: supplier.name,
+        code: supplier.code,
+      }));
+      supplierCache = { at: Date.now(), value };
+      return value;
+    } catch (err) {
+      logger.warn('加载供应商列表失败，本地发票解析将无法校准供应商名称:', err);
+      return [];
+    }
+  },
+
+  async hasLlmProvider(): Promise<boolean> {
+    try {
+      await llmService.getProvider('ocr');
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
+  async getStatus() {
+    const [mode, local, llmConfigured] = await Promise.all([
+      this.getOcrMode(),
+      localInvoiceOcr.getStatus(),
+      this.hasLlmProvider(),
+    ]);
+    return { mode, llmConfigured, local };
+  },
+
+  buildLocalTextOutcome(text: string, suppliers: KnownSupplier[]): OcrOutcome {
+    const parsed = localInvoiceOcr.parseText(text, suppliers);
+    return {
+      ocrMethod: 'text_extract',
+      recognized: this.normalizeRecognized(parsed.recognized),
+      confidence: parsed.confidence,
+      warnings: parsed.diagnostics.warnings,
+      engine: 'local_text',
+    };
+  },
+
+  async tryLocalOcr(
+    filePath: string,
+    fileType: 'image' | 'pdf',
+    suppliers: KnownSupplier[]
+  ): Promise<OcrOutcome | null> {
+    try {
+      const status = await localInvoiceOcr.getStatus();
+      if (!status.available) return null;
+      if (fileType === 'pdf' && !status.pdfRenderer.available) return null;
+
+      const parsed = await localInvoiceOcr.recognizeInvoice(filePath, fileType, suppliers);
+      return {
+        ocrMethod: 'local_ocr',
+        recognized: this.normalizeRecognized(parsed.recognized),
+        confidence: parsed.confidence,
+        warnings: parsed.diagnostics.warnings,
+        engine: 'local_tesseract',
+      };
+    } catch (err) {
+      logger.warn(`本地 OCR 失败，尝试其他识别方式: ${(err as Error).message}`);
+      return null;
+    }
+  },
+
+  async processPdfWithVision(filePath: string): Promise<OcrRecognizedResult> {
+    try {
+      const page = await localInvoiceOcr.renderPdfPageForVision(filePath);
+      return await this.processImageBase64(page.base64, page.mimeType);
+    } catch (err) {
+      logger.warn('扫描版 PDF 转图片失败:', err);
+      throw new AppError(
+        422,
+        'OCR_UNAVAILABLE',
+        '扫描版 PDF 需要 poppler-utils（pdftoppm）才能识别；请在服务器安装后重试，或直接上传图片/Excel。'
+      );
+    }
+  },
+
   async processFile(
     filePath: string,
     userId: number
@@ -193,26 +307,33 @@ export const ocrService = {
     recognized: OcrRecognizedResult;
     filePath: string;
     fileType: FileType;
+    ocrConfidence?: number;
+    ocrWarnings?: string[];
+    ocrEngine?: string;
   }> {
     const fileType = this.detectFileType(filePath);
-    let ocrMethod: OcrMethod;
-    let recognized: OcrRecognizedResult;
+    const mode = await this.getOcrMode();
+    let outcome: OcrOutcome;
 
     switch (fileType) {
       case 'pdf':
-        ({ ocrMethod, recognized } = await this.processPdf(filePath));
+        outcome = await this.processPdf(filePath, mode);
         break;
       case 'image':
-        ocrMethod = 'ai_vision';
-        recognized = await this.processImage(filePath);
+        outcome = await this.processImage(filePath, mode);
         break;
       case 'excel':
-        ocrMethod = 'excel_parse';
-        recognized = excelService.parseInvoice(filePath);
+        outcome = {
+          ocrMethod: 'excel_parse',
+          recognized: excelService.parseInvoice(filePath),
+          engine: 'excel',
+        };
         break;
       default:
         throw new Error(`不支持的文件类型: ${fileType}`);
     }
+
+    const recognized = outcome.recognized;
 
     // 先解析供应商：商品匹配要用 supplierId 查「供应商别名学习」映射，故必须排在匹配之前
     let supplierId: number | null = null;
@@ -239,8 +360,15 @@ export const ocrService = {
       grand_total: recognized.grandTotal,
       file_path: relativePath,
       file_type: fileType,
-      ocr_method: ocrMethod,
-      ocr_raw_result: JSON.stringify(recognized),
+      ocr_method: outcome.ocrMethod,
+      ocr_raw_result: JSON.stringify({
+        ...recognized,
+        _ocr: {
+          engine: outcome.engine,
+          confidence: outcome.confidence ?? null,
+          warnings: outcome.warnings || [],
+        },
+      }),
       status: 'pending',
       uploaded_by: userId,
     });
@@ -268,30 +396,88 @@ export const ocrService = {
 
     return {
       invoiceId,
-      ocrMethod,
+      ocrMethod: outcome.ocrMethod,
       recognized,
       filePath: relativePath,
       fileType,
+      ocrConfidence: outcome.confidence,
+      ocrWarnings: outcome.warnings,
+      ocrEngine: outcome.engine,
     };
   },
 
-  async processPdf(filePath: string): Promise<{ ocrMethod: OcrMethod; recognized: OcrRecognizedResult }> {
+  async processPdf(filePath: string, mode: InvoiceOcrMode = 'auto'): Promise<OcrOutcome> {
     const { text, hasText } = await pdfService.extractText(filePath);
+    const suppliers = await this.getKnownSuppliers();
+    const llmAvailable = mode !== 'local' && (await this.hasLlmProvider());
+    let localText: OcrOutcome | null = null;
+    let localOcr: OcrOutcome | null = null;
 
     if (hasText) {
-      // 文本型 PDF → 先尝试模板，再用 LLM 解析
-      try {
-        const recognized = await this.parseTextWithLlm(text);
-        return { ocrMethod: 'text_extract', recognized };
-      } catch (err) {
-        logger.warn('PDF 文本 LLM 解析失败，降级为 Vision:', err);
+      localText = this.buildLocalTextOutcome(text, suppliers);
+
+      if (mode === 'local') {
+        if (localText.recognized.items.length > 0) return localText;
+      } else if (mode === 'auto') {
+        if (
+          localText.recognized.items.length > 0 &&
+          (localText.confidence || 0) >= LOCAL_TEXT_ACCEPT_CONFIDENCE
+        ) {
+          return localText;
+        }
+      }
+
+      if (llmAvailable) {
+        try {
+          return {
+            ocrMethod: 'text_extract',
+            recognized: await this.parseTextWithLlm(text),
+            engine: 'llm',
+          };
+        } catch (err) {
+          logger.warn('PDF 文本 LLM 解析失败，尝试本地兜底:', err);
+          if (localText.recognized.items.length > 0) return localText;
+        }
+      } else if (localText.recognized.items.length > 0) {
+        return localText;
       }
     }
 
-    // 扫描型 PDF 或文本解析失败 → 转图片用 Vision
-    const base64 = await pdfService.toBase64(filePath);
-    const recognized = await this.processImageBase64(base64);
-    return { ocrMethod: 'ai_vision', recognized };
+    // 扫描型 PDF、文本层不可用，或本地文本解析失败 → 本地 OCR / Vision
+    if (mode !== 'llm') {
+      localOcr = await this.tryLocalOcr(filePath, 'pdf', suppliers);
+      if (localOcr && (mode === 'local' || !llmAvailable || (localOcr.confidence || 0) >= LOCAL_OCR_ACCEPT_CONFIDENCE)) {
+        return localOcr;
+      }
+    }
+
+    if (llmAvailable) {
+      try {
+        return { ocrMethod: 'ai_vision', recognized: await this.processPdfWithVision(filePath), engine: 'llm' };
+      } catch (err) {
+        logger.warn('PDF Vision 识别失败，尝试本地 OCR 兜底:', err);
+      }
+    }
+
+    if (!localOcr) {
+      localOcr = await this.tryLocalOcr(filePath, 'pdf', suppliers);
+    }
+    if (localOcr && localOcr.recognized.items.length > 0) return localOcr;
+    if (localText && localText.recognized.items.length > 0) return localText;
+
+    const status = await localInvoiceOcr.getStatus();
+    if (!status.available) {
+      throw new AppError(
+        503,
+        'OCR_UNAVAILABLE',
+        `无法识别该 PDF：未配置 AI 提供商，且服务器未安装本地 OCR。${status.installHint}`
+      );
+    }
+    throw new AppError(
+      422,
+      'OCR_FAILED',
+      `未从 PDF 中识别出商品明细。${localOcr?.warnings?.[0] || '请上传更清晰的扫描件，或改用 Excel。'}`
+    );
   },
 
   async parseTextWithLlm(text: string): Promise<OcrRecognizedResult> {
@@ -302,9 +488,51 @@ export const ocrService = {
     return this.parseAiResponse(response, text);
   },
 
-  async processImage(filePath: string): Promise<OcrRecognizedResult> {
-    const prepared = await this.prepareImageForVision(filePath);
-    return this.processImageBase64(prepared.base64, prepared.mimeType);
+  async processImage(filePath: string, mode: InvoiceOcrMode = 'auto'): Promise<OcrOutcome> {
+    const suppliers = await this.getKnownSuppliers();
+    const llmAvailable = mode !== 'local' && (await this.hasLlmProvider());
+    let localOcr: OcrOutcome | null = null;
+
+    if (mode !== 'llm') {
+      localOcr = await this.tryLocalOcr(filePath, 'image', suppliers);
+      if (localOcr && localOcr.recognized.items.length > 0) {
+        if (mode === 'local' || !llmAvailable || (localOcr.confidence || 0) >= LOCAL_OCR_ACCEPT_CONFIDENCE) {
+          return localOcr;
+        }
+      }
+    }
+
+    if (llmAvailable) {
+      try {
+        const prepared = await this.prepareImageForVision(filePath);
+        return {
+          ocrMethod: 'ai_vision',
+          recognized: await this.processImageBase64(prepared.base64, prepared.mimeType),
+          engine: 'llm',
+        };
+      } catch (err) {
+        logger.warn('图片 Vision 识别失败，尝试本地 OCR 兜底:', err);
+      }
+    }
+
+    if (!localOcr) {
+      localOcr = await this.tryLocalOcr(filePath, 'image', suppliers);
+    }
+    if (localOcr && localOcr.recognized.items.length > 0) return localOcr;
+
+    const status = await localInvoiceOcr.getStatus();
+    if (!status.available) {
+      throw new AppError(
+        503,
+        'OCR_UNAVAILABLE',
+        `无法识别该图片：未配置 AI 提供商，且服务器未安装本地 OCR。${status.installHint}`
+      );
+    }
+    throw new AppError(
+      422,
+      'OCR_FAILED',
+      `未从图片中识别出商品明细。${localOcr?.warnings?.[0] || '请上传更清晰、摆正的发票照片。'}`
+    );
   },
 
   async processImageBase64(base64: string, mimeType: string = 'image/jpeg'): Promise<OcrRecognizedResult> {

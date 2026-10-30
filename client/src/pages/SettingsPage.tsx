@@ -20,6 +20,7 @@ import {
   updateAiProvider,
 } from "../api/aiProviders";
 import { getSettings, updateSettings } from "../api/settings";
+import { getOcrStatus, type OcrStatus } from "../api/invoices";
 import { getProductAliases, deleteProductAlias, type ProductAlias } from "../api/productAliases";
 import type { AiProvider } from "../types";
 import { Card, CardHeader } from "../components/ui/Card";
@@ -82,6 +83,7 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [providers, setProviders] = useState<AiProvider[]>([]);
   const [aliases, setAliases] = useState<ProductAlias[]>([]);
+  const [ocrStatus, setOcrStatus] = useState<OcrStatus | null>(null);
   const [providerForm, setProviderForm] = useState<ProviderForm>(defaultProviderForm);
   const [providerDrawerOpen, setProviderDrawerOpen] = useState(false);
   const [savingProvider, setSavingProvider] = useState(false);
@@ -97,15 +99,17 @@ export default function SettingsPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const [settingRes, providerRes, aliasRes] = await Promise.all([
+      const [settingRes, providerRes, aliasRes, ocrRes] = await Promise.all([
         getSettings(),
         getAiProviders(),
         // 别名学习列表失败不应阻塞设置页其余内容
         getProductAliases().catch(() => []),
+        getOcrStatus().catch(() => null),
       ]);
       setSettings(settingRes);
       setProviders(providerRes);
       setAliases(aliasRes);
+      setOcrStatus(ocrRes);
     } catch (err: unknown) {
       showError(err, "加载设置失败");
     } finally {
@@ -376,6 +380,34 @@ export default function SettingsPage() {
                     setSettings({ ...settings, assistant_snapshot_ttl_seconds: e.target.value })
                   }
                 />
+              </Field>
+              <Field
+                label="发票识别模式"
+                htmlFor="setting-ocr-mode"
+                hint={
+                  <span>
+                    auto：本地解析优先，置信度低才调用 AI；local：完全不用 AI；llm：保持 AI 优先。
+                    <br />
+                    本地 OCR：
+                    {ocrStatus
+                      ? ocrStatus.local.available
+                        ? `${ocrStatus.local.version ? `Tesseract ${ocrStatus.local.version}` : "Tesseract"} · ${ocrStatus.local.requestedLanguages}${
+                            ocrStatus.local.pdfRenderer.available ? "" : "（扫描 PDF 未安装 pdftoppm）"
+                          }`
+                        : "未安装（无需 AI 的图片/扫描件识别将不可用）"
+                      : "检测中…"}
+                  </span>
+                }
+              >
+                <Select
+                  id="setting-ocr-mode"
+                  value={settings.invoice_ocr_mode || "auto"}
+                  onChange={(e) => setSettings({ ...settings, invoice_ocr_mode: e.target.value })}
+                >
+                  <option value="auto">自动（本地优先，低置信度用 AI）</option>
+                  <option value="local">仅本地（不调用任何 AI）</option>
+                  <option value="llm">LLM 优先</option>
+                </Select>
               </Field>
             </div>
             <div className="mt-4 flex justify-end border-t border-line pt-4">

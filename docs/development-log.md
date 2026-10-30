@@ -468,3 +468,65 @@
 - 前端：`tsc --noEmit` 0 错；`vitest` 23 通过。
 - 真实 MySQL（migration 025）冒烟：资料库生成 42 商品 / 16 低库存 / 3 过期批次 / 18 临期 / 5 待确认发票 / 应付 $38,702.21；补货、预警、临期、销售、应付回答均返回真实数字。
 - 公开演示：demo 构建成功，本地助手单测 4 条通过。
+
+---
+
+## 2026-10-30 — 无需 AI API 的本地发票 OCR（迁移 026）
+
+### 0. 本轮目标
+
+把发票识别从「必须配置 AI 提供商」改成**本地优先**：文本 PDF 走规则解析，图片/扫描件走本机 Tesseract OCR，结果由确定性解析器整理后写入 `invoices / invoice_items`。原 LLM/Vision 能力保留为可选增强，AI 失败自动回退本地。
+
+### 1. 背景与选型
+
+- Tesseract 是 Apache-2.0 开源项目（源码与训练数据公开），不需要逆向分析；直接调用系统 CLI 即可。
+- 选择 CLI 而非 tesseract.js/ONNX：进程隔离、内存可控（生产 VPS 仅 961MB）、不增加 Node 原生依赖。
+- 轻量部署：`tesseract-ocr` + `eng` + `chi_sim` + `poppler-utils` 合计约十余 MB；不装语言包时自动退回 `eng`。
+
+### 2. 插件结构（`server/src/ocr/`）
+
+- `types.ts`：`OcrDocument / OcrPage / OcrLine / OcrWord`，统一「文字 + 坐标」模型。
+- `document.ts`：Tesseract TSV 解析、文本型 PDF 的伪坐标文档、视觉行合并、中文词拼接。
+- `tesseract.provider.ts`：二进制检测（60s 缓存）、Sharp 灰度/归一化/锐化预处理、`pdftoppm` 渲染扫描 PDF、超时与临时目录清理。
+- `invoice-parser.ts`：纯函数解析器（无 DB / 无二进制依赖）：
+  - 行尾三个数字反推数量/单价/金额，兼容两行式发票与列漂移；
+  - 中英文名称拆分、条码、货号、单位、E/H 税码；
+  - 供应商名称用数据库已有名称校准；
+  - `Subtotal/HST/Total`、`小计/税额/总计` 识别并做明细勾稽；
+  - 输出置信度与 warnings（低置信度不静默）。
+- `index.ts`：插件门面 `localInvoiceOcr.recognizeInvoice / parseText / getStatus`。
+
+### 3. 识别流程与模式
+
+`ocr.service.processFile` 按 `invoice_ocr_mode` 选择：
+
+| 模式 | 行为 |
+| --- | --- |
+| `auto`（默认） | 本地解析优先；置信度低于阈值且配置了 AI 才调用 LLM；LLM 失败回退本地 |
+| `local` | 只用文本解析 + Tesseract，绝不调用 AI |
+| `llm` | 保持原 AI 优先；本地作为兜底 |
+
+- 文本 PDF：`pdf-parse` → 规则解析；低置信度才走 LLM。
+- 图片：Tesseract → TSV → 规则解析。
+- 扫描 PDF：`pdftoppm`（300dpi，最多 3 页）→ Tesseract；原先把 PDF 字节当 JPEG 发给 Vision 的问题一并修正为「渲染第一页再发」。
+- 落库仍走统一链路：供应商匹配 → 别名学习 → 商品匹配 → `InvoiceModel.create` → `InvoiceItemModel.createMany`。
+
+### 4. API / 设置 / 前端
+
+- `invoices.ocr_method` 增加 `local_ocr`；迁移 026；默认 `invoice_ocr_mode=auto`。
+- 新增 `GET /api/v1/invoices/ocr/status`（管理员）：返回模式、LLM 是否配置、Tesseract 版本/语言、poppler 是否可用、安装提示。
+- 上传响应新增 `ocrEngine / ocrConfidence / ocrWarnings`；`ocr_raw_result` 增加 `_ocr` 元数据。
+- 系统设置新增「发票识别模式」，并展示本机 OCR 检测结果。
+- 发票上传页显示「本地 OCR（无需 AI）」「PDF 文本解析」「AI 视觉识别」等中文标签与置信度，warnings 写入上传日志。
+
+### 5. 部署
+
+- `scripts/install-ocr-deps.sh`：Ubuntu/Debian 安装 tesseract、eng/chi_sim、poppler-utils。
+- `scripts/deploy.sh` 部署时检测并打印 Tesseract / poppler 状态；缺失只告警不中断。
+- 详细说明见 `docs/local-ocr.md`。
+
+### 6. 测试
+
+- 新增 `server/src/ocr/invoice-parser.test.ts` 6 条：单行英文发票、两行式发票、中文发票、无表头兜底、文本文档、TSV 重建。
+- `ocr.service.test.ts` 增加本地文本入口用例；后端共 **88 条测试通过**，`tsc --noEmit` 0 错。
+- 前端 `tsc --noEmit` 0 错。

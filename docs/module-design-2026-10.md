@@ -251,3 +251,45 @@ MySQL ──(并行聚合, 60s TTL)──> knowledge.snapshot
 ### 9.5 公开演示
 
 `client/src/demo/assistant.ts` 在浏览器内用同一套意图与答案结构复刻本地助手，读取 `localStorage` 演示数据集。GitHub Pages 上 `/ai/knowledge`、`/ai/alerts`、`/ai/report`、`/ai/chat` 均由该模块响应；`mode=llm` 返回明确的降级提示，避免演示环境伪装成有 LLM。
+
+---
+
+## 10. 2026-10-30 增补：本地发票 OCR 插件（迁移 026）
+
+### 10.1 目标与非目标
+
+- **目标**：未配置任何 AI API 时，PDF/图片发票仍能识别出供应商、单号、日期、明细和金额，并写入 `invoices / invoice_items`。
+- **非目标**：不训练自有 OCR 模型，不做版式生成式理解；复杂手写发票仍建议人工核对或使用 LLM。
+- **约束**：生产 VPS 961MB 内存，不能把 OCR 运行时塞进 Node 进程；部署必须可回滚、可缺省。
+
+### 10.2 分层
+
+| 层 | 文件 | 职责 |
+| --- | --- | --- |
+| 引擎层 | `ocr/tesseract.provider.ts` | 调用 Tesseract / pdftoppm，输出 `OcrDocument`（文字+坐标+置信度） |
+| 解析层 | `ocr/invoice-parser.ts` | 纯函数：表头/明细/金额/供应商/日期，输出 `OcrRecognizedResult` + 置信度 + warnings |
+| 编排层 | `services/ocr.service.ts` | 模式选择、LLM 兜底、供应商与商品匹配、落库 |
+| 展示层 | 上传页 / 设置页 / `GET /invoices/ocr/status` | 模式配置、引擎状态、置信度与警告 |
+
+引擎可替换：解析层只依赖 `OcrDocument`，接 PaddleOCR/RapidOCR 时只需新增一个 provider。
+
+### 10.3 解析策略
+
+1. **不信任表头坐标**：优先用「商品名 + 行尾数字」解析每行；坐标列解析作为交叉校验，仅在列解析得到更多明细时采用。
+2. **两行式布局**：名称行先缓存（`pendingDescription`），下一行只有数字时合并。
+3. **金额勾稽**：`Σ lineTotal` 与 `Subtotal/Sales Total` 或 `Total - Tax` 比较，容差 max($1, 1%)；不一致写 warning，不阻断入库。
+4. **供应商校准**：先用数据库 `suppliers.name` 做规范化包含匹配；匹配成功直接返回库中名称，后续 `SupplierModel.findByName` 与别名学习不受 OCR 错字影响。
+5. **置信度**：字段完整度 0.35 + 供应商 0.15 + 单号 0.10 + 日期 0.05 + 总额 0.10 + 勾稽 0.15 + OCR 0.10；低于 0.72（文本）/0.62（OCR）时才考虑 LLM。
+
+### 10.4 模式与降级
+
+- `auto`：本地优先，低置信度且存在 `purpose=ocr` 提供商时调用 LLM；LLM 异常回退本地结果。
+- `local`：即使 LLM 已配置也不调用；本地无明细时返回 422 并说明原因。
+- `llm`：AI 优先；AI 失败后尝试本地 OCR / 文本解析，避免整单失败。
+- 本地引擎不可用且无 LLM：返回 503 `OCR_UNAVAILABLE`，附安装命令，不创建空发票。
+
+### 10.5 安全与运维
+
+- `execFile` 传参、无 shell；临时目录 `mkdtemp` 且 finally 清理；单页 120s 超时、TSV 32MB 上限、扫描 PDF 最多 3 页。
+- 语言包缺失自动退回 `eng`；`TESSERACT_BIN/PDFTOPPM_BIN/TESSERACT_LANG/TESSERACT_PSM` 可覆盖。
+- 迁移 026 只扩展枚举与 settings，可回滚；回滚时 `local_ocr` 历史行改写为 `text_extract`。

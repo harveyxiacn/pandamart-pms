@@ -186,13 +186,21 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 |------|------|------|------|
 | file | File | ✅ | 发票文件（PDF/JPG/PNG/XLSX） |
 
+**识别模式**（系统设置 `invoice_ocr_mode`）：
+- `auto`（默认）：Excel/文本 PDF/本地 OCR 优先，置信度低且已配置 AI 时才调用 LLM。
+- `local`：只使用本地解析 + Tesseract，不产生外部调用。
+- `llm`：保持 AI 优先，本地作为失败兜底。
+
 **成功响应 (200)：**
 ```json
 {
   "success": true,
   "data": {
     "invoiceId": 42,
-    "ocrMethod": "ai_vision",
+    "ocrMethod": "local_ocr",
+    "ocrEngine": "local_tesseract",
+    "ocrConfidence": 0.86,
+    "ocrWarnings": [],
     "recognized": {
       "supplierName": "CBS",
       "supplierCode": null,
@@ -414,6 +422,33 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
 > 返回原始文件流（PDF/图片/Excel），用于前端对照查看。
 > 店员仅可访问 `pending` 状态发票的原始文件；历史已确认/已驳回发票原件仅管理员可访问。
+
+### 3.7 查询发票识别能力
+👤 `GET /api/v1/invoices/ocr/status`（仅管理员）
+
+返回当前识别模式、是否配置了 LLM，以及本地 OCR 引擎检测结果：
+
+```json
+{
+  "success": true,
+  "data": {
+    "mode": "auto",
+    "llmConfigured": false,
+    "local": {
+      "available": true,
+      "engine": "tesseract",
+      "version": "5.3.4",
+      "languages": ["eng", "chi_sim", "osd"],
+      "requestedLanguages": "eng+chi_sim",
+      "pdfRenderer": { "available": true, "binary": "pdftoppm" },
+      "message": "本地 OCR 可用（Tesseract 5.3.4，语言 eng+chi_sim）",
+      "installHint": "Ubuntu/Debian: apt-get install -y tesseract-ocr ..."
+    }
+  }
+}
+```
+
+`local.available=false` 时，图片/扫描版 PDF 会自动尝试 LLM（如果已配置）；两者都不可用则返回 `503 OCR_UNAVAILABLE`。
 
 ---
 

@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../../i18n";
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
@@ -19,6 +20,7 @@ interface TrendProps {
 }
 
 export function Trend({ current, previous, label, positiveGood = true, className }: TrendProps) {
+  useLanguage();
   const pct = percentChange(current, previous);
   if (pct === null) {
     return <span className={cn("text-meta text-ink-subtle", className)}>—{label ? ` ${label}` : ""}</span>;
@@ -26,8 +28,7 @@ export function Trend({ current, previous, label, positiveGood = true, className
   if (pct === 0) {
     return (
       <span className={cn("inline-flex items-center gap-1 text-meta text-ink-subtle", className)}>
-        <Minus size={12} aria-hidden="true" />
-        持平{label ? ` · ${label}` : ""}
+        <Minus size={12} aria-hidden="true" />{t("持平")}{label ? ` · ${label}` : ""}
       </span>
     );
   }
@@ -71,6 +72,7 @@ interface StatCardProps {
 }
 
 function Sparkline({ values }: { values: number[] }) {
+  useLanguage();
   if (values.length < 2) return null;
   const max = Math.max(...values);
   const min = Math.min(...values);
@@ -114,6 +116,7 @@ export function StatCard({
   sparkline,
   className,
 }: StatCardProps) {
+  useLanguage();
   const body = (
     <>
       <div className="flex items-start justify-between gap-3">

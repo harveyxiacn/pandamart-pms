@@ -1,3 +1,4 @@
+import { getLocale } from "../../i18n";
 import type { ReactNode } from "react";
 import { cn } from "../../utils/classnames";
 
@@ -61,7 +62,7 @@ export function ChartTooltip({
               {row.name ?? row.dataKey}
             </span>
             <span className="font-semibold tabular text-ink">
-              {valueFormatter ? valueFormatter(Number(row.value)) : Number(row.value).toLocaleString("zh-CN")}
+              {valueFormatter ? valueFormatter(Number(row.value)) : Number(row.value).toLocaleString(getLocale())}
             </span>
           </div>
         ))}

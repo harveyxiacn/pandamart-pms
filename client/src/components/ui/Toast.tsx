@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../../i18n";
 import {
   createContext,
   useCallback,
@@ -39,6 +40,7 @@ const toneIcon: Record<ToastTone, typeof CheckCircle2> = {
 };
 
 export function ToastProvider({ children }: PropsWithChildren) {
+  useLanguage();
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const idRef = useRef(0);
 
@@ -88,7 +90,7 @@ export function ToastProvider({ children }: PropsWithChildren) {
               <span className="flex-1 break-words leading-5">{toast.message}</span>
               <button
                 type="button"
-                aria-label="关闭通知"
+                aria-label={t("关闭通知")}
                 className="shrink-0 rounded p-0.5 text-current/70 transition-colors hover:bg-black/5"
                 onClick={() => remove(toast.id)}
               >

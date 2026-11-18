@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../../i18n";
 import { cn } from "../../utils/classnames";
 
 interface SkeletonProps {
@@ -5,6 +6,7 @@ interface SkeletonProps {
 }
 
 export function Skeleton({ className }: SkeletonProps) {
+  useLanguage();
   return (
     <div
       className={cn(
@@ -22,6 +24,7 @@ interface SkeletonCardProps {
 }
 
 export function SkeletonCard({ className }: SkeletonCardProps) {
+  useLanguage();
   return (
     <div className={cn("surface space-y-3 p-5", className)}>
       <div className="flex items-center justify-between">
@@ -41,8 +44,9 @@ interface SkeletonTableProps {
 }
 
 export function SkeletonTable({ rows = 5, columns = 5, className }: SkeletonTableProps) {
+  useLanguage();
   return (
-    <div className={cn("overflow-hidden rounded-xl border border-line", className)} role="status" aria-label="正在加载">
+    <div className={cn("overflow-hidden rounded-xl border border-line", className)} role="status" aria-label={t("正在加载")}>
       <div className="flex gap-3 border-b border-line bg-surface-muted px-3 py-2.5">
         {Array.from({ length: columns }).map((_, index) => (
           <Skeleton key={`head-${index}`} className="h-3 flex-1" />

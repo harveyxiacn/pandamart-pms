@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../../i18n";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "./Button";
 import { Select } from "./Select";
@@ -33,6 +34,7 @@ export function Pagination({
   onPageSizeChange,
   pageSizeOptions = [10, 20, 50, 100],
 }: PaginationProps) {
+  useLanguage();
   const totalPages = Math.max(1, Math.ceil(total / Math.max(1, pageSize)));
   const currentPage = Math.min(Math.max(1, page), totalPages);
   const from = total === 0 ? 0 : (currentPage - 1) * pageSize + 1;
@@ -40,13 +42,11 @@ export function Pagination({
 
   return (
     <nav
-      aria-label="分页"
+      aria-label={t("分页")}
       className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-1 pt-3 text-meta text-ink-muted"
     >
-      <p className="tabular" aria-live="polite">
-        显示 <span className="font-medium text-ink">{from}–{to}</span>，共{" "}
-        <span className="font-medium text-ink">{total}</span> 条
-      </p>
+      <p className="tabular" aria-live="polite">{t("显示")} <span className="font-medium text-ink">{from}–{to}</span> {t("，共")}{" "}
+        <span className="font-medium text-ink">{total}</span> {t("条")}</p>
 
       <div className="flex items-center gap-2">
         {onPageSizeChange ? (
@@ -54,12 +54,10 @@ export function Pagination({
             className="w-[7.25rem]"
             value={pageSize}
             onChange={(event) => onPageSizeChange(Number(event.target.value))}
-            aria-label="每页条数"
+            aria-label={t("每页条数")}
           >
             {pageSizeOptions.map((option) => (
-              <option key={option} value={option}>
-                每页 {option} 条
-              </option>
+              <option key={option} value={option}>{t("每页")} {option} {t("条")}</option>
             ))}
           </Select>
         ) : null}
@@ -69,7 +67,7 @@ export function Pagination({
             variant="ghost"
             size="sm"
             iconOnly
-            aria-label="上一页"
+            aria-label={t("上一页")}
             disabled={currentPage <= 1}
             onClick={() => onPageChange(currentPage - 1)}
           >
@@ -85,7 +83,7 @@ export function Pagination({
               <button
                 key={item}
                 type="button"
-                aria-label={`第 ${item} 页`}
+                aria-label={t("第 {0} 页", item)}
                 aria-current={item === currentPage ? "page" : undefined}
                 onClick={() => onPageChange(item)}
                 className={cn(
@@ -104,7 +102,7 @@ export function Pagination({
             variant="ghost"
             size="sm"
             iconOnly
-            aria-label="下一页"
+            aria-label={t("下一页")}
             disabled={currentPage >= totalPages}
             onClick={() => onPageChange(currentPage + 1)}
           >

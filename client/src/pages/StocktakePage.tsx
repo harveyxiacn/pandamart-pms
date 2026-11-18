@@ -1,3 +1,5 @@
+import { formatNumber } from "../utils/formatters";
+import { productName, t, useLanguage } from "../i18n";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowUpDown,
@@ -28,6 +30,7 @@ type DraftItem = {
 };
 
 export default function StocktakePage() {
+  useLanguage();
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [keyword, setKeyword] = useState("");
   const [draft, setDraft] = useState<Record<number, DraftItem>>({});
@@ -55,7 +58,7 @@ export default function StocktakePage() {
         return next;
       });
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "盘点数据加载失败");
+      setError(err instanceof Error ? err.message : t("盘点数据加载失败"));
     } finally {
       setLoading(false);
     }
@@ -77,7 +80,7 @@ export default function StocktakePage() {
           systemQuantity: item.quantity,
           notes: row?.notes || "",
           changed: actualQuantity !== item.quantity,
-          productName: item.product.nameZh || item.product.nameEn,
+          productName: productName(item.product.nameZh, item.product.nameEn),
         };
       })
       .filter((row) => row.changed);
@@ -97,13 +100,13 @@ export default function StocktakePage() {
     }
     setDraft(reset);
     setGlobalNotes("");
-    setMessage("已重置盘点草稿。");
+    setMessage(t("已重置盘点草稿。"));
     setError(null);
   };
 
   const submit = async () => {
     if (changedItems.length === 0) {
-      setMessage("没有变化，无需提交。");
+      setMessage(t("没有变化，无需提交。"));
       return;
     }
     setSaving(true);
@@ -119,10 +122,10 @@ export default function StocktakePage() {
           notes: item.notes,
         })),
       });
-      setMessage(`盘点完成：已调整 ${result.adjustedCount} 个产品。`);
+      setMessage(t("盘点完成：已调整 {0} 个产品。", result.adjustedCount));
       await load();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "提交盘点失败");
+      setError(err instanceof Error ? err.message : t("提交盘点失败"));
     } finally {
       setSaving(false);
     }
@@ -131,37 +134,35 @@ export default function StocktakePage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="库存盘点"
-        description="逐项录入实际库存，提交后系统会按差异调整库存并记录盘点日志。"
-        meta={loading ? "正在加载盘点明细…" : `本次载入 ${inventory.length} 个商品`}
+        title={t("库存盘点")}
+        description={t("逐项录入实际库存，提交后系统会按差异调整库存并记录盘点日志。")}
+        meta={loading ? t("正在加载盘点明细…") : t("本次载入 {0} 个商品", inventory.length)}
         actions={
-          <Button leadingIcon={Save} onClick={() => void submit()} loading={saving} disabled={loading}>
-            提交盘点
-          </Button>
+          <Button leadingIcon={Save} onClick={() => void submit()} loading={saving} disabled={loading}>{t("提交盘点")}</Button>
         }
       />
 
       <section className="grid gap-3 sm:grid-cols-3">
         <StatCard
-          label="变更条目"
+          label={t("变更条目")}
           value={changedItems.length}
           icon={ClipboardCheck}
           tone={changedItems.length > 0 ? "accent" : "neutral"}
-          hint={`盘盈 ${surplusCount} · 盘亏 ${shortageCount}`}
+          hint={t("盘盈 {0} · 盘亏 {1}", surplusCount, shortageCount)}
         />
         <StatCard
-          label="净差异"
+          label={t("净差异")}
           value={`${netDifference > 0 ? "+" : ""}${netDifference}`}
           icon={ArrowUpDown}
           tone={netDifference === 0 ? "neutral" : netDifference > 0 ? "success" : "danger"}
-          hint="实际库存 − 系统库存"
+          hint={t("实际库存 − 系统库存")}
         />
         <StatCard
-          label="未变更商品"
+          label={t("未变更商品")}
           value={Math.max(inventory.length - changedItems.length, 0)}
           icon={PackageSearch}
           tone="neutral"
-          hint="账面与实物一致"
+          hint={t("账面与实物一致")}
         />
       </section>
 
@@ -176,18 +177,14 @@ export default function StocktakePage() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter") void load();
                 }}
-                placeholder="产品名 / SKU"
-                aria-label="按产品关键词查询"
+                placeholder={t("产品名 / SKU")}
+                aria-label={t("按产品关键词查询")}
               />
             </div>
-            <Button variant="secondary" onClick={() => void load()}>
-              查询
-            </Button>
+            <Button variant="secondary" onClick={() => void load()}>{t("查询")}</Button>
           </ToolbarGroup>
           <ToolbarGroup>
-            <Button variant="ghost" leadingIcon={RotateCcw} onClick={resetDraft} disabled={saving || loading}>
-              重置草稿
-            </Button>
+            <Button variant="ghost" leadingIcon={RotateCcw} onClick={resetDraft} disabled={saving || loading}>{t("重置草稿")}</Button>
           </ToolbarGroup>
         </Toolbar>
       </Card>
@@ -207,20 +204,17 @@ export default function StocktakePage() {
           className="flex flex-wrap items-center gap-3 rounded-xl border border-danger/20 bg-danger-soft px-4 py-2.5 text-sm text-danger"
         >
           <span className="flex-1">{error}</span>
-          <Button variant="ghost" size="sm" onClick={() => void load()}>
-            重试
-          </Button>
+          <Button variant="ghost" size="sm" onClick={() => void load()}>{t("重试")}</Button>
         </div>
       ) : null}
 
       <Card padded={false} className="p-4 sm:p-5">
         <CardHeader
-          title="盘点明细"
-          description="只提交有变化的条目，备注用于说明破损、报损或补记原因。"
+          title={t("盘点明细")}
+          description={t("只提交有变化的条目，备注用于说明破损、报损或补记原因。")}
           className="mb-3"
           action={
-            <span className="text-meta text-ink-subtle">
-              变更条目 <span className="font-semibold tabular text-ink">{changedItems.length}</span>
+            <span className="text-meta text-ink-subtle">{t("变更条目")} <span className="font-semibold tabular text-ink">{changedItems.length}</span>
             </span>
           }
         />
@@ -229,8 +223,8 @@ export default function StocktakePage() {
         {!loading && !error && inventory.length === 0 ? (
           <EmptyState
             icon={PackageSearch}
-            title="没有匹配的商品"
-            description="调整关键词后重新查询，或先在商品模块中建立商品档案。"
+            title={t("没有匹配的商品")}
+            description={t("调整关键词后重新查询，或先在商品模块中建立商品档案。")}
           />
         ) : null}
 
@@ -238,11 +232,11 @@ export default function StocktakePage() {
           <Table>
             <thead>
               <tr>
-                <Th>产品</Th>
-                <Th numeric>系统库存</Th>
-                <Th>实际库存</Th>
-                <Th numeric>差异</Th>
-                <Th>备注</Th>
+                <Th>{t("产品")}</Th>
+                <Th numeric>{t("系统库存")}</Th>
+                <Th>{t("实际库存")}</Th>
+                <Th numeric>{t("差异")}</Th>
+                <Th>{t("备注")}</Th>
               </tr>
             </thead>
             <tbody>
@@ -252,11 +246,11 @@ export default function StocktakePage() {
                 return (
                   <tr key={item.id}>
                     <Td>
-                      <p className="cell-strong">{item.product.nameZh || item.product.nameEn}</p>
+                      <p className="cell-strong">{productName(item.product.nameZh, item.product.nameEn)}</p>
                       <p className="font-mono text-meta text-ink-subtle">{item.product.sku || "—"}</p>
                     </Td>
                     <Td numeric className="text-ink-muted">
-                      {item.quantity} {item.unit}
+                      {formatNumber(Number(item.quantity))} {item.unit}
                     </Td>
                     <Td className="w-32">
                       <Input
@@ -264,7 +258,7 @@ export default function StocktakePage() {
                         min="0"
                         step="0.01"
                         value={row.actualQuantity}
-                        aria-label={`${item.product.nameZh || item.product.nameEn} 实际库存`}
+                        aria-label={t("{0} 实际库存", productName(item.product.nameZh, item.product.nameEn))}
                         onChange={(e) =>
                           setDraft((prev) => ({
                             ...prev,
@@ -291,14 +285,14 @@ export default function StocktakePage() {
                     <Td className="min-w-[12rem]">
                       <Input
                         value={row.notes}
-                        aria-label={`${item.product.nameZh || item.product.nameEn} 盘点备注`}
+                        aria-label={t("{0} 盘点备注", productName(item.product.nameZh, item.product.nameEn))}
                         onChange={(e) =>
                           setDraft((prev) => ({
                             ...prev,
                             [item.product.id]: { ...row, notes: e.target.value },
                           }))
                         }
-                        placeholder="例如：破损 / 报损 / 补记"
+                        placeholder={t("例如：破损 / 报损 / 补记")}
                         className="h-8"
                       />
                     </Td>
@@ -310,13 +304,13 @@ export default function StocktakePage() {
         ) : null}
 
         <div className="mt-4 grid gap-3 border-t border-line pt-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-          <Field label="全局备注" htmlFor="stocktake-notes" hint="本次盘点的整体说明，会写入盘点日志。">
+          <Field label={t("全局备注")} htmlFor="stocktake-notes" hint={t("本次盘点的整体说明，会写入盘点日志。")}>
             <Textarea
               id="stocktake-notes"
               value={globalNotes}
               onChange={(e) => setGlobalNotes(e.target.value)}
               rows={2}
-              placeholder="例如：10 月月末盘点，冷藏区温度异常已单独记录"
+              placeholder={t("例如：10 月月末盘点，冷藏区温度异常已单独记录")}
             />
           </Field>
           <div className="flex gap-2 sm:pb-0">
@@ -326,7 +320,7 @@ export default function StocktakePage() {
               disabled={loading || changedItems.length === 0}
               leadingIcon={Save}
             >
-              {saving ? "提交中…" : `提交盘点${changedItems.length ? ` (${changedItems.length})` : ""}`}
+              {saving ? t("提交中…") : t("提交盘点{0}", changedItems.length ? ` (${changedItems.length})` : "")}
             </Button>
           </div>
         </div>

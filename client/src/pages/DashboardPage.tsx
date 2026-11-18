@@ -1,3 +1,6 @@
+import { formatNumber } from "../utils/formatters";
+import { getLocale } from "../i18n";
+import { productName, t, useLanguage } from "../i18n";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -47,7 +50,7 @@ import { parseISODate } from "../utils/date";
 import { cn } from "../utils/classnames";
 import type { DashboardAlert, DashboardData } from "../types";
 
-const compactCurrency = new Intl.NumberFormat("en-US", {
+const compactCurrency = () => new Intl.NumberFormat(getLocale(), {
   style: "currency",
   currency: "USD",
   notation: "compact",
@@ -55,18 +58,18 @@ const compactCurrency = new Intl.NumberFormat("en-US", {
 });
 
 const alertTypeLabels: Record<string, string> = {
-  stockout_risk: "库存风险",
-  price_spike: "价格波动",
-  pending_invoice: "待处理发票",
-  expiring_batch: "临期批次",
-  slow_mover: "滞销商品",
-  cost_increase: "成本上升",
+  get stockout_risk() { return t("库存风险"); },
+  get price_spike() { return t("价格波动"); },
+  get pending_invoice() { return t("待处理发票"); },
+  get expiring_batch() { return t("临期批次"); },
+  get slow_mover() { return t("滞销商品"); },
+  get cost_increase() { return t("成本上升"); },
 };
 
 const severityMeta = {
-  high: { tone: "danger" as const, icon: AlertTriangle, label: "紧急" },
-  medium: { tone: "warning" as const, icon: Clock, label: "提醒" },
-  low: { tone: "default" as const, icon: CheckCircle2, label: "提示" },
+  high: { tone: "danger" as const, icon: AlertTriangle, get label() { return t("紧急"); } },
+  medium: { tone: "warning" as const, icon: Clock, get label() { return t("提醒"); } },
+  low: { tone: "default" as const, icon: CheckCircle2, get label() { return t("提示"); } },
 };
 
 function daysUntil(iso: string): number | null {
@@ -78,6 +81,7 @@ function daysUntil(iso: string): number | null {
 }
 
 export default function DashboardPage() {
+  const language = useLanguage();
   const navigate = useNavigate();
   const [data, setData] = useState<DashboardData | null>(null);
   const [alerts, setAlerts] = useState<DashboardAlert[]>([]);
@@ -95,7 +99,7 @@ export default function DashboardPage() {
       setAlerts(alertList);
       setLastUpdated(new Date());
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "获取仪表盘数据失败");
+      setError(err instanceof Error ? err.message : t("获取仪表盘数据失败"));
     } finally {
       setLoading(false);
     }
@@ -103,42 +107,42 @@ export default function DashboardPage() {
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, language]);
 
   const comparisonData = useMemo(
     () =>
       data
         ? [
             {
-              label: "今日",
+              label: t("今日"),
               current: data.today.totalAmount,
               previous: data.comparisons?.yesterday?.totalAmount ?? 0,
             },
             {
-              label: "本周",
+              label: t("本周"),
               current: data.thisWeek.totalAmount,
               previous: data.comparisons?.prevWeek?.totalAmount ?? 0,
             },
             {
-              label: "本月",
+              label: t("本月"),
               current: data.thisMonth.totalAmount,
               previous: data.comparisons?.prevMonth?.totalAmount ?? 0,
             },
           ]
         : [],
-    [data]
+    [data, language]
   );
 
   const lowStockChart = useMemo(() => {
     if (!data) return [];
     return data.lowStockProducts.slice(0, 5).map((item) => ({
-      name: item.nameZh || item.nameEn,
+      name: productName(item.nameZh, item.nameEn),
       value: Math.max(item.safeStock - item.quantity, 1),
       quantity: item.quantity,
       safeStock: item.safeStock,
       unit: item.unit,
     }));
-  }, [data]);
+  }, [data, language]);
 
   const highAlerts = alerts.filter((a) => a.severity === "high");
   const otherAlerts = alerts.filter((a) => a.severity !== "high");
@@ -171,35 +175,30 @@ export default function DashboardPage() {
           <AlertTriangle size={22} aria-hidden="true" />
         </span>
         <div>
-          <p className="font-semibold text-ink">仪表盘加载失败</p>
+          <p className="font-semibold text-ink">{t("仪表盘加载失败")}</p>
           <p className="mt-0.5 text-sm text-ink-muted">{error}</p>
         </div>
-        <Button variant="secondary" leadingIcon={RefreshCw} onClick={() => void load()}>
-          重试
-        </Button>
+        <Button variant="secondary" leadingIcon={RefreshCw} onClick={() => void load()}>{t("重试")}</Button>
       </Card>
     );
   }
 
-  if (!data) return <Card>暂无数据</Card>;
+  if (!data) return <Card>{t("暂无数据")}</Card>;
 
   return (
     <div className="space-y-5 lg:space-y-6">
       <PageHeader
-        title="运营概览"
-        description="今天需要处理的事、进货趋势和库存风险，一屏看完。"
+        title={t("运营概览")}
+        description={t("今天需要处理的事、进货趋势和库存风险，一屏看完。")}
         meta={
           <span className="inline-flex items-center gap-1.5">
-            <Clock size={12} aria-hidden="true" />
-            更新于{" "}
+            <Clock size={12} aria-hidden="true" />{t("更新于")}{" "}
             {lastUpdated
-              ? lastUpdated.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })
+              ? lastUpdated.toLocaleTimeString(getLocale(), { hour: "2-digit", minute: "2-digit" })
               : "—"}
             <span className="mx-1 text-line-strong" aria-hidden="true">
               ·
-            </span>
-            数据来自已确认发票
-          </span>
+            </span>{t("数据来自已确认发票")}</span>
         }
         actions={
           <>
@@ -208,12 +207,8 @@ export default function DashboardPage() {
               leadingIcon={RefreshCw}
               loading={loading}
               onClick={() => void load()}
-            >
-              刷新
-            </Button>
-            <Button leadingIcon={BarChart3} onClick={() => navigate("/analytics")}>
-              查看分析
-            </Button>
+            >{t("刷新")}</Button>
+            <Button leadingIcon={BarChart3} onClick={() => navigate("/analytics")}>{t("查看分析")}</Button>
           </>
         }
       />
@@ -222,7 +217,7 @@ export default function DashboardPage() {
       {alerts.length === 0 ? (
         <div className="flex items-center gap-2.5 rounded-xl border border-success/20 bg-success-soft/70 px-4 py-3 text-success">
           <CheckCircle2 size={18} aria-hidden="true" />
-          <p className="text-sm font-medium">今天没有需要处理的异常，库存与价格均在正常范围。</p>
+          <p className="text-sm font-medium">{t("今天没有需要处理的异常，库存与价格均在正常范围。")}</p>
         </div>
       ) : (
         <Card padded={false} className="overflow-hidden">
@@ -232,18 +227,18 @@ export default function DashboardPage() {
                 <AlertTriangle size={15} aria-hidden="true" />
               </span>
               <div>
-                <h2 className="text-sm font-semibold text-ink">需要关注</h2>
+                <h2 className="text-sm font-semibold text-ink">{t("需要关注")}</h2>
                 <p className="text-meta text-ink-subtle">
                   {highAlerts.length > 0
-                    ? `${highAlerts.length} 项紧急`
-                    : "没有紧急事项"}
-                  {otherAlerts.length > 0 ? ` · ${otherAlerts.length} 项提醒` : ""}
+                    ? t("{0} 项紧急", highAlerts.length)
+                    : t("没有紧急事项")}
+                  {otherAlerts.length > 0 ? t("· {0} 项提醒", otherAlerts.length) : ""}
                 </p>
               </div>
             </div>
             {otherAlerts.length > 0 ? (
               <Button variant="ghost" size="sm" onClick={() => setShowAllAlerts((v) => !v)}>
-                {showAllAlerts ? "只看紧急" : "查看全部"}
+                {showAllAlerts ? t("只看紧急") : t("查看全部")}
                 <ChevronRight
                   size={14}
                   aria-hidden="true"
@@ -261,40 +256,40 @@ export default function DashboardPage() {
       )}
 
       {/* ── KPIs ──────────────────────────────────────────── */}
-      <section aria-label="关键指标" className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <section aria-label={t("关键指标")} className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <StatCard
-          label="今日入库金额"
+          label={t("今日入库金额")}
           value={formatCurrency(data.today.totalAmount)}
           icon={Wallet}
           tone="accent"
           delta={{
             current: data.today.totalAmount,
             previous: data.comparisons?.yesterday?.totalAmount ?? 0,
-            label: "较昨日",
+            label: t("较昨日"),
           }}
         />
         <StatCard
-          label="今日发票"
+          label={t("今日发票")}
           value={data.today.invoiceCount}
           icon={FileText}
           tone="neutral"
-          hint={`本周 ${data.thisWeek.invoiceCount} 张 · 本月 ${data.thisMonth.invoiceCount} 张`}
+          hint={t("本周 {0} 张 · 本月 {1} 张", data.thisWeek.invoiceCount, data.thisMonth.invoiceCount)}
         />
         <StatCard
-          label="待处理发票"
+          label={t("待处理发票")}
           value={data.today.pendingInvoices}
           icon={FileSearch}
           tone={data.today.pendingInvoices > 0 ? "warning" : "success"}
           to="/invoices"
-          hint={data.today.pendingInvoices > 0 ? "点击前往处理" : "已全部处理"}
+          hint={data.today.pendingInvoices > 0 ? t("点击前往处理") : t("已全部处理")}
         />
         <StatCard
-          label="低库存商品"
+          label={t("低库存商品")}
           value={data.today.lowStockAlerts}
           icon={Package}
           tone={data.today.lowStockAlerts > 0 ? "danger" : "success"}
           to="/inventory"
-          hint={data.today.lowStockAlerts > 0 ? "查看补货建议" : "库存充足"}
+          hint={data.today.lowStockAlerts > 0 ? t("查看补货建议") : t("库存充足")}
         />
       </section>
 
@@ -302,19 +297,19 @@ export default function DashboardPage() {
       <section className="grid gap-4 xl:grid-cols-5">
         <Card className="xl:col-span-3">
           <CardHeader
-            title="进货金额对比"
-            description="今日、本周、本月与上一周期的入库金额。"
+            title={t("进货金额对比")}
+            description={t("今日、本周、本月与上一周期的入库金额。")}
             action={
               <div className="flex items-center gap-3">
-                <LegendChip color={chartColor(1)}>本期</LegendChip>
-                <LegendChip color="rgb(var(--line-strong))">上期</LegendChip>
+                <LegendChip color={chartColor(1)}>{t("本期")}</LegendChip>
+                <LegendChip color="rgb(var(--line-strong))">{t("上期")}</LegendChip>
               </div>
             }
           />
           <div
             className="mt-4 h-64"
             role="img"
-            aria-label="进货金额对比柱状图：今日、本周、本月与上一周期"
+            aria-label={t("进货金额对比柱状图：今日、本周、本月与上一周期")}
           >
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={comparisonData} margin={chartMargin} barGap={6}>
@@ -325,16 +320,16 @@ export default function DashboardPage() {
                   axisLine={false}
                   tickLine={false}
                   width={56}
-                  tickFormatter={(value: number) => compactCurrency.format(value)}
+                  tickFormatter={(value: number) => compactCurrency().format(value)}
                 />
                 <Tooltip
                   cursor={{ fill: "rgb(var(--surface-inset))", opacity: 0.6 }}
                   content={<ChartTooltip valueFormatter={(value) => formatCurrency(value)} />}
                 />
-                <Bar dataKey="current" name="本期" fill={chartColor(1)} radius={[4, 4, 0, 0]} maxBarSize={36} />
+                <Bar dataKey="current" name={t("本期")} fill={chartColor(1)} radius={[4, 4, 0, 0]} maxBarSize={36} />
                 <Bar
                   dataKey="previous"
-                  name="上期"
+                  name={t("上期")}
                   fill="rgb(var(--line-strong))"
                   radius={[4, 4, 0, 0]}
                   maxBarSize={36}
@@ -343,32 +338,26 @@ export default function DashboardPage() {
             </ResponsiveContainer>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t border-line pt-3 text-meta text-ink-subtle">
-            <span className="inline-flex items-center gap-1.5">
-              本周较上周
-              <Trend current={data.thisWeek.totalAmount} previous={data.comparisons?.prevWeek?.totalAmount ?? 0} />
+            <span className="inline-flex items-center gap-1.5">{t("本周较上周")}<Trend current={data.thisWeek.totalAmount} previous={data.comparisons?.prevWeek?.totalAmount ?? 0} />
             </span>
-            <span className="inline-flex items-center gap-1.5">
-              本月较上月
-              <Trend current={data.thisMonth.totalAmount} previous={data.comparisons?.prevMonth?.totalAmount ?? 0} />
+            <span className="inline-flex items-center gap-1.5">{t("本月较上月")}<Trend current={data.thisMonth.totalAmount} previous={data.comparisons?.prevMonth?.totalAmount ?? 0} />
             </span>
           </div>
         </Card>
 
         <Card className="xl:col-span-2">
           <CardHeader
-            title="低库存分布"
-            description="距离安全库存的缺口，按商品排序。"
+            title={t("低库存分布")}
+            description={t("距离安全库存的缺口，按商品排序。")}
             action={
-              <Link to="/inventory" className="text-meta font-medium text-accent hover:underline">
-                查看全部
-              </Link>
+              <Link to="/inventory" className="text-meta font-medium text-accent hover:underline">{t("查看全部")}</Link>
             }
           />
           {lowStockChart.length === 0 ? (
             <EmptyState
               icon={Package}
-              title="库存状态良好"
-              description="当前没有低于安全库存的商品。"
+              title={t("库存状态良好")}
+              description={t("当前没有低于安全库存的商品。")}
               size="sm"
               className="mt-4"
             />
@@ -398,7 +387,7 @@ export default function DashboardPage() {
                   <span className="text-[26px] font-semibold leading-none tabular text-ink">
                     {data.lowStockProducts.length}
                   </span>
-                  <span className="mt-1 text-meta text-ink-subtle">项低库存</span>
+                  <span className="mt-1 text-meta text-ink-subtle">{t("项低库存")}</span>
                 </div>
               </div>
               <ul className="mt-2 space-y-1">
@@ -410,8 +399,7 @@ export default function DashboardPage() {
                       style={{ backgroundColor: chartColor(((index % 6) + 1) as 1 | 2 | 3 | 4 | 5 | 6) }}
                     />
                     <span className="min-w-0 flex-1 truncate text-ink-muted">{item.name}</span>
-                    <span className="tabular text-ink-subtle">
-                      缺 {item.value} {item.unit}
+                    <span className="tabular text-ink-subtle">{t("缺")} {item.value} {item.unit}
                     </span>
                   </li>
                 ))}
@@ -424,14 +412,14 @@ export default function DashboardPage() {
       {/* ── lists ─────────────────────────────────────────── */}
       <section className="grid gap-4 lg:grid-cols-3">
         <ListCard
-          title="最近发票"
-          description="最新录入的采购单据。"
+          title={t("最近发票")}
+          description={t("最新录入的采购单据。")}
           link="/invoices"
-          linkLabel="全部发票"
+          linkLabel={t("全部发票")}
           empty={data.recentInvoices.length === 0}
           emptyIcon={FileText}
-          emptyTitle="暂无发票记录"
-          emptyDescription="识别第一张供应商发票后，这里会显示最近记录。"
+          emptyTitle={t("暂无发票记录")}
+          emptyDescription={t("识别第一张供应商发票后，这里会显示最近记录。")}
         >
           {data.recentInvoices.map((invoice) => (
             <Link
@@ -442,7 +430,7 @@ export default function DashboardPage() {
               <div className="min-w-0 flex-1">
                 <p className="truncate text-body font-medium text-ink">{invoice.invoiceNumber}</p>
                 <p className="truncate text-meta text-ink-subtle">
-                  {invoice.supplierName || "未匹配供应商"} · {formatDateTime(invoice.createdAt)}
+                  {invoice.supplierName || t("未匹配供应商")} · {formatDateTime(invoice.createdAt)}
                 </p>
               </div>
               <div className="shrink-0 text-right">
@@ -457,7 +445,7 @@ export default function DashboardPage() {
                         : "warning"
                   }
                 >
-                  {invoice.status === "confirmed" ? "已确认" : invoice.status === "rejected" ? "已驳回" : "待处理"}
+                  {invoice.status === "confirmed" ? t("已确认") : invoice.status === "rejected" ? t("已驳回") : t("待处理")}
                 </Badge>
               </div>
             </Link>
@@ -465,14 +453,14 @@ export default function DashboardPage() {
         </ListCard>
 
         <ListCard
-          title="低库存清单"
-          description="低于安全库存，建议尽快补货。"
+          title={t("低库存清单")}
+          description={t("低于安全库存，建议尽快补货。")}
           link="/inventory"
-          linkLabel="库存管理"
+          linkLabel={t("库存管理")}
           empty={data.lowStockProducts.length === 0}
           emptyIcon={Package}
-          emptyTitle="库存状态良好"
-          emptyDescription="所有商品都高于安全库存线。"
+          emptyTitle={t("库存状态良好")}
+          emptyDescription={t("所有商品都高于安全库存线。")}
         >
           {data.lowStockProducts.slice(0, 5).map((item) => {
             const ratio = item.safeStock > 0 ? Math.min(100, Math.round((item.quantity / item.safeStock) * 100)) : 0;
@@ -483,10 +471,10 @@ export default function DashboardPage() {
                 className="block rounded-lg px-3 py-2.5 transition-colors hover:bg-surface-muted"
               >
                 <div className="flex items-baseline justify-between gap-2">
-                  <p className="truncate text-body font-medium text-ink">{item.nameZh || item.nameEn}</p>
+                  <p className="truncate text-body font-medium text-ink">{productName(item.nameZh, item.nameEn)}</p>
                   <p className="shrink-0 text-meta tabular text-ink-muted">
-                    <span className="font-semibold text-danger">{item.quantity}</span>
-                    <span className="text-ink-subtle"> / {item.safeStock} {item.unit}</span>
+                    <span className="font-semibold text-danger">{formatNumber(Number(item.quantity))}</span>
+                    <span className="text-ink-subtle"> / {formatNumber(Number(item.safeStock))} {item.unit}</span>
                   </p>
                 </div>
                 <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface-inset">
@@ -504,14 +492,14 @@ export default function DashboardPage() {
         </ListCard>
 
         <ListCard
-          title="临期批次"
-          description="按到期日排序，先到期的先处理。"
+          title={t("临期批次")}
+          description={t("按到期日排序，先到期的先处理。")}
           link="/batches"
-          linkLabel="批次管理"
+          linkLabel={t("批次管理")}
           empty={(data.expiringBatches ?? []).length === 0}
           emptyIcon={CalendarClock}
-          emptyTitle="近 7 天无临期批次"
-          emptyDescription="暂没有需要优先处理的保质期商品。"
+          emptyTitle={t("近 7 天无临期批次")}
+          emptyDescription={t("暂没有需要优先处理的保质期商品。")}
         >
           {(data.expiringBatches ?? []).map((batch, index) => {
             const days = daysUntil(batch.expiryDate);
@@ -531,15 +519,13 @@ export default function DashboardPage() {
                   <CalendarClock size={15} aria-hidden="true" />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-body font-medium text-ink">{batch.nameZh || batch.nameEn}</p>
-                  <p className="truncate text-meta text-ink-subtle">
-                    批次 {batch.batchNo} · {batch.quantity} 件
-                  </p>
+                  <p className="truncate text-body font-medium text-ink">{productName(batch.nameZh, batch.nameEn)}</p>
+                  <p className="truncate text-meta text-ink-subtle">{t("批次")} {batch.batchNo} · {formatNumber(Number(batch.quantity))} {t("件")}</p>
                 </div>
                 <div className="shrink-0 text-right">
                   <p className="text-meta font-medium text-ink-muted">{formatDate(batch.expiryDate)}</p>
                   <p className={cn("text-[11px]", urgent ? "text-danger" : "text-warning")}>
-                    {batch.expired ? "已过期" : days === 0 ? "今天到期" : `${days} 天后`}
+                    {batch.expired ? t("已过期") : days === 0 ? t("今天到期") : t("{0} 天后", days)}
                   </p>
                 </div>
               </Link>
@@ -554,6 +540,7 @@ export default function DashboardPage() {
 /* ── sub-components ───────────────────────────────────────── */
 
 function AlertRow({ alert }: { alert: DashboardAlert }) {
+  useLanguage();
   const meta = severityMeta[alert.severity] ?? severityMeta.low;
   const Icon = meta.icon;
   const content = (
@@ -619,6 +606,7 @@ function ListCard({
   emptyDescription,
   children,
 }: ListCardProps) {
+  useLanguage();
   return (
     <Card padded={false} className="flex flex-col">
       <div className="flex items-start justify-between gap-3 px-5 pb-1 pt-4">

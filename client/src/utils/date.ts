@@ -1,3 +1,5 @@
+import { t } from "../i18n";
+import { getLocale } from "../i18n";
 /*
   Local-date helpers. Everything here works in the browser's local timezone on
   purpose: the server stores DATE columns and the UI must never shift a day
@@ -76,7 +78,7 @@ export function getCalendarCells(month: Date): Date[] {
 export function formatISO(value: string | null | undefined): string {
   const date = parseISODate(value);
   if (!date) return "-";
-  return new Intl.DateTimeFormat("zh-CN", {
+  return new Intl.DateTimeFormat(getLocale(), {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -86,16 +88,16 @@ export function formatISO(value: string | null | undefined): string {
 export function formatCompact(value: string | null | undefined): string {
   const date = parseISODate(value);
   if (!date) return "-";
-  return `${date.getMonth() + 1}月${date.getDate()}日`;
+  return new Intl.DateTimeFormat(getLocale(), { month: "short", day: "numeric" }).format(date);
 }
 
 export function formatMonth(date: Date): string {
-  return `${date.getFullYear()}年${date.getMonth() + 1}月`;
+  return new Intl.DateTimeFormat(getLocale(), { year: "numeric", month: "long" }).format(date);
 }
 
 export function formatRange(start: string | null, end: string | null): string {
-  if (!start && !end) return "选择日期范围";
-  if (start && !end) return `${formatCompact(start)} 起`;
+  if (!start && !end) return t("选择日期范围");
+  if (start && !end) return t("{0} 起", formatCompact(start));
   if (start && end) {
     if (start === end) return formatCompact(start);
     const a = parseISODate(start);
@@ -105,7 +107,7 @@ export function formatRange(start: string | null, end: string | null): string {
     }
     return `${formatISO(start)} – ${formatISO(end)}`;
   }
-  return "选择日期范围";
+  return t("选择日期范围");
 }
 
 export interface DateRange {

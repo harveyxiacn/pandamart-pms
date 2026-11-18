@@ -1,3 +1,5 @@
+import { getLocale } from "../../i18n";
+import { t, useLanguage } from "../../i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "../../utils/classnames";
@@ -46,6 +48,7 @@ export function Calendar({
   maxDate,
   autoFocus = false,
 }: CalendarProps) {
+  useLanguage();
   const days = getCalendarCells(month);
   const [focused, setFocused] = useState<Date>(
     selectedStart ?? selectedEnd ?? startOfDay(new Date())
@@ -139,7 +142,7 @@ export function Calendar({
           type="button"
           onClick={() => onMonthChange(addMonths(month, -1))}
           className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-surface-inset hover:text-ink"
-          aria-label="上个月"
+          aria-label={t("上个月")}
         >
           <ChevronLeft size={16} aria-hidden="true" />
         </button>
@@ -150,7 +153,7 @@ export function Calendar({
           type="button"
           onClick={() => onMonthChange(addMonths(month, 1))}
           className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-surface-inset hover:text-ink"
-          aria-label="下个月"
+          aria-label={t("下个月")}
         >
           <ChevronRight size={16} aria-hidden="true" />
         </button>
@@ -158,8 +161,8 @@ export function Calendar({
 
       <div className="grid grid-cols-7 border-b border-line pb-1 text-center text-[10px] font-semibold uppercase tracking-wider text-ink-subtle">
         {WEEKDAYS_MON.map((label) => (
-          <span key={label} className="py-1" aria-hidden="true">
-            {label}
+          <span key={t(label)} className="py-1" aria-hidden="true">
+            {t(label)}
           </span>
         ))}
       </div>
@@ -201,7 +204,7 @@ export function Calendar({
                 data-day={`cal-day-${iso}`}
                 tabIndex={isFocused ? 0 : -1}
                 disabled={disabled}
-                aria-label={new Intl.DateTimeFormat("zh-CN", {
+                aria-label={new Intl.DateTimeFormat(getLocale(), {
                   year: "numeric",
                   month: "long",
                   day: "numeric",
@@ -230,9 +233,7 @@ export function Calendar({
           );
         })}
       </div>
-      <p className="mt-2 border-t border-line px-1 pt-2 text-[10px] text-ink-subtle">
-        ← → 切换日期 · PgUp/PgDn 切换月份 · Enter 选择
-      </p>
+      <p className="mt-2 border-t border-line px-1 pt-2 text-[10px] text-ink-subtle">{t("← → 切换日期 · PgUp/PgDn 切换月份 · Enter 选择")}</p>
     </div>
   );
 }

@@ -1,3 +1,5 @@
+import { getLocale, productName } from "../i18n";
+import { t } from "../i18n";
 import type {
   AssistantAlert,
   AssistantChatResult,
@@ -46,7 +48,7 @@ function dateKey(value: unknown): string {
 }
 
 function formatMoney(value: number): string {
-  return `$${round2(value).toLocaleString("en-US", {
+  return `$${round2(value).toLocaleString(getLocale(), {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
@@ -54,7 +56,7 @@ function formatMoney(value: number): string {
 
 function formatQty(value: number): string {
   const rounded = round2(value);
-  return Number.isInteger(rounded) ? rounded.toLocaleString("en-US") : rounded.toFixed(2);
+  return Number.isInteger(rounded) ? rounded.toLocaleString(getLocale()) : rounded.toFixed(2);
 }
 
 function formatPercent(value: number): string {
@@ -62,16 +64,13 @@ function formatPercent(value: number): string {
 }
 
 function label(item: { nameEn: string; nameZh?: string | null }): string {
-  if (item.nameZh && item.nameEn && item.nameZh !== item.nameEn) {
-    return `${item.nameZh}（${item.nameEn}）`;
-  }
-  return item.nameZh || item.nameEn;
+  return productName(item.nameZh, item.nameEn);
 }
 
 function localDateTime(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return `${localDateKey(d)} ${pad(d.getHours(), 2)}:${pad(d.getMinutes(), 2)}`;
+  return new Intl.DateTimeFormat(getLocale(), { dateStyle: "short", timeStyle: "short" }).format(d);
 }
 
 function productOf(db: DemoDb, id: unknown): Row | undefined {
@@ -488,11 +487,11 @@ function deriveAlerts(snapshot: AssistantSnapshot): AssistantAlert[] {
       id: "low-stock",
       type: "stockout_risk",
       severity: inventory.zeroStockCount > 0 ? "high" : "medium",
-      title: "库存不足",
+      title: t("库存不足"),
       message:
         inventory.zeroStockCount > 0
-          ? `${inventory.lowStockCount} 个商品低于安全库存，其中 ${inventory.zeroStockCount} 个已缺货`
-          : `${inventory.lowStockCount} 个商品低于安全库存，请及时补货`,
+          ? t("{0} 个商品低于安全库存，其中 {1} 个已缺货", inventory.lowStockCount, inventory.zeroStockCount)
+          : t("{0} 个商品低于安全库存，请及时补货", inventory.lowStockCount),
       link: "/inventory",
       count: inventory.lowStockCount,
     });
@@ -502,8 +501,8 @@ function deriveAlerts(snapshot: AssistantSnapshot): AssistantAlert[] {
       id: "expired-batches",
       type: "expiring_batch",
       severity: "high",
-      title: "过期批次",
-      message: `${expiring.expiredCount} 个批次已过期，请尽快下架并报损`,
+      title: t("过期批次"),
+      message: t("{0} 个批次已过期，请尽快下架并报损", expiring.expiredCount),
       link: "/batches",
       count: expiring.expiredCount,
     });
@@ -513,8 +512,8 @@ function deriveAlerts(snapshot: AssistantSnapshot): AssistantAlert[] {
       id: "expiring-batches",
       type: "expiring_batch",
       severity: expiring.expiringCount > 3 ? "medium" : "low",
-      title: "临期批次",
-      message: `${expiring.expiringCount} 个批次将在 ${expiring.days} 天内到期`,
+      title: t("临期批次"),
+      message: t("{0} 个批次将在 {1} 天内到期", expiring.expiringCount, expiring.days),
       link: "/batches",
       count: expiring.expiringCount,
     });
@@ -524,11 +523,11 @@ function deriveAlerts(snapshot: AssistantSnapshot): AssistantAlert[] {
       id: "pending-invoices",
       type: "pending_invoice",
       severity: purchase.pendingOverdueCount > 0 ? "high" : "medium",
-      title: "待处理发票",
+      title: t("待处理发票"),
       message:
         purchase.pendingOverdueCount > 0
-          ? `${purchase.pendingCount} 张发票待确认，其中 ${purchase.pendingOverdueCount} 张已超过 3 天`
-          : `${purchase.pendingCount} 张发票等待确认入库`,
+          ? t("{0} 张发票待确认，其中 {1} 张已超过 3 天", purchase.pendingCount, purchase.pendingOverdueCount)
+          : t("{0} 张发票等待确认入库", purchase.pendingCount),
       link: "/invoices?status=pending",
       count: purchase.pendingCount,
     });
@@ -539,8 +538,8 @@ function deriveAlerts(snapshot: AssistantSnapshot): AssistantAlert[] {
       id: "price-increase",
       type: "price_spike",
       severity: "medium",
-      title: "采购价格上涨",
-      message: `${increases.length} 个商品近期采购价上涨超过 ${purchase.priceThreshold}%`,
+      title: t("采购价格上涨"),
+      message: t("{0} 个商品近期采购价上涨超过 {1}%", increases.length, purchase.priceThreshold),
       link: "/analytics",
       count: increases.length,
     });
@@ -550,10 +549,10 @@ function deriveAlerts(snapshot: AssistantSnapshot): AssistantAlert[] {
       id: "payables",
       type: "payables",
       severity: "low",
-      title: "应付未结",
-      message: `${payables.count} 家供应商尚有 ${formatMoney(
+      title: t("应付未结"),
+      message: t("{0} 家供应商尚有 {1} 货款未结清", payables.count, formatMoney(
         payables.totalOutstanding
-      )} 货款未结清`,
+      )),
       link: "/payables",
       count: payables.count,
     });
@@ -564,8 +563,8 @@ function deriveAlerts(snapshot: AssistantSnapshot): AssistantAlert[] {
       id: "slow-movers",
       type: "slow_mover",
       severity: "low",
-      title: "滞销商品",
-      message: `${zeroSales.length} 个商品近 ${sales.slowMoverDays} 天零销量，占用库存资金`,
+      title: t("滞销商品"),
+      message: t("{0} 个商品近 {1} 天零销量，占用库存资金", zeroSales.length, sales.slowMoverDays),
       link: "/analytics",
       count: zeroSales.length,
     });
@@ -578,16 +577,16 @@ function knowledgeText(snapshot: AssistantSnapshot): string {
   const w7 = snapshot.windows.find((item) => item.days === 7)!;
   const w30 = snapshot.windows.find((item) => item.days === 30)!;
   return [
-    `资料库快照 ${localDateTime(snapshot.generatedAt)}（演示数据）`,
-    `库存：${snapshot.inventory.productCount} 个商品，低库存 ${snapshot.inventory.lowStockCount}（缺货 ${snapshot.inventory.zeroStockCount}）`,
-    `临期/过期：过期 ${snapshot.expiring.expiredCount}、临期 ${snapshot.expiring.expiringCount}`,
-    `销售近7天：${w7.sales.orderCount}单 ${formatMoney(w7.sales.revenue)}；近30天 ${w30.sales.orderCount}单 ${formatMoney(w30.sales.revenue)}`,
-    `采购近30天：${w30.purchase.invoiceCount}张 ${formatMoney(w30.purchase.totalAmount)}`,
-    `应付未结：${formatMoney(snapshot.payables.totalOutstanding)}`,
-    `补货 TOP：${snapshot.reorder
+    t("资料库快照 {0}（演示数据）", localDateTime(snapshot.generatedAt)),
+    t("库存：{0} 个商品，低库存 {1}（缺货 {2}）", snapshot.inventory.productCount, snapshot.inventory.lowStockCount, snapshot.inventory.zeroStockCount),
+    t("临期/过期：过期 {0}、临期 {1}", snapshot.expiring.expiredCount, snapshot.expiring.expiringCount),
+    t("销售近7天：{0}单 {1}；近30天 {2}单 {3}", w7.sales.orderCount, formatMoney(w7.sales.revenue), w30.sales.orderCount, formatMoney(w30.sales.revenue)),
+    t("采购近30天：{0}张 {1}", w30.purchase.invoiceCount, formatMoney(w30.purchase.totalAmount)),
+    t("应付未结：{0}", formatMoney(snapshot.payables.totalOutstanding)),
+    t("补货 TOP：{0}", snapshot.reorder
       .slice(0, 5)
       .map((item) => `${label(item)} +${formatQty(item.suggestedQuantity)}${item.unit}`)
-      .join("；")}`,
+      .join("；")),
   ].join("\n");
 }
 
@@ -707,7 +706,7 @@ function matchProduct(
   message: string,
   products: AssistantProduct[]
 ): AssistantProduct | undefined {
-  const text = message.toLowerCase();
+  const text = message.toLowerCase().replace(/補貨/g, "补货").replace(/預警/g, "预警").replace(/過期/g, "过期").replace(/庫存/g, "库存").replace(/採購|入貨/g, "采购").replace(/銷售/g, "销售").replace(/供應商/g, "供应商").replace(/應付/g, "应付").replace(/發票/g, "发票").replace(/滯銷/g, "滞销").replace(/價格/g, "价格");
   const tokens = tokensOf(message);
   let best: AssistantProduct | undefined;
   let bestScore = 0;
@@ -741,7 +740,7 @@ function matchProduct(
 }
 
 function parseDays(message: string): number {
-  const text = message.toLowerCase();
+  const text = message.toLowerCase().replace(/補貨/g, "补货").replace(/預警/g, "预警").replace(/過期/g, "过期").replace(/庫存/g, "库存").replace(/採購|入貨/g, "采购").replace(/銷售/g, "销售").replace(/供應商/g, "供应商").replace(/應付/g, "应付").replace(/發票/g, "发票").replace(/滯銷/g, "滞销").replace(/價格/g, "价格");
   const explicit = text.match(/(?:最近|近|过去|前)\s*(\d{1,3})\s*(?:个)?(?:天|日|days?)/);
   if (explicit) return Math.min(365, Math.max(1, Number(explicit[1])));
   const english = text.match(/(?:last|past)\s*(\d{1,3})\s*days?/);
@@ -790,7 +789,7 @@ interface Intent {
 }
 
 function parseIntent(message: string, products: AssistantProduct[]): Intent {
-  const text = message.toLowerCase();
+  const text = message.toLowerCase().replace(/補貨/g, "补货").replace(/預警/g, "预警").replace(/過期/g, "过期").replace(/庫存/g, "库存").replace(/採購|入貨/g, "采购").replace(/銷售/g, "销售").replace(/供應商/g, "供应商").replace(/應付/g, "应付").replace(/發票/g, "发票").replace(/滯銷/g, "滞销").replace(/價格/g, "价格");
   const window = pickWindow(parseDays(message));
   const product = matchProduct(message, products);
   const out = (name: IntentName): Intent => ({ name, window, product });
@@ -801,8 +800,8 @@ function parseIntent(message: string, products: AssistantProduct[]): Intent {
   const rules: Array<[IntentName, RegExp]> = [
     ["expiring", /临期|过期|到期|保质期|expir/],
     ["alerts", /预警|告警|风险|异常|需要关注|alert|warning/],
-    ["payables", /应付|欠款|还欠|欠多少|未付|未结|账款|payable|owed/],
-    ["price_change", /涨价|降价|价格波动|价格变化|进价|采购价|price change|cost increase/],
+    ["payables", /应付|欠款|还欠|欠多少|未付|未结|账款|payable|owed|owe/],
+    ["price_change", /涨价|降价|价格波动|价格变化|进价|采购价|price change|prices? (?:rising|changed|increase)|costs? (?:increase|rising)/],
     ["slow_mover", /滞销|卖不动|不动销|slow.?mov/],
     ["profit", /毛利|利润|赚了多少|盈利|profit|margin/],
     ["sales", /销售|营业额|营收|收入|流水|卖了多少|sales|revenue/],
@@ -811,7 +810,7 @@ function parseIntent(message: string, products: AssistantProduct[]): Intent {
     ["reorder", /补货|订货|进货建议|该进什么|买什么|reorder|restock/],
     ["low_stock", /缺货|断货|库存不足|低于安全|安全库存|low stock|stockout/],
     ["purchase", /采购|进货|买入|purchase|spend/],
-    ["overview", /库存|仓库|概览|总体|经营情况|overview|summary|dashboard/],
+    ["overview", /库存|仓库|概览|总体|经营情况|inventory|overview|summary|dashboard/],
   ];
 
   for (const [name, pattern] of rules) {
@@ -837,42 +836,42 @@ function windowOf(snapshot: AssistantSnapshot, days: number) {
 
 function productStatus(product: AssistantProduct): string {
   if (product.safeStock === null) {
-    return `当前库存 ${formatQty(product.quantity)} ${product.unit}（未设置安全库存）`;
+    return t("当前库存 {0} {1}（未设置安全库存）", formatQty(product.quantity), product.unit);
   }
   const deficit = round2(product.safeStock - product.quantity);
   if (product.quantity <= 0) {
-    return `当前库存 0 ${product.unit}，已缺货（安全库存 ${formatQty(product.safeStock)} ${product.unit}）`;
+    return t("当前库存 0 {0}，已缺货（安全库存 {1} {2}）", product.unit, formatQty(product.safeStock), product.unit);
   }
   if (deficit > 0) {
-    return `当前库存 ${formatQty(product.quantity)} ${product.unit}，低于安全库存 ${formatQty(
+    return t("当前库存 {0} {1}，低于安全库存 {2} {3}，缺口 {4} {5}", formatQty(product.quantity), product.unit, formatQty(
       product.safeStock
-    )} ${product.unit}，缺口 ${formatQty(deficit)} ${product.unit}`;
+    ), product.unit, formatQty(deficit), product.unit);
   }
-  return `当前库存 ${formatQty(product.quantity)} ${product.unit}，高于安全库存 ${formatQty(
+  return t("当前库存 {0} {1}，高于安全库存 {2} {3}", formatQty(product.quantity), product.unit, formatQty(
     product.safeStock
-  )} ${product.unit}`;
+  ), product.unit);
 }
 
 function overview(snapshot: AssistantSnapshot): string {
   const w7 = windowOf(snapshot, 7);
   const w30 = windowOf(snapshot, 30);
   return [
-    `当前资料库（${localDateTime(snapshot.generatedAt)} 同步，数据来自演示仓库）：`,
-    `库存：${snapshot.inventory.productCount} 个商品，总库存 ${formatQty(
+    t("当前资料库（{0} 同步，数据来自演示仓库）：", localDateTime(snapshot.generatedAt)),
+    t("库存：{0} 个商品，总库存 {1} 件，库存成本约 {2}，零售价值约 {3}", snapshot.inventory.productCount, formatQty(
       snapshot.inventory.totalUnits
-    )} 件，库存成本约 ${formatMoney(snapshot.inventory.stockValueCost)}，零售价值约 ${formatMoney(
+    ), formatMoney(snapshot.inventory.stockValueCost), formatMoney(
       snapshot.inventory.stockValueRetail
-    )}`,
-    `预警：${snapshot.inventory.lowStockCount} 个商品低于安全线（${snapshot.inventory.zeroStockCount} 个已缺货）；${snapshot.expiring.expiredCount} 个批次过期、${snapshot.expiring.expiringCount} 个 ${snapshot.expiring.days} 天内临期`,
-    `销售：近 7 天 ${w7.sales.orderCount} 单 / ${formatMoney(
+    )),
+    t("预警：{0} 个商品低于安全线（{1} 个已缺货）；{2} 个批次过期、{3} 个 {4} 天内临期", snapshot.inventory.lowStockCount, snapshot.inventory.zeroStockCount, snapshot.expiring.expiredCount, snapshot.expiring.expiringCount, snapshot.expiring.days),
+    t("销售：近 7 天 {0} 单 / {1}，毛利率 {2}；近 30 天 {3} 单 / {4}", w7.sales.orderCount, formatMoney(
       w7.sales.revenue
-    )}，毛利率 ${formatPercent(w7.sales.margin)}；近 30 天 ${w30.sales.orderCount} 单 / ${formatMoney(
+    ), formatPercent(w7.sales.margin), w30.sales.orderCount, formatMoney(
       w30.sales.revenue
-    )}`,
-    `采购：近 30 天 ${w30.purchase.invoiceCount} 张已确认发票 / ${formatMoney(
+    )),
+    t("采购：近 30 天 {0} 张已确认发票 / {1}；待确认发票 {2} 张", w30.purchase.invoiceCount, formatMoney(
       w30.purchase.totalAmount
-    )}；待确认发票 ${snapshot.purchase.pendingCount} 张`,
-    `应付：${snapshot.payables.count} 家供应商未结 ${formatMoney(snapshot.payables.totalOutstanding)}`,
+    ), snapshot.purchase.pendingCount),
+    t("应付：{0} 家供应商未结 {1}", snapshot.payables.count, formatMoney(snapshot.payables.totalOutstanding)),
   ].join("\n");
 }
 
@@ -883,35 +882,33 @@ function reorderText(snapshot: AssistantSnapshot, product?: AssistantProduct): s
   }
   if (items.length === 0) {
     return product
-      ? `${label(product)} 当前不需要补货，库存高于安全线。`
-      : "当前所有商品都高于安全库存，暂时不需要补货。可以继续关注临期批次和滞销库存。";
+      ? t("{0} 当前不需要补货，库存高于安全线。", label(product))
+      : t("当前所有商品都高于安全库存，暂时不需要补货。可以继续关注临期批次和滞销库存。");
   }
   const lines = product
-    ? [`${label(product)} 的补货建议：`]
-    : [`补货建议（按缺口与近 4 周销量估算，共 ${snapshot.reorder.length} 项）：`];
+    ? [t("{0} 的补货建议：", label(product))]
+    : [t("补货建议（按缺口与近 4 周销量估算，共 {0} 项）：", snapshot.reorder.length)];
   for (const [index, item] of items.slice(0, 8).entries()) {
     lines.push(
-      `${index + 1}. ${label(item)}：现有 ${formatQty(item.quantity)} / 安全线 ${formatQty(
+      t("{0}. {1}：现有 {2} / 安全线 {3} {4}，周均销量 {5}，建议进 {6} {7}（约 {8}）{9}", index + 1, label(item), formatQty(item.quantity), formatQty(
         item.safeStock
-      )} ${item.unit}，周均销量 ${formatQty(item.avgWeeklyUsage)}，建议进 ${formatQty(
+      ), item.unit, formatQty(item.avgWeeklyUsage), formatQty(
         item.suggestedQuantity
-      )} ${item.unit}（约 ${formatMoney(item.estimatedCost)}）${
-        item.supplierName ? `，供应商 ${item.supplierName}` : ""
-      }`
+      ), item.unit, formatMoney(item.estimatedCost), item.supplierName ? t("，供应商 {0}", item.supplierName) : "")
     );
   }
   lines.push("");
-  lines.push("建议先确认供应商到货周期，并按保质期安排先进先出。");
+  lines.push(t("建议先确认供应商到货周期，并按保质期安排先进先出。"));
   return lines.join("\n");
 }
 
 function expiringText(snapshot: AssistantSnapshot): string {
   if (snapshot.expiring.items.length === 0) {
-    return `未来 ${snapshot.expiring.days} 天内没有临期或过期批次，保质期状态良好。`;
+    return t("未来 {0} 天内没有临期或过期批次，保质期状态良好。", snapshot.expiring.days);
   }
   const today = dateKey(snapshot.generatedAt);
   const lines = [
-    `临期/过期批次：已过期 ${snapshot.expiring.expiredCount} 个，${snapshot.expiring.days} 天内到期 ${snapshot.expiring.expiringCount} 个。`,
+    t("临期/过期批次：已过期 {0} 个，{1} 天内到期 {2} 个。", snapshot.expiring.expiredCount, snapshot.expiring.days, snapshot.expiring.expiringCount),
   ];
   for (const item of snapshot.expiring.items.slice(0, 8)) {
     const left = Math.round(
@@ -920,13 +917,13 @@ function expiringText(snapshot: AssistantSnapshot): string {
         86400000
     );
     lines.push(
-      `- ${label(item)}${item.batchNo ? ` 批次 ${item.batchNo}` : ""}：到期 ${item.expiryDate}，剩余 ${formatQty(
+      t("- {0}{1}：到期 {2}，剩余 {3}，{4}", label(item), item.batchNo ? " " + t("批次 {0}", item.batchNo) : "", item.expiryDate, formatQty(
         item.quantity
-      )}，${left < 0 ? `已过期 ${Math.abs(left)} 天` : left === 0 ? "今天到期" : `还剩 ${left} 天`}`
+      ), left < 0 ? t("已过期 {0} 天", Math.abs(left)) : left === 0 ? t("今天到期") : t("还剩 {0} 天", left))
     );
   }
   lines.push("");
-  lines.push("建议：已过期商品立即下架报损；3 天内到期的商品优先促销或做捆绑销售。");
+  lines.push(t("建议：已过期商品立即下架报损；3 天内到期的商品优先促销或做捆绑销售。"));
   return lines.join("\n");
 }
 
@@ -936,30 +933,30 @@ function salesText(snapshot: AssistantSnapshot, days: number, profitOnly: boolea
     .sort((a, b) => (profitOnly ? b.profit - a.profit : b.revenue - a.revenue))
     .slice(0, 5);
   const lines = [
-    profitOnly ? `近 ${metrics.days} 天毛利概览：` : `近 ${metrics.days} 天销售：`,
-    `- 完成订单：${metrics.sales.orderCount} 单`,
-    `- 销售额：${formatMoney(metrics.sales.revenue)}`,
-    `- 销售成本：${formatMoney(metrics.sales.cost)}`,
-    `- 毛利：${formatMoney(metrics.sales.grossProfit)}（毛利率 ${formatPercent(
+    profitOnly ? t("近 {0} 天毛利概览：", metrics.days) : t("近 {0} 天销售：", metrics.days),
+    t("- 完成订单：{0} 单", metrics.sales.orderCount),
+    t("- 销售额：{0}", formatMoney(metrics.sales.revenue)),
+    t("- 销售成本：{0}", formatMoney(metrics.sales.cost)),
+    t("- 毛利：{0}（毛利率 {1}）", formatMoney(metrics.sales.grossProfit), formatPercent(
       metrics.sales.margin
-    )}）`,
+    )),
   ];
   if (top.length > 0) {
     lines.push("");
-    lines.push(profitOnly ? "毛利贡献前 5：" : "销售额贡献前 5：");
+    lines.push(profitOnly ? t("毛利贡献前 5：") : t("销售额贡献前 5："));
     for (const [index, item] of top.entries()) {
       lines.push(
-        `${index + 1}. ${label(item)}：销售额 ${formatMoney(item.revenue)}，毛利 ${formatMoney(
+        t("{0}. {1}：销售额 {2}，毛利 {3}，销量 {4}", index + 1, label(item), formatMoney(item.revenue), formatMoney(
           item.profit
-        )}，销量 ${formatQty(item.qty)}`
+        ), formatQty(item.qty))
       );
     }
   }
   lines.push("");
   lines.push(
     metrics.sales.margin < 20
-      ? "毛利率偏低，建议检查售价与采购成本，优先推动高毛利商品。"
-      : "毛利率处于正常区间，可保持高毛利商品的库存水位。"
+      ? t("毛利率偏低，建议检查售价与采购成本，优先推动高毛利商品。")
+      : t("毛利率处于正常区间，可保持高毛利商品的库存水位。")
   );
   return lines.join("\n");
 }
@@ -967,31 +964,29 @@ function salesText(snapshot: AssistantSnapshot, days: number, profitOnly: boolea
 function purchaseText(snapshot: AssistantSnapshot, days: number): string {
   const metrics = windowOf(snapshot, days);
   const lines = [
-    `近 ${metrics.days} 天采购：${metrics.purchase.invoiceCount} 张已确认发票，金额 ${formatMoney(
+    t("近 {0} 天采购：{1} 张已确认发票，金额 {2}。", metrics.days, metrics.purchase.invoiceCount, formatMoney(
       metrics.purchase.totalAmount
-    )}。`,
+    )),
   ];
   if (snapshot.purchase.pendingCount > 0) {
     lines.push(
-      `另有 ${snapshot.purchase.pendingCount} 张待确认发票${
-        snapshot.purchase.pendingOverdueCount > 0
-          ? `（${snapshot.purchase.pendingOverdueCount} 张超过 3 天）`
-          : ""
-      }。`
+      t("另有 {0} 张待确认发票{1}。", snapshot.purchase.pendingCount, snapshot.purchase.pendingOverdueCount > 0
+          ? t("（{0} 张超过 3 天）", snapshot.purchase.pendingOverdueCount)
+          : "")
     );
   }
   if (snapshot.purchase.topSuppliers.length > 0) {
     lines.push("");
-    lines.push("采购额前 5 的供应商（近 30 天）：");
+    lines.push(t("采购额前 5 的供应商（近 30 天）："));
     for (const [index, item] of snapshot.purchase.topSuppliers.slice(0, 5).entries()) {
       lines.push(
-        `${index + 1}. ${item.supplierName}：${formatMoney(item.totalAmount)}，${item.invoiceCount} 张发票`
+        t("{0}. {1}：{2}，{3} 张发票", index + 1, item.supplierName, formatMoney(item.totalAmount), item.invoiceCount)
       );
     }
   }
   if (snapshot.purchase.topProducts.length > 0) {
     lines.push("");
-    lines.push("采购量前 5 的商品（近 30 天）：");
+    lines.push(t("采购量前 5 的商品（近 30 天）："));
     for (const [index, item] of snapshot.purchase.topProducts.slice(0, 5).entries()) {
       lines.push(
         `${index + 1}. ${label(item)}：${formatQty(item.totalQuantity)}，${formatMoney(
@@ -1007,20 +1002,20 @@ function supplierText(snapshot: AssistantSnapshot): string {
   const lines: string[] = [];
   lines.push(
     snapshot.purchase.topSuppliers.length > 0
-      ? "近 30 天供应商采购分布："
-      : "近 30 天没有已确认的采购记录。"
+      ? t("近 30 天供应商采购分布：")
+      : t("近 30 天没有已确认的采购记录。")
   );
   for (const [index, item] of snapshot.purchase.topSuppliers.slice(0, 6).entries()) {
     lines.push(
-      `${index + 1}. ${item.supplierName}：${formatMoney(item.totalAmount)}，${item.invoiceCount} 张发票`
+      t("{0}. {1}：{2}，{3} 张发票", index + 1, item.supplierName, formatMoney(item.totalAmount), item.invoiceCount)
     );
   }
   if (snapshot.payables.items.length > 0) {
     lines.push("");
-    lines.push(`应付未结 ${formatMoney(snapshot.payables.totalOutstanding)}：`);
+    lines.push(t("应付未结 {0}：", formatMoney(snapshot.payables.totalOutstanding)));
     for (const item of snapshot.payables.items.slice(0, 5)) {
       lines.push(
-        `- ${item.supplierName}：${formatMoney(item.outstanding)}（${item.invoiceCount} 张发票）`
+        t("- {0}：{1}（{2} 张发票）", item.supplierName, formatMoney(item.outstanding), item.invoiceCount)
       );
     }
   }
@@ -1029,23 +1024,19 @@ function supplierText(snapshot: AssistantSnapshot): string {
 
 function payablesText(snapshot: AssistantSnapshot): string {
   if (snapshot.payables.totalOutstanding <= 0) {
-    return "当前没有未结清的供应商应付账款。";
+    return t("当前没有未结清的供应商应付账款。");
   }
   const lines = [
-    `当前应付未结 ${formatMoney(snapshot.payables.totalOutstanding)}，涉及 ${
-      snapshot.payables.count
-    } 家供应商。`,
+    t("当前应付未结 {0}，涉及 {1} 家供应商。", formatMoney(snapshot.payables.totalOutstanding), snapshot.payables.count),
     "",
   ];
   for (const item of snapshot.payables.items.slice(0, 8)) {
     lines.push(
-      `- ${item.supplierName}：${formatMoney(item.outstanding)}（${item.invoiceCount} 张发票${
-        item.lastInvoiceDate ? `，最近 ${item.lastInvoiceDate}` : ""
-      }）`
+      t("- {0}：{1}（{2} 张发票{3}）", item.supplierName, formatMoney(item.outstanding), item.invoiceCount, item.lastInvoiceDate ? t("，最近 {0}", item.lastInvoiceDate) : "")
     );
   }
   lines.push("");
-  lines.push("建议优先核对金额较大、账期较长的供应商。");
+  lines.push(t("建议优先核对金额较大、账期较长的供应商。"));
   return lines.join("\n");
 }
 
@@ -1057,13 +1048,13 @@ function priceChangeText(
   if (product) items = items.filter((item) => item.productId === product.productId);
   if (items.length === 0) {
     return product
-      ? `${label(product)} 近期没有超过 ${snapshot.purchase.priceThreshold}% 的采购价波动。`
-      : `近期没有检测到超过 ${snapshot.purchase.priceThreshold}% 的采购价波动，价格整体平稳。`;
+      ? t("{0} 近期没有超过 {1}% 的采购价波动。", label(product), snapshot.purchase.priceThreshold)
+      : t("近期没有检测到超过 {0}% 的采购价波动，价格整体平稳。", snapshot.purchase.priceThreshold);
   }
   const lines = [
     product
-      ? `${label(product)} 的近期采购价变化：`
-      : `近期采购价波动（阈值 ${snapshot.purchase.priceThreshold}%）：`,
+      ? t("{0} 的近期采购价变化：", label(product))
+      : t("近期采购价波动（阈值 {0}%）：", snapshot.purchase.priceThreshold),
   ];
   for (const item of items.slice(0, 8)) {
     lines.push(
@@ -1077,54 +1068,54 @@ function priceChangeText(
   lines.push("");
   lines.push(
     items.some((item) => item.changePercent > 0)
-      ? "建议对涨幅较大的商品复核供应商报价，必要时比较替代货源。"
-      : "价格整体下降，可结合库存与保质期适度增加采购。"
+      ? t("建议对涨幅较大的商品复核供应商报价，必要时比较替代货源。")
+      : t("价格整体下降，可结合库存与保质期适度增加采购。")
   );
   return lines.join("\n");
 }
 
 function slowMoverText(snapshot: AssistantSnapshot): string {
   if (snapshot.sales.slowMovers.length === 0) {
-    return `近 ${snapshot.sales.slowMoverDays} 天没有发现明显滞销商品。`;
+    return t("近 {0} 天没有发现明显滞销商品。", snapshot.sales.slowMoverDays);
   }
-  const lines = [`近 ${snapshot.sales.slowMoverDays} 天滞销商品（有库存但销量最低）：`];
+  const lines = [t("近 {0} 天滞销商品（有库存但销量最低）：", snapshot.sales.slowMoverDays)];
   for (const item of snapshot.sales.slowMovers.slice(0, 8)) {
     lines.push(
-      `- ${label(item)}：库存 ${formatQty(item.currentStock)}，近 ${snapshot.sales.slowMoverDays} 天销量 ${formatQty(
+      t("- {0}：库存 {1}，近 {2} 天销量 {3}", label(item), formatQty(item.currentStock), snapshot.sales.slowMoverDays, formatQty(
         item.soldQty
-      )}`
+      ))
     );
   }
   lines.push("");
-  lines.push("建议：对零销量商品做促销/捆绑销售，并下调下一次采购量。");
+  lines.push(t("建议：对零销量商品做促销/捆绑销售，并下调下一次采购量。"));
   return lines.join("\n");
 }
 
 function pendingText(snapshot: AssistantSnapshot): string {
   if (snapshot.purchase.pendingCount === 0) {
-    return "当前没有待确认的发票，入库与应付数据已同步。";
+    return t("当前没有待确认的发票，入库与应付数据已同步。");
   }
   return [
-    `当前有 ${snapshot.purchase.pendingCount} 张发票待确认。`,
+    t("当前有 {0} 张发票待确认。", snapshot.purchase.pendingCount),
     snapshot.purchase.pendingOverdueCount > 0
-      ? `其中 ${snapshot.purchase.pendingOverdueCount} 张已超过 3 天，建议优先处理。`
-      : "发票确认后才会更新库存与应付账款。",
+      ? t("其中 {0} 张已超过 3 天，建议优先处理。", snapshot.purchase.pendingOverdueCount)
+      : t("发票确认后才会更新库存与应付账款。"),
   ].join("\n");
 }
 
 function alertsText(snapshot: AssistantSnapshot): string {
   const alerts = deriveAlerts(snapshot);
   if (alerts.length === 0) {
-    return "当前没有发现需要处理的库存或经营预警，各项指标正常。";
+    return t("当前没有发现需要处理的库存或经营预警，各项指标正常。");
   }
-  const labels = { high: "紧急", medium: "关注", low: "提示" };
+  const labels = { high: t("紧急"), medium: t("关注"), low: t("提示") };
   return [
-    `当前共 ${alerts.length} 项预警：`,
+    t("当前共 {0} 项预警：", alerts.length),
     ...alerts.map(
       (alert, index) => `${index + 1}. [${labels[alert.severity]}] ${alert.title}：${alert.message}`
     ),
     "",
-    "建议先处理「紧急」项，其余可按模块逐步跟进。",
+    t("建议先处理「紧急」项，其余可按模块逐步跟进。"),
   ].join("\n");
 }
 
@@ -1133,33 +1124,33 @@ function productText(snapshot: AssistantSnapshot, product: AssistantProduct): st
     `${label(product)}${product.sku ? `（SKU: ${product.sku}）` : ""}：`,
     `- ${productStatus(product)}`,
   ];
-  if (product.supplierName) lines.push(`- 默认供应商：${product.supplierName}`);
+  if (product.supplierName) lines.push(t("- 默认供应商：{0}", product.supplierName));
   if (product.defaultPrice !== null) {
-    lines.push(`- 采购成本：${formatMoney(product.defaultPrice)} / ${product.unit}`);
+    lines.push(t("- 采购成本：{0} / {1}", formatMoney(product.defaultPrice), product.unit));
   }
   if (product.sellingPrice !== null) {
-    lines.push(`- 零售价：${formatMoney(product.sellingPrice)} / ${product.unit}`);
+    lines.push(t("- 零售价：{0} / {1}", formatMoney(product.sellingPrice), product.unit));
   }
   const change = snapshot.purchase.priceChanges.find((item) => item.productId === product.productId);
   if (change) {
     lines.push(
-      `- 近期进价：${formatMoney(change.previousPrice)} → ${formatMoney(
+      t("- 近期进价：{0} → {1}（{2}{3}%）", formatMoney(change.previousPrice), formatMoney(
         change.currentPrice
-      )}（${change.changePercent > 0 ? "+" : ""}${change.changePercent.toFixed(1)}%）`
+      ), change.changePercent > 0 ? "+" : "", change.changePercent.toFixed(1))
     );
   }
   const reorder = snapshot.reorder.find((item) => item.productId === product.productId);
   if (reorder) {
     lines.push(
-      `- 建议补货：${formatQty(reorder.suggestedQuantity)} ${product.unit}（周均销量 ${formatQty(
+      t("- 建议补货：{0} {1}（周均销量 {2} {3}）", formatQty(reorder.suggestedQuantity), product.unit, formatQty(
         reorder.avgWeeklyUsage
-      )} ${product.unit}）`
+      ), product.unit)
     );
   }
   if (product.safeStock !== null && product.quantity <= product.safeStock) {
-    lines.push("- 状态：低于安全库存，请尽快安排补货");
+    lines.push(t("- 状态：低于安全库存，请尽快安排补货"));
   } else {
-    lines.push("- 状态：库存充足");
+    lines.push(t("- 状态：库存充足"));
   }
   return lines.join("\n");
 }
@@ -1211,23 +1202,23 @@ export function demoAnswer(db: DemoDb, message: string): AssistantChatResult {
 
   switch (intent.name) {
     case "greeting":
-      reply = `你好，我是熊猫超市的本地智能助手。我不依赖 LLM，直接从当前演示资料库回答。\n\n${overview(
+      reply = t("你好，我是熊猫超市的本地智能助手。我不依赖 LLM，直接从当前演示资料库回答。 {0} 你可以问库存、补货、临期、销售、采购、供应商和应付账款。", overview(
         snapshot
-      )}\n\n你可以问库存、补货、临期、销售、采购、供应商和应付账款。`;
+      ));
       break;
     case "help":
       reply = [
-        "我可以直接基于当前仓库资料库回答：",
-        "- 库存与补货：哪些商品低于安全线、建议进多少、找哪个供应商",
-        "- 保质期：哪些批次临期或已过期",
-        "- 销售与毛利：近 7/30/90 天销售额、成本、毛利率、畅销商品",
-        "- 采购与价格：采购额、主要供应商、进价涨跌",
-        "- 应付与发票：欠供应商多少、哪些发票待确认",
-        "- 盘点单品：直接说商品名或 SKU，例如「生姜还有多少库存」",
+        t("我可以直接基于当前仓库资料库回答："),
+        t("- 库存与补货：哪些商品低于安全线、建议进多少、找哪个供应商"),
+        t("- 保质期：哪些批次临期或已过期"),
+        t("- 销售与毛利：近 7/30/90 天销售额、成本、毛利率、畅销商品"),
+        t("- 采购与价格：采购额、主要供应商、进价涨跌"),
+        t("- 应付与发票：欠供应商多少、哪些发票待确认"),
+        t("- 盘点单品：直接说商品名或 SKU，例如「生姜还有多少库存」"),
       ].join("\n");
       break;
     case "overview":
-      reply = `${overview(snapshot)}\n\n想深入看哪一块？${SUGGESTIONS.overview.join(" / ")}`;
+      reply = t("{0} 想深入看哪一块？{1}", overview(snapshot), SUGGESTIONS.overview.map((key) => t(key)).join(" / "));
       break;
     case "alerts":
       reply = alertsText(snapshot);
@@ -1236,17 +1227,17 @@ export function demoAnswer(db: DemoDb, message: string): AssistantChatResult {
       reply = intent.product
         ? productText(snapshot, intent.product)
         : snapshot.inventory.lowStock.length === 0
-          ? "目前没有商品低于安全库存，库存水位整体健康。"
+          ? t("目前没有商品低于安全库存，库存水位整体健康。")
           : [
-              `当前有 ${snapshot.inventory.lowStockCount} 个商品低于安全库存，其中 ${snapshot.inventory.zeroStockCount} 个已缺货。缺口最大的商品：`,
+              t("当前有 {0} 个商品低于安全库存，其中 {1} 个已缺货。缺口最大的商品：", snapshot.inventory.lowStockCount, snapshot.inventory.zeroStockCount),
               ...snapshot.inventory.lowStock.slice(0, 8).map(
                 (item, index) =>
-                  `${index + 1}. ${label(item)}：现有 ${formatQty(item.quantity)} / 安全线 ${formatQty(
+                  t("{0}. {1}：现有 {2} / 安全线 {3} {4}，缺口 {5} {6}", index + 1, label(item), formatQty(item.quantity), formatQty(
                     item.safeStock
-                  )} ${item.unit}，缺口 ${formatQty(item.deficit)} ${item.unit}`
+                  ), item.unit, formatQty(item.deficit), item.unit)
               ),
               "",
-              "建议：优先补缺口最大和已缺货的商品。",
+              t("建议：优先补缺口最大和已缺货的商品。"),
             ].join("\n");
       break;
     case "reorder":
@@ -1285,9 +1276,9 @@ export function demoAnswer(db: DemoDb, message: string): AssistantChatResult {
         : overview(snapshot);
       break;
     default:
-      reply = `${overview(snapshot)}\n\n我没有完全理解你的问题。可以换个说法，或试试：\n- ${SUGGESTIONS.unknown.join(
+      reply = t("{0} 我没有完全理解你的问题。可以换个说法，或试试： - {1}", overview(snapshot), SUGGESTIONS.unknown.map((key) => t(key)).join(
         "\n- "
-      )}`;
+      ));
       break;
   }
 
@@ -1300,14 +1291,14 @@ export function demoAnswer(db: DemoDb, message: string): AssistantChatResult {
     intent: intent.name,
     confidence: intent.name === "unknown" ? 0 : 0.9,
     windowDays: intent.window,
-    suggestions: SUGGESTIONS[intent.name].slice(0, 3),
+    suggestions: SUGGESTIONS[intent.name].slice(0, 3).map((key) => t(key)),
     sources: SOURCES[intent.name],
     snapshotAt: snapshot.generatedAt,
     alertsCount: snapshot.inventory.lowStockCount + snapshot.expiring.expiredCount,
     dataUsed: {
       tools: [],
       tables: SOURCES[intent.name],
-      dateRange: `近 ${intent.window} 天`,
+      dateRange: t("近 {0} 天", intent.window),
       recordCount:
         snapshot.inventory.productCount +
         snapshot.purchase.pendingCount +
@@ -1325,18 +1316,18 @@ export function demoReport(db: DemoDb, period: "week" | "month"): AssistantRepor
   return {
     period,
     summary: [
-      `${days === 7 ? "周度" : "月度"}经营简报（${localDateTime(snapshot.generatedAt)}）：`,
-      `销售：${window.sales.orderCount} 单，${formatMoney(window.sales.revenue)}，毛利 ${formatMoney(
+      t("{0}经营简报（{1}）：", t(days === 7 ? "周度" : "月度"), localDateTime(snapshot.generatedAt)),
+      t("销售：{0} 单，{1}，毛利 {2}（毛利率 {3}）。", window.sales.orderCount, formatMoney(window.sales.revenue), formatMoney(
         window.sales.grossProfit
-      )}（毛利率 ${formatPercent(window.sales.margin)}）。`,
-      `采购：${window.purchase.invoiceCount} 张已确认发票，${formatMoney(
+      ), formatPercent(window.sales.margin)),
+      t("采购：{0} 张已确认发票，{1}；待确认 {2} 张。", window.purchase.invoiceCount, formatMoney(
         window.purchase.totalAmount
-      )}；待确认 ${snapshot.purchase.pendingCount} 张。`,
-      `库存：${snapshot.inventory.lowStockCount} 个商品低于安全线（${snapshot.inventory.zeroStockCount} 个缺货），${snapshot.expiring.expiredCount} 个批次过期、${snapshot.expiring.expiringCount} 个临期。`,
-      `应付：${snapshot.payables.count} 家供应商未结 ${formatMoney(snapshot.payables.totalOutstanding)}。`,
+      ), snapshot.purchase.pendingCount),
+      t("库存：{0} 个商品低于安全线（{1} 个缺货），{2} 个批次过期、{3} 个临期。", snapshot.inventory.lowStockCount, snapshot.inventory.zeroStockCount, snapshot.expiring.expiredCount, snapshot.expiring.expiringCount),
+      t("应付：{0} 家供应商未结 {1}。", snapshot.payables.count, formatMoney(snapshot.payables.totalOutstanding)),
       high.length > 0
-        ? `需要优先处理：${high.map((alert) => alert.title).join("、")}。`
-        : "本期没有需要紧急处理的风险项。",
+        ? t("需要优先处理：{0}。", high.map((alert) => alert.title).join("、"))
+        : t("本期没有需要紧急处理的风险项。"),
     ].join("\n"),
     alerts: alerts.map((alert) => ({
       type: alert.type,

@@ -6,7 +6,9 @@
 
 ## Live demo
 
-**<https://harveyxiacn.github.io/pandamart-pms/>**
+[English](https://harveyxiacn.github.io/pandamart-pms/?lang=en) · [简体中文](https://harveyxiacn.github.io/pandamart-pms/?lang=zh-Hans) · [繁體中文（香港）](https://harveyxiacn.github.io/pandamart-pms/?lang=zh-Hant)
+
+The language selector is available before and after sign-in, including inside edit dialogs. A direct language link overrides the saved preference. Invoice links can include a route, e.g. `?lang=en#/invoices?id=62`. To check the production demo with desktop and mobile Chromium, run `python scripts/check-pages-locales.py https://harveyxiacn.github.io/pandamart-pms/` with Python Playwright and Chromium installed.
 
 A static GitHub Pages build of the client with an **in-browser mock backend** — no server or database required. The mock implements every API the UI calls, so all modules are interactive: invoice upload + OCR review + confirm, inventory, batches, sales, stocktake, products, suppliers, payables, analytics, smart assistant, notifications, settings, users, audit logs, and CSV/JSON exports.
 

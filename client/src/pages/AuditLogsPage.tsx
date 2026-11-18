@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n";
 import { useEffect, useState } from "react";
 import { Filter, RotateCcw, ScrollText } from "lucide-react";
 import { getAuditLogs, type AuditLogItem } from "../api/auditLogs";
@@ -36,7 +37,48 @@ const actionTone: Record<string, "default" | "info" | "success" | "warning" | "d
   upload: "info",
 };
 
+const actionLabels: Record<string, string> = {
+  "login": "登录系统",
+  "adjust_inventory": "调整库存",
+  "change_password": "修改密码",
+  "confirm_invoice": "确认入库",
+  "create_batch": "创建批次",
+  "create_product": "创建产品",
+  "create_sale": "登记销售",
+  "create_supplier": "创建供应商",
+  "create_user": "创建用户",
+  "delete_invoice": "删除发票",
+  "delete_product": "删除产品",
+  "dispose_batch": "批次报损",
+  "import_products": "导入产品",
+  "record_payment": "登记付款",
+  "reject_invoice": "驳回发票",
+  "reset_password": "重置密码",
+  "rollback_invoice": "回滚发票",
+  "stocktake": "库存盘点",
+  "update_invoice": "更新发票",
+  "update_product": "更新产品",
+  "update_settings": "更新设置",
+  "update_supplier": "更新供应商",
+  "update_user_status": "更新用户状态",
+  "update_user": "更新用户",
+  "upload_invoice": "上传发票",
+  "void_sale": "作废销售单"
+};
+const entityLabels: Record<string, string> = {
+  "invoice": "发票",
+  "product": "产品",
+  "supplier": "供应商",
+  "user": "用户",
+  "inventory": "库存",
+  "sales_order": "销售单",
+  "batch": "库存批次",
+  "setting": "系统设置",
+  "payment": "付款记录"
+};
+
 export default function AuditLogsPage() {
+  useLanguage();
   const [items, setItems] = useState<AuditLogItem[]>([]);
   const [users, setUsers] = useState<UserOption[]>([]);
   const [page, setPage] = useState(1);
@@ -69,7 +111,7 @@ export default function AuditLogsPage() {
       setTotal(logsRes.pagination.total);
       setUsers(usersRes as unknown as UserOption[]);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "审计日志加载失败");
+      setError(err instanceof Error ? err.message : t("审计日志加载失败"));
     } finally {
       setLoading(false);
     }
@@ -91,9 +133,9 @@ export default function AuditLogsPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="审计日志"
-        description="记录登录、数据变更与关键业务操作，用于追溯与合规检查。"
-        meta={`共 ${total} 条记录`}
+        title={t("审计日志")}
+        description={t("记录登录、数据变更与关键业务操作，用于追溯与合规检查。")}
+        meta={t("共 {0} 条记录", total)}
       />
 
       <Card>
@@ -102,10 +144,10 @@ export default function AuditLogsPage() {
             <Select
               value={userId}
               onChange={(e) => setUserId(e.target.value)}
-              aria-label="按用户筛选"
+              aria-label={t("按用户筛选")}
               className="w-auto min-w-[10rem]"
             >
-              <option value="">全部用户</option>
+              <option value="">{t("全部用户")}</option>
               {users.map((user) => (
                 <option key={user.id} value={user.id}>
                   {user.display_name} ({user.username})
@@ -115,31 +157,27 @@ export default function AuditLogsPage() {
             <Input
               value={action}
               onChange={(e) => setAction(e.target.value)}
-              placeholder="动作，如 login / update"
-              aria-label="按动作筛选"
+              placeholder={t("动作，如 login / update")}
+              aria-label={t("按动作筛选")}
               className="w-auto min-w-[12rem]"
             />
             <Input
               value={entityType}
               onChange={(e) => setEntityType(e.target.value)}
-              placeholder="实体，如 product / invoice"
-              aria-label="按实体筛选"
+              placeholder={t("实体，如 product / invoice")}
+              aria-label={t("按实体筛选")}
               className="w-auto min-w-[12rem]"
             />
             <DateRangePicker
               value={dateRange}
               onChange={setDateRange}
-              label="按日期筛选"
+              label={t("按日期筛选")}
               className="w-auto min-w-[13rem]"
             />
           </ToolbarGroup>
           <ToolbarGroup>
-            <Button leadingIcon={Filter} onClick={() => void load(1)}>
-              筛选
-            </Button>
-            <Button variant="ghost" leadingIcon={RotateCcw} onClick={reset}>
-              重置
-            </Button>
+            <Button leadingIcon={Filter} onClick={() => void load(1)}>{t("筛选")}</Button>
+            <Button variant="ghost" leadingIcon={RotateCcw} onClick={reset}>{t("重置")}</Button>
           </ToolbarGroup>
         </Toolbar>
       </Card>
@@ -149,28 +187,26 @@ export default function AuditLogsPage() {
         {!loading && error ? (
           <EmptyState
             icon={ScrollText}
-            title="加载失败"
+            title={t("加载失败")}
             description={error}
             action={
-              <Button variant="ghost" onClick={() => void load()}>
-                重试
-              </Button>
+              <Button variant="ghost" onClick={() => void load()}>{t("重试")}</Button>
             }
           />
         ) : null}
         {!loading && !error && items.length === 0 ? (
-          <EmptyState icon={ScrollText} title="没有匹配的日志" description="调整筛选条件或清除筛选后重试。" />
+          <EmptyState icon={ScrollText} title={t("没有匹配的日志")} description={t("调整筛选条件或清除筛选后重试。")} />
         ) : null}
         {!loading && !error && items.length > 0 ? (
           <>
             <Table>
               <thead>
                 <tr>
-                  <Th>时间</Th>
-                  <Th>用户</Th>
-                  <Th>动作</Th>
-                  <Th>实体</Th>
-                  <Th>详情</Th>
+                  <Th>{t("时间")}</Th>
+                  <Th>{t("用户")}</Th>
+                  <Th>{t("动作")}</Th>
+                  <Th>{t("实体")}</Th>
+                  <Th>{t("详情")}</Th>
                   <Th>IP</Th>
                 </tr>
               </thead>
@@ -185,14 +221,14 @@ export default function AuditLogsPage() {
                           <span className="ml-1 text-meta text-ink-subtle">@{item.user.username}</span>
                         </span>
                       ) : (
-                        <span className="text-ink-subtle">系统</span>
+                        <span className="text-ink-subtle">{t("系统")}</span>
                       )}
                     </Td>
                     <Td>
-                      <Badge tone={actionTone[item.action] ?? "default"}>{item.action}</Badge>
+                      <Badge tone={actionTone[item.action] ?? "default"}>{t(actionLabels[item.action] ?? item.action)}</Badge>
                     </Td>
                     <Td className="whitespace-nowrap text-meta">
-                      {item.entityType}
+                      {t(entityLabels[item.entityType] ?? item.entityType)}
                       {item.entityId ? <span className="text-ink-subtle"> #{item.entityId}</span> : null}
                     </Td>
                     <Td>

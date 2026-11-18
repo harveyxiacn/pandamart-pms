@@ -1,3 +1,4 @@
+import { t } from "../../i18n";
 // 浏览器内发票 OCR（GitHub Pages 演示专用）。
 //
 // GitHub Pages 只能托管静态文件，跑不了服务端 Tesseract，所以演示站改用
@@ -64,18 +65,18 @@ function mapLogger(status: string, progress: number): DemoOcrProgress {
   const value = progress * 100;
   const key = status.toLowerCase();
   if (key.includes("loading tesseract core")) {
-    return { percent: 5 + value * 0.15, message: "加载 OCR 引擎" };
+    return { percent: 5 + value * 0.15, message: t("加载 OCR 引擎") };
   }
   if (key.includes("loading language") || key.includes("loading traineddata")) {
-    return { percent: 20 + value * 0.35, message: "下载/加载语言包（首次较慢）" };
+    return { percent: 20 + value * 0.35, message: t("下载/加载语言包（首次较慢）") };
   }
   if (key.includes("initializing") || key.includes("initialized")) {
-    return { percent: 55 + value * 0.05, message: "初始化识别引擎" };
+    return { percent: 55 + value * 0.05, message: t("初始化识别引擎") };
   }
   if (key.includes("recognizing")) {
-    return { percent: 60 + value * 0.35, message: "识别发票文字" };
+    return { percent: 60 + value * 0.35, message: t("识别发票文字") };
   }
-  return { percent: 10 + value * 0.8, message: "准备 OCR" };
+  return { percent: 10 + value * 0.8, message: t("准备 OCR") };
 }
 
 async function getWorker(): Promise<TesseractWorker> {
@@ -103,7 +104,7 @@ async function getWorker(): Promise<TesseractWorker> {
 function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
-      (blob) => (blob ? resolve(blob) : reject(new Error("图片转换失败"))),
+      (blob) => (blob ? resolve(blob) : reject(new Error(t("图片转换失败")))),
       "image/png"
     );
   });
@@ -124,7 +125,7 @@ async function normalizeImage(file: File): Promise<Blob> {
     canvas.width = width;
     canvas.height = height;
     const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("浏览器不支持 Canvas");
+    if (!ctx) throw new Error(t("浏览器不支持 Canvas"));
     ctx.filter = "grayscale(1) contrast(1.15)";
     ctx.drawImage(bitmap, 0, 0, width, height);
     return await canvasToBlob(canvas);
@@ -183,7 +184,7 @@ async function renderPdfFirstPage(file: File): Promise<Blob> {
     canvas.width = Math.round(viewport.width);
     canvas.height = Math.round(viewport.height);
     const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("浏览器不支持 Canvas");
+    if (!ctx) throw new Error(t("浏览器不支持 Canvas"));
     await page.render({ canvas, viewport }).promise;
     return await canvasToBlob(canvas);
   } finally {
@@ -206,16 +207,16 @@ export async function recognizeInvoiceInBrowser(
 ): Promise<DemoOcrOutcome> {
   const startedAt = performance.now();
   progressSink = onProgress ?? null;
-  emitProgress(3, "准备文件");
+  emitProgress(3, t("准备文件"));
 
   try {
     const image = isPdf(file) ? await renderPdfFirstPage(file) : await normalizeImage(file);
-    emitProgress(6, "图片预处理完成");
+    emitProgress(6, t("图片预处理完成"));
 
     const worker = await getWorker();
-    emitProgress(60, "识别发票文字");
+    emitProgress(60, t("识别发票文字"));
     const result = await worker.recognize(image, {}, { tsv: true });
-    emitProgress(96, "整理发票明细");
+    emitProgress(96, t("整理发票明细"));
 
     const text = result.data.text ?? "";
     const tsv = result.data.tsv ?? "";

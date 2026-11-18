@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 import axios from "axios";
 import type { ApiResponse } from "../types";
 import { API_BASE_URL, STORAGE_KEYS } from "../utils/constants";
@@ -62,14 +63,14 @@ apiClient.interceptors.response.use(
       }
     }
 
-    return Promise.reject(new Error(extractErrorMessage(error)));
+    return Promise.reject(new Error(t(extractErrorMessage(error))));
   }
 );
 
 export async function unwrap<T>(promise: Promise<{ data: ApiResponse<T> }>): Promise<T> {
   const { data } = await promise;
   if (!data.success) {
-    throw new Error(data.error?.message || "请求失败");
+    throw new Error(t(data.error?.message || "请求失败"));
   }
   return data.data;
 }

@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n";
 import { useEffect, useState } from "react";
 import { KeyRound, MoreHorizontal, Pencil, Plus, ShieldCheck, UserCheck, UserX } from "lucide-react";
 import { createUser, getUsers, resetUserPassword, updateUser, updateUserStatus } from "../api/users";
@@ -50,6 +51,7 @@ const initialForm: UserForm = {
 };
 
 export default function UsersPage() {
+  useLanguage();
   const toast = useToast();
   const confirm = useConfirm();
   const [items, setItems] = useState<UserRecord[]>([]);
@@ -70,7 +72,7 @@ export default function UsersPage() {
     try {
       setItems((await getUsers()) as UserRecord[]);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "加载用户失败");
+      setError(err instanceof Error ? err.message : t("加载用户失败"));
     } finally {
       setLoading(false);
     }
@@ -109,11 +111,11 @@ export default function UsersPage() {
           email: form.email || null,
           role: form.role,
         });
-        toast.success("用户已更新");
+        toast.success(t("用户已更新"));
         setDrawerOpen(false);
         await load();
       } catch (err: unknown) {
-        toast.error(err instanceof Error ? err.message : "更新用户失败");
+        toast.error(err instanceof Error ? err.message : t("更新用户失败"));
       } finally {
         setSaving(false);
       }
@@ -121,19 +123,19 @@ export default function UsersPage() {
     }
 
     if (!form.username.trim() || !form.password) {
-      setFormError("用户名和密码为必填项");
+      setFormError(t("用户名和密码为必填项"));
       return;
     }
     setFormError(null);
     setSaving(true);
     try {
       await createUser(form);
-      toast.success("用户已创建");
+      toast.success(t("用户已创建"));
       setForm(initialForm);
       setDrawerOpen(false);
       await load();
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "创建用户失败");
+      toast.error(err instanceof Error ? err.message : t("创建用户失败"));
     } finally {
       setSaving(false);
     }
@@ -142,19 +144,19 @@ export default function UsersPage() {
   const toggleStatus = async (user: UserRecord) => {
     if (user.is_active) {
       const ok = await confirm({
-        title: "禁用用户",
-        message: `禁用「${user.display_name || user.username}」后，该用户将立即无法登录。`,
-        confirmText: "禁用",
+        title: t("禁用用户"),
+        message: t("禁用「{0}」后，该用户将立即无法登录。", user.display_name || user.username),
+        confirmText: t("禁用"),
         danger: true,
       });
       if (!ok) return;
     }
     try {
       await updateUserStatus(user.id, !user.is_active);
-      toast.success(user.is_active ? "用户已禁用" : "用户已启用");
+      toast.success(user.is_active ? t("用户已禁用") : t("用户已启用"));
       await load();
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "更新状态失败");
+      toast.error(err instanceof Error ? err.message : t("更新状态失败"));
     }
   };
 
@@ -163,11 +165,11 @@ export default function UsersPage() {
     setResetting(true);
     try {
       await resetUserPassword(resetTarget.id, newPassword);
-      toast.success("密码已重置，该用户需重新登录");
+      toast.success(t("密码已重置，该用户需重新登录"));
       setResetTarget(null);
       setNewPassword("");
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "重置密码失败");
+      toast.error(err instanceof Error ? err.message : t("重置密码失败"));
     } finally {
       setResetting(false);
     }
@@ -178,12 +180,10 @@ export default function UsersPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="用户管理"
-        description="管理后台账号、角色与登录状态。管理员可管理全部模块，店员仅能操作进货与销售。"
+        title={t("用户管理")}
+        description={t("管理后台账号、角色与登录状态。管理员可管理全部模块，店员仅能操作进货与销售。")}
         actions={
-          <Button leadingIcon={Plus} onClick={openCreate}>
-            创建用户
-          </Button>
+          <Button leadingIcon={Plus} onClick={openCreate}>{t("创建用户")}</Button>
         }
       />
 
@@ -193,7 +193,7 @@ export default function UsersPage() {
             <ShieldCheck size={17} aria-hidden="true" />
           </span>
           <div>
-            <p className="text-meta text-ink-subtle">账号总数</p>
+            <p className="text-meta text-ink-subtle">{t("账号总数")}</p>
             <p className="text-title font-semibold tabular text-ink">{items.length}</p>
           </div>
         </Card>
@@ -202,7 +202,7 @@ export default function UsersPage() {
             <UserCheck size={17} aria-hidden="true" />
           </span>
           <div>
-            <p className="text-meta text-ink-subtle">启用中</p>
+            <p className="text-meta text-ink-subtle">{t("启用中")}</p>
             <p className="text-title font-semibold tabular text-ink">{activeCount}</p>
           </div>
         </Card>
@@ -211,7 +211,7 @@ export default function UsersPage() {
             <UserX size={17} aria-hidden="true" />
           </span>
           <div>
-            <p className="text-meta text-ink-subtle">已禁用</p>
+            <p className="text-meta text-ink-subtle">{t("已禁用")}</p>
             <p className="text-title font-semibold tabular text-ink">{items.length - activeCount}</p>
           </div>
         </Card>
@@ -219,35 +219,33 @@ export default function UsersPage() {
 
       <Card padded={false} className="p-4 sm:p-5">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-title font-semibold tracking-tight text-ink">用户列表</h2>
-          <span className="text-meta text-ink-subtle">共 {items.length} 个账号</span>
+          <h2 className="text-title font-semibold tracking-tight text-ink">{t("用户列表")}</h2>
+          <span className="text-meta text-ink-subtle">{t("共")} {items.length} {t("个账号")}</span>
         </div>
         {loading ? <SkeletonTable rows={5} columns={6} /> : null}
         {!loading && error ? (
           <EmptyState
             icon={UserX}
-            title="加载失败"
+            title={t("加载失败")}
             description={error}
             action={
-              <Button variant="ghost" onClick={() => void load()}>
-                重试
-              </Button>
+              <Button variant="ghost" onClick={() => void load()}>{t("重试")}</Button>
             }
           />
         ) : null}
         {!loading && !error && items.length === 0 ? (
-          <EmptyState icon={UserX} title="暂无用户" description="点击右上角「创建用户」添加第一个账号。" />
+          <EmptyState icon={UserX} title={t("暂无用户")} description={t("点击右上角「创建用户」添加第一个账号。")} />
         ) : null}
         {!loading && !error && items.length > 0 ? (
           <Table>
             <thead>
               <tr>
-                <Th>用户</Th>
-                <Th>角色</Th>
-                <Th>状态</Th>
-                <Th>最后登录</Th>
-                <Th>创建时间</Th>
-                <Th className="cell-actions">操作</Th>
+                <Th>{t("用户")}</Th>
+                <Th>{t("角色")}</Th>
+                <Th>{t("状态")}</Th>
+                <Th>{t("最后登录")}</Th>
+                <Th>{t("创建时间")}</Th>
+                <Th className="cell-actions">{t("操作")}</Th>
               </tr>
             </thead>
             <tbody>
@@ -268,41 +266,37 @@ export default function UsersPage() {
                     </div>
                   </Td>
                   <Td>
-                    {item.role === "admin" ? <Badge tone="info">管理员</Badge> : <Badge>店员</Badge>}
+                    {item.role === "admin" ? <Badge tone="info">{t("管理员")}</Badge> : <Badge>{t("店员")}</Badge>}
                   </Td>
                   <Td>
-                    {item.is_active ? <Badge tone="success">启用</Badge> : <Badge tone="danger">已禁用</Badge>}
+                    {item.is_active ? <Badge tone="success">{t("启用")}</Badge> : <Badge tone="danger">{t("已禁用")}</Badge>}
                   </Td>
                   <Td className="whitespace-nowrap tabular text-meta">{formatDateTime(item.last_login_at)}</Td>
                   <Td className="whitespace-nowrap tabular text-meta">{formatDateTime(item.created_at)}</Td>
                   <Td className="cell-actions">
                     <DropdownMenu
-                      label={`${item.username} 操作`}
+                      label={t("{0} 操作", item.username)}
                       trigger={(props) => (
-                        <Button {...props} variant="ghost" size="sm" iconOnly aria-label="更多操作">
+                        <Button {...props} variant="ghost" size="sm" iconOnly aria-label={t("更多操作")}>
                           <MoreHorizontal size={16} aria-hidden="true" />
                         </Button>
                       )}
                     >
-                      <DropdownMenuItem icon={Pencil} onSelect={() => openEdit(item)}>
-                        编辑资料
-                      </DropdownMenuItem>
+                      <DropdownMenuItem icon={Pencil} onSelect={() => openEdit(item)}>{t("编辑资料")}</DropdownMenuItem>
                       <DropdownMenuItem
                         icon={KeyRound}
                         onSelect={() => {
                           setResetTarget(item);
                           setNewPassword("");
                         }}
-                      >
-                        重置密码
-                      </DropdownMenuItem>
+                      >{t("重置密码")}</DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         icon={item.is_active ? UserX : UserCheck}
                         tone={item.is_active ? "danger" : "default"}
                         onSelect={() => void toggleStatus(item)}
                       >
-                        {item.is_active ? "禁用账号" : "启用账号"}
+                        {item.is_active ? t("禁用账号") : t("启用账号")}
                       </DropdownMenuItem>
                     </DropdownMenu>
                   </Td>
@@ -316,15 +310,13 @@ export default function UsersPage() {
       <Drawer
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        title={editing ? "编辑用户" : "创建用户"}
-        description={editing ? `账号 ${editing.username} 的基本资料` : "创建后可将账号分配给店员或管理员。"}
+        title={editing ? t("编辑用户") : t("创建用户")}
+        description={editing ? t("账号 {0} 的基本资料", editing.username) : t("创建后可将账号分配给店员或管理员。")}
         footer={
           <>
-            <Button variant="ghost" onClick={() => setDrawerOpen(false)}>
-              取消
-            </Button>
+            <Button variant="ghost" onClick={() => setDrawerOpen(false)}>{t("取消")}</Button>
             <Button onClick={() => void submit()} loading={saving}>
-              {editing ? "保存修改" : "创建用户"}
+              {editing ? t("保存修改") : t("创建用户")}
             </Button>
           </>
         }
@@ -332,7 +324,7 @@ export default function UsersPage() {
         <div className="space-y-3">
           {!editing ? (
             <>
-              <Field label="用户名" htmlFor="user-username" required error={formError ?? undefined}>
+              <Field label={t("用户名")} htmlFor="user-username" required error={formError ?? undefined}>
                 <Input
                   id="user-username"
                   value={form.username}
@@ -341,7 +333,7 @@ export default function UsersPage() {
                   aria-invalid={Boolean(formError)}
                 />
               </Field>
-              <Field label="初始密码" htmlFor="user-password" required hint="至少 8 位，且同时包含字母与数字">
+              <Field label={t("初始密码")} htmlFor="user-password" required hint={t("至少 8 位，且同时包含字母与数字")}>
                 <Input
                   id="user-password"
                   type="password"
@@ -352,31 +344,31 @@ export default function UsersPage() {
               </Field>
             </>
           ) : null}
-          <Field label="显示名" htmlFor="user-display">
+          <Field label={t("显示名")} htmlFor="user-display">
             <Input
               id="user-display"
               value={form.displayName}
               onChange={(e) => setForm({ ...form, displayName: e.target.value })}
-              placeholder="例如 张伟"
+              placeholder={t("例如 张伟")}
             />
           </Field>
-          <Field label="邮箱" htmlFor="user-email">
+          <Field label={t("邮箱")} htmlFor="user-email">
             <Input
               id="user-email"
               type="email"
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
-              placeholder="可选"
+              placeholder={t("可选")}
             />
           </Field>
-          <Field label="角色" htmlFor="user-role" hint="管理员可访问仪表盘、分析、设置等模块；店员仅可使用进货与销售。">
+          <Field label={t("角色")} htmlFor="user-role" hint={t("管理员可访问仪表盘、分析、设置等模块；店员仅可使用进货与销售。")}>
             <Select
               id="user-role"
               value={form.role}
               onChange={(e) => setForm({ ...form, role: e.target.value as "admin" | "staff" })}
             >
-              <option value="staff">店员（Staff）</option>
-              <option value="admin">管理员（Admin）</option>
+              <option value="staff">{t("店员（Staff）")}</option>
+              <option value="admin">{t("管理员（Admin）")}</option>
             </Select>
           </Field>
         </div>
@@ -385,24 +377,20 @@ export default function UsersPage() {
       <Modal
         open={resetTarget !== null}
         onClose={() => setResetTarget(null)}
-        title="重置密码"
-        description={resetTarget ? `为 ${resetTarget.display_name || resetTarget.username} 设置新密码` : undefined}
+        title={t("重置密码")}
+        description={resetTarget ? t("为 {0} 设置新密码", resetTarget.display_name || resetTarget.username) : undefined}
         size="sm"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setResetTarget(null)}>
-              取消
-            </Button>
-            <Button onClick={() => void submitReset()} loading={resetting} disabled={newPassword.length < 8}>
-              重置密码
-            </Button>
+            <Button variant="ghost" onClick={() => setResetTarget(null)}>{t("取消")}</Button>
+            <Button onClick={() => void submitReset()} loading={resetting} disabled={newPassword.length < 8}>{t("重置密码")}</Button>
           </>
         }
       >
         <Field
-          label="新密码"
+          label={t("新密码")}
           htmlFor="reset-password"
-          hint="至少 8 位，且同时包含字母与数字；重置后该用户需重新登录。"
+          hint={t("至少 8 位，且同时包含字母与数字；重置后该用户需重新登录。")}
         >
           <Input
             id="reset-password"

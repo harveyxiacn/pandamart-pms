@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n";
 import { useEffect, useState } from "react";
 import { Banknote, CheckCircle2, Receipt, Wallet } from "lucide-react";
 import {
@@ -23,6 +24,7 @@ import { formatCurrency, formatDate } from "../utils/formatters";
 import { cn } from "../utils/classnames";
 
 export default function PayablesPage() {
+  useLanguage();
   const toast = useToast();
   const [rows, setRows] = useState<PayableRow[]>([]);
   const [totalOutstanding, setTotalOutstanding] = useState(0);
@@ -45,7 +47,7 @@ export default function PayablesPage() {
       setTotalOutstanding(res.totalOutstanding);
       setTotalBilled(res.items.reduce((sum, row) => sum + row.billed, 0));
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "应付账款加载失败");
+      setError(err instanceof Error ? err.message : t("应付账款加载失败"));
     } finally {
       setLoading(false);
     }
@@ -63,14 +65,14 @@ export default function PayablesPage() {
       setPayMethod("");
       setDetailOpen(true);
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "加载明细失败");
+      toast.error(err instanceof Error ? err.message : t("加载明细失败"));
     }
   }
 
   async function submitPayment() {
     if (!detail) return;
     if (!(Number(payAmount) > 0)) {
-      toast.error("付款金额无效");
+      toast.error(t("付款金额无效"));
       return;
     }
     setSaving(true);
@@ -80,11 +82,11 @@ export default function PayablesPage() {
         amount: Number(payAmount),
         method: payMethod || undefined,
       });
-      toast.success("付款已记录");
+      toast.success(t("付款已记录"));
       setDetailOpen(false);
       void load();
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "记录付款失败");
+      toast.error(err instanceof Error ? err.message : t("记录付款失败"));
     } finally {
       setSaving(false);
     }
@@ -96,65 +98,62 @@ export default function PayablesPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="应付账款"
-        description="按供应商汇总已开票、已付款与未结清金额，并登记付款。"
-        meta="数据来自已确认发票与付款记录"
+        title={t("应付账款")}
+        description={t("按供应商汇总已开票、已付款与未结清金额，并登记付款。")}
+        meta={t("数据来自已确认发票与付款记录")}
       />
 
       <section className="grid gap-3 sm:grid-cols-3">
         <StatCard
-          label="未结清总额"
+          label={t("未结清总额")}
           value={formatCurrency(totalOutstanding)}
           icon={Wallet}
           tone={totalOutstanding > 0 ? "danger" : "success"}
-          hint={`${suppliersWithBalance} 家供应商有待付金额`}
+          hint={t("{0} 家供应商有待付金额", suppliersWithBalance)}
         />
-        <StatCard label="累计已开票" value={formatCurrency(totalBilled)} icon={Receipt} tone="neutral" hint="全部供应商" />
+        <StatCard label={t("累计已开票")} value={formatCurrency(totalBilled)} icon={Receipt} tone="neutral" hint={t("全部供应商")} />
         <StatCard
-          label="结清比例"
+          label={t("结清比例")}
           value={`${settledRate}%`}
           icon={CheckCircle2}
           tone={settledRate >= 80 ? "success" : "warning"}
-          hint="已付金额占已开票金额"
+          hint={t("已付金额占已开票金额")}
         />
       </section>
 
       <Card padded={false} className="p-4 sm:p-5">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-title font-semibold tracking-tight text-ink">供应商账款</h2>
+          <h2 className="text-title font-semibold tracking-tight text-ink">{t("供应商账款")}</h2>
           <span className="text-meta text-ink-subtle">
-            {rows.length} 家供应商
-          </span>
+            {rows.length} {t("家供应商")}</span>
         </div>
         {loading ? (
           <SkeletonTable rows={6} columns={5} />
         ) : error ? (
           <EmptyState
             icon={Wallet}
-            title="加载失败"
+            title={t("加载失败")}
             description={error}
             action={
-              <Button variant="ghost" onClick={() => void load()}>
-                重试
-              </Button>
+              <Button variant="ghost" onClick={() => void load()}>{t("重试")}</Button>
             }
           />
         ) : rows.length === 0 ? (
           <EmptyState
             icon={Wallet}
-            title="暂无应付账款"
-            description="确认采购发票后会在此累计应付，并可按供应商登记付款。"
+            title={t("暂无应付账款")}
+            description={t("确认采购发票后会在此累计应付，并可按供应商登记付款。")}
           />
         ) : (
           <Table>
             <thead>
               <tr>
-                <Th>供应商</Th>
-                <Th numeric>已开票</Th>
-                <Th numeric>已付</Th>
-                <Th numeric>未结清</Th>
-                <Th>状态</Th>
-                <Th className="cell-actions">操作</Th>
+                <Th>{t("供应商")}</Th>
+                <Th numeric>{t("已开票")}</Th>
+                <Th numeric>{t("已付")}</Th>
+                <Th numeric>{t("未结清")}</Th>
+                <Th>{t("状态")}</Th>
+                <Th className="cell-actions">{t("操作")}</Th>
               </tr>
             </thead>
             <tbody>
@@ -178,15 +177,13 @@ export default function PayablesPage() {
                   </Td>
                   <Td>
                     {r.outstanding > 0.001 ? (
-                      <Badge tone="warning">待付款</Badge>
+                      <Badge tone="warning">{t("待付款")}</Badge>
                     ) : (
-                      <Badge tone="success">已结清</Badge>
+                      <Badge tone="success">{t("已结清")}</Badge>
                     )}
                   </Td>
                   <Td className="cell-actions">
-                    <Button variant="secondary" size="sm" onClick={() => void openDetail(r.supplierId)}>
-                      明细 / 付款
-                    </Button>
+                    <Button variant="secondary" size="sm" onClick={() => void openDetail(r.supplierId)}>{t("明细 / 付款")}</Button>
                   </Td>
                 </tr>
               ))}
@@ -197,22 +194,19 @@ export default function PayablesPage() {
 
       <Modal
         open={detailOpen}
-        title={detail ? `应付明细 · ${detail.supplier.name}` : "应付明细"}
-        description={detail ? `未结清 ${formatCurrency(detail.outstanding)}` : undefined}
+        title={detail ? t("应付明细 · {0}", detail.supplier.name) : t("应付明细")}
+        description={detail ? t("未结清 {0}", formatCurrency(detail.outstanding)) : undefined}
         onClose={() => setDetailOpen(false)}
         size="lg"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setDetailOpen(false)}>
-              关闭
-            </Button>
+            <Button variant="ghost" onClick={() => setDetailOpen(false)}>{t("关闭")}</Button>
             <Button
               onClick={() => void submitPayment()}
               loading={saving}
               leadingIcon={Banknote}
               disabled={!detail || Number(payAmount) <= 0}
-            >
-              记录付款{payAmount ? ` · ${formatCurrency(Number(payAmount))}` : ""}
+            >{t("记录付款")}{payAmount ? ` · ${formatCurrency(Number(payAmount))}` : ""}
             </Button>
           </>
         }
@@ -221,9 +215,9 @@ export default function PayablesPage() {
           <div className="space-y-5">
             <div className="grid grid-cols-3 gap-3">
               {[
-                { label: "已开票", value: detail.billed, tone: "text-ink" },
-                { label: "已付", value: detail.paid, tone: "text-success" },
-                { label: "未结清", value: detail.outstanding, tone: "text-danger" },
+                { label: t("已开票"), value: detail.billed, tone: "text-ink" },
+                { label: t("已付"), value: detail.paid, tone: "text-success" },
+                { label: t("未结清"), value: detail.outstanding, tone: "text-danger" },
               ].map((item) => (
                 <div key={item.label} className="rounded-lg border border-line bg-surface-muted p-3">
                   <p className="text-meta text-ink-subtle">{item.label}</p>
@@ -235,9 +229,9 @@ export default function PayablesPage() {
             </div>
 
             <div className="rounded-xl border border-line p-3">
-              <h4 className="mb-2 text-meta font-semibold uppercase tracking-wider text-ink-subtle">登记付款</h4>
+              <h4 className="mb-2 text-meta font-semibold uppercase tracking-wider text-ink-subtle">{t("登记付款")}</h4>
               <div className="flex flex-wrap items-end gap-3">
-                <Field label="付款金额" htmlFor="pay-amount" className="w-40">
+                <Field label={t("付款金额")} htmlFor="pay-amount" className="w-40">
                   <Input
                     id="pay-amount"
                     type="number"
@@ -247,27 +241,23 @@ export default function PayablesPage() {
                     onChange={(e) => setPayAmount(e.target.value)}
                   />
                 </Field>
-                <Field label="方式" htmlFor="pay-method" className="w-44">
+                <Field label={t("方式")} htmlFor="pay-method" className="w-44">
                   <Input
                     id="pay-method"
                     value={payMethod}
                     onChange={(e) => setPayMethod(e.target.value)}
-                    placeholder="现金 / 转账"
+                    placeholder={t("现金 / 转账")}
                   />
                 </Field>
-                <p className="pb-2 text-meta text-ink-subtle">提交后会在下方付款记录中登记。</p>
+                <p className="pb-2 text-meta text-ink-subtle">{t("提交后会在下方付款记录中登记。")}</p>
               </div>
             </div>
 
             <div className="grid gap-4 lg:grid-cols-2">
               <div>
-                <h4 className="mb-2 text-meta font-semibold uppercase tracking-wider text-ink-subtle">
-                  付款记录
-                </h4>
+                <h4 className="mb-2 text-meta font-semibold uppercase tracking-wider text-ink-subtle">{t("付款记录")}</h4>
                 {detail.payments.length === 0 ? (
-                  <p className="rounded-lg border border-line px-3 py-6 text-center text-meta text-ink-subtle">
-                    暂无付款记录
-                  </p>
+                  <p className="rounded-lg border border-line px-3 py-6 text-center text-meta text-ink-subtle">{t("暂无付款记录")}</p>
                 ) : (
                   <div className="max-h-52 space-y-1 overflow-y-auto">
                     {detail.payments.map((p) => (
@@ -287,13 +277,9 @@ export default function PayablesPage() {
               </div>
 
               <div>
-                <h4 className="mb-2 text-meta font-semibold uppercase tracking-wider text-ink-subtle">
-                  已确认发票（近 100 张）
-                </h4>
+                <h4 className="mb-2 text-meta font-semibold uppercase tracking-wider text-ink-subtle">{t("已确认发票（近 100 张）")}</h4>
                 {detail.invoices.length === 0 ? (
-                  <p className="rounded-lg border border-line px-3 py-6 text-center text-meta text-ink-subtle">
-                    暂无发票
-                  </p>
+                  <p className="rounded-lg border border-line px-3 py-6 text-center text-meta text-ink-subtle">{t("暂无发票")}</p>
                 ) : (
                   <div className="max-h-52 space-y-1 overflow-y-auto">
                     {detail.invoices.map((inv) => (

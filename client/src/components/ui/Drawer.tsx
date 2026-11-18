@@ -1,3 +1,5 @@
+import { LanguageSelector } from "../../i18n/LanguageSelector";
+import { t, useLanguage } from "../../i18n";
 import { useId, type PropsWithChildren, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
@@ -29,6 +31,7 @@ export function Drawer({
   bodyClassName,
   children,
 }: PropsWithChildren<DrawerProps>) {
+  useLanguage();
   const titleId = useId();
   const descriptionId = useId();
   const panelRef = useDialogA11y(open, onClose);
@@ -68,10 +71,11 @@ export function Drawer({
               </p>
             ) : null}
           </div>
+          <LanguageSelector />
           <button
             type="button"
             onClick={onClose}
-            aria-label="关闭面板"
+            aria-label={t("关闭面板")}
             className="-mr-1.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-ink-subtle transition-colors hover:bg-surface-inset hover:text-ink"
           >
             <X size={18} aria-hidden="true" />

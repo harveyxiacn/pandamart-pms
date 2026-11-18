@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../../i18n";
 import { createContext, useCallback, useContext, useState, type PropsWithChildren } from "react";
 import { Modal } from "./Modal";
 import { Button } from "./Button";
@@ -22,6 +23,7 @@ interface ConfirmState extends ConfirmOptions {
 const initialState: ConfirmState = { open: false, title: "" };
 
 export function ConfirmProvider({ children }: PropsWithChildren) {
+  useLanguage();
   const [state, setState] = useState<ConfirmState>(initialState);
 
   const confirm = useCallback<ConfirmFn>((options) => {
@@ -46,10 +48,10 @@ export function ConfirmProvider({ children }: PropsWithChildren) {
           {state.message ? <p className="text-sm text-slate-600">{state.message}</p> : null}
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => settle(false)}>
-              {state.cancelText || "取消"}
+              {state.cancelText || t("取消")}
             </Button>
             <Button variant={state.danger ? "danger" : "primary"} onClick={() => settle(true)}>
-              {state.confirmText || "确认"}
+              {state.confirmText || t("确认")}
             </Button>
           </div>
         </div>

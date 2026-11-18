@@ -1,5 +1,6 @@
+import { t, useLanguage } from "./i18n";
 import { lazy, Suspense } from "react";
-import { BrowserRouter, HashRouter, Navigate, Outlet, Route, Routes } from "react-router-dom";
+import { BrowserRouter, HashRouter, Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { MainLayout } from "./components/layout/MainLayout";
 import { ToastProvider } from "./components/ui/Toast";
 import { ConfirmProvider } from "./components/ui/ConfirmDialog";
@@ -27,16 +28,17 @@ const ExportPage = lazy(() => import("./pages/ExportPage"));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
 
 function PageFallback() {
+  useLanguage();
   return (
-    <div className="rounded-xl border border-white/40 bg-white/70 p-4 text-sm text-slate-600">
-      页面加载中...
-    </div>
+    <div className="rounded-xl border border-white/40 bg-white/70 p-4 text-sm text-slate-600">{t("页面加载中...")}</div>
   );
 }
 
 function ProtectedRoute() {
+  useLanguage();
   const { isAuthenticated } = useAuth();
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  const location = useLocation();
+  if (!isAuthenticated) return <Navigate to="/login" replace state={{ destination: location.pathname + location.search }} />;
   return (
     <MainLayout>
       <Outlet />
@@ -45,8 +47,10 @@ function ProtectedRoute() {
 }
 
 function AdminRoute() {
+  useLanguage();
   const { isAuthenticated, isAdmin } = useAuth();
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  const location = useLocation();
+  if (!isAuthenticated) return <Navigate to="/login" replace state={{ destination: location.pathname + location.search }} />;
   if (!isAdmin) return <Navigate to="/invoices/scan" replace />;
   return (
     <MainLayout>
@@ -56,6 +60,7 @@ function AdminRoute() {
 }
 
 function NotFoundRoute() {
+  useLanguage();
   const { isAuthenticated } = useAuth();
   if (!isAuthenticated) {
     return <NotFoundPage />;
@@ -69,6 +74,7 @@ function NotFoundRoute() {
 }
 
 export default function App() {
+  useLanguage();
   // GitHub Pages serves static files only; hash routing keeps deep links working
   // without a server-side rewrite. Local/dev builds keep clean browser URLs.
   const Router = DEMO_MODE ? HashRouter : BrowserRouter;

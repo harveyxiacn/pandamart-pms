@@ -1,3 +1,4 @@
+import { productName, t, useLanguage } from "../i18n";
 import { useEffect, useMemo, useState } from "react";
 import { Ban, MoreHorizontal, Plus, Receipt, ShoppingCart, Trash2 } from "lucide-react";
 import { getAllProducts } from "../api/products";
@@ -37,6 +38,7 @@ interface DraftLine {
 }
 
 export default function SalesPage() {
+  useLanguage();
   const toast = useToast();
   const confirm = useConfirm();
   const { isAdmin } = useAuth();
@@ -86,7 +88,7 @@ export default function SalesPage() {
       setPage(res.pagination.page);
       setTotal(res.pagination.total);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "销售记录加载失败");
+      setError(err instanceof Error ? err.message : t("销售记录加载失败"));
     } finally {
       setLoading(false);
     }
@@ -123,19 +125,19 @@ export default function SalesPage() {
     const quantity = Number(qty);
     const unitPrice = Number(price);
     if (!productId) {
-      toast.error("请选择商品");
+      toast.error(t("请选择商品"));
       return;
     }
     if (!(quantity > 0)) {
-      toast.error("数量必须大于 0");
+      toast.error(t("数量必须大于 0"));
       return;
     }
     if (!(unitPrice >= 0)) {
-      toast.error("单价无效");
+      toast.error(t("单价无效"));
       return;
     }
     const p = products.find((x) => x.id === productId);
-    const name = p ? `${p.name_en}${p.name_zh ? ` (${p.name_zh})` : ""}` : `#${productId}`;
+    const name = p ? productName(p.name_zh, p.name_en) : `#${productId}`;
     setDraft((prev) => {
       const existing = prev.find((l) => l.productId === productId);
       if (existing) {
@@ -156,7 +158,7 @@ export default function SalesPage() {
 
   async function submitSale() {
     if (draft.length === 0) {
-      toast.error("请先添加商品");
+      toast.error(t("请先添加商品"));
       return;
     }
     setSubmitting(true);
@@ -165,13 +167,13 @@ export default function SalesPage() {
         items: draft.map((l) => ({ productId: l.productId, quantity: l.quantity, unitPrice: l.unitPrice })),
         note: note || null,
       });
-      toast.success(`销售出库成功，合计 ${formatCurrency(grandTotal)}`);
+      toast.success(t("销售出库成功，合计 {0}", formatCurrency(grandTotal)));
       setDraft([]);
       setNote("");
       setComposerOpen(false);
       void loadOrders(1);
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "销售出库失败");
+      toast.error(err instanceof Error ? err.message : t("销售出库失败"));
     } finally {
       setSubmitting(false);
     }
@@ -179,18 +181,18 @@ export default function SalesPage() {
 
   async function handleVoid(order: SaleSummary) {
     const ok = await confirm({
-      title: "作废销售单",
-      message: `确认作废 ${order.orderNo}？此操作会把已售出的库存回补，且不可撤销。`,
-      confirmText: "作废并回补",
+      title: t("作废销售单"),
+      message: t("确认作废 {0}？此操作会把已售出的库存回补，且不可撤销。", order.orderNo),
+      confirmText: t("作废并回补"),
       danger: true,
     });
     if (!ok) return;
     try {
       await voidSale(order.id);
-      toast.success("销售单已作废，库存已回补");
+      toast.success(t("销售单已作废，库存已回补"));
       void loadOrders(page);
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "作废失败");
+      toast.error(err instanceof Error ? err.message : t("作废失败"));
     }
   }
 
@@ -199,30 +201,28 @@ export default function SalesPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="销售出库"
-        description="现场收银出库，自动按 FIFO 扣减批次并回写库存。"
+        title={t("销售出库")}
+        description={t("现场收银出库，自动按 FIFO 扣减批次并回写库存。")}
         actions={
-          <Button leadingIcon={Plus} onClick={() => setComposerOpen(true)}>
-            新建销售单
-          </Button>
+          <Button leadingIcon={Plus} onClick={() => setComposerOpen(true)}>{t("新建销售单")}</Button>
         }
       />
 
       <section className="grid gap-3 sm:grid-cols-3">
         <StatCard
-          label="本页销售额"
+          label={t("本页销售额")}
           value={formatCurrency(completedTotal)}
           icon={Receipt}
           tone="accent"
-          hint={`${orders.filter((o) => o.status === "completed").length} 笔已完成`}
+          hint={t("{0} 笔已完成", orders.filter((o) => o.status === "completed").length)}
         />
-        <StatCard label="本页订单" value={orders.length} icon={ShoppingCart} hint="含已作废订单" />
+        <StatCard label={t("本页订单")} value={orders.length} icon={ShoppingCart} hint={t("含已作废订单")} />
         <StatCard
-          label="待处理草稿"
+          label={t("待处理草稿")}
           value={draft.length}
           icon={Plus}
           tone={draft.length > 0 ? "warning" : "neutral"}
-          hint={draft.length > 0 ? `合计 ${formatCurrency(grandTotal)}` : "暂无草稿"}
+          hint={draft.length > 0 ? t("合计 {0}", formatCurrency(grandTotal)) : t("暂无草稿")}
         />
       </section>
 
@@ -232,7 +232,7 @@ export default function SalesPage() {
             <DateRangePicker
               value={dateRange}
               onChange={setDateRange}
-              label="按销售日期筛选"
+              label={t("按销售日期筛选")}
               className="w-auto min-w-[13rem]"
             />
             {hasFilters ? (
@@ -243,20 +243,18 @@ export default function SalesPage() {
                   setStatus("");
                   setDateRange({ start: null, end: null });
                 }}
-              >
-                清除筛选
-              </Button>
+              >{t("清除筛选")}</Button>
             ) : null}
           </ToolbarGroup>
           <ToolbarGroup>
             <SegmentedControl
-              label="订单状态"
+              label={t("订单状态")}
               value={status}
               onChange={setStatus}
               options={[
-                { value: "", label: "全部" },
-                { value: "completed", label: "已完成" },
-                { value: "voided", label: "已作废" },
+                { value: "", label: t("全部") },
+                { value: "completed", label: t("已完成") },
+                { value: "voided", label: t("已作废") },
               ]}
             />
           </ToolbarGroup>
@@ -265,34 +263,28 @@ export default function SalesPage() {
 
       <Card padded={false} className="p-4 sm:p-5">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-title font-semibold tracking-tight text-ink">销售记录</h2>
-          <span className="text-meta text-ink-subtle">
-            共 <span className="font-medium tabular text-ink-muted">{total}</span> 笔
-          </span>
+          <h2 className="text-title font-semibold tracking-tight text-ink">{t("销售记录")}</h2>
+          <span className="text-meta text-ink-subtle">{t("共")} <span className="font-medium tabular text-ink-muted">{total}</span> {t("笔")}</span>
         </div>
         {loading ? (
           <SkeletonTable rows={5} columns={6} />
         ) : error ? (
           <EmptyState
             icon={Receipt}
-            title="加载失败"
+            title={t("加载失败")}
             description={error}
             action={
-              <Button variant="ghost" onClick={() => void loadOrders(page)}>
-                重试
-              </Button>
+              <Button variant="ghost" onClick={() => void loadOrders(page)}>{t("重试")}</Button>
             }
           />
         ) : orders.length === 0 ? (
           <EmptyState
             icon={Receipt}
-            title={hasFilters ? "没有符合条件的销售单" : "暂无销售记录"}
-            description={hasFilters ? "试试放宽日期范围。" : "完成第一笔销售后，记录会显示在这里。"}
+            title={hasFilters ? t("没有符合条件的销售单") : t("暂无销售记录")}
+            description={hasFilters ? t("试试放宽日期范围。") : t("完成第一笔销售后，记录会显示在这里。")}
             action={
               !hasFilters ? (
-                <Button leadingIcon={Plus} onClick={() => setComposerOpen(true)}>
-                  新建销售单
-                </Button>
+                <Button leadingIcon={Plus} onClick={() => setComposerOpen(true)}>{t("新建销售单")}</Button>
               ) : null
             }
           />
@@ -301,12 +293,12 @@ export default function SalesPage() {
             <Table>
               <thead>
                 <tr>
-                  <Th>单号</Th>
-                  <Th>状态</Th>
-                  <Th numeric>金额</Th>
-                  <Th>操作员</Th>
-                  <Th>时间</Th>
-                  {isAdmin ? <Th className="cell-actions">操作</Th> : null}
+                  <Th>{t("单号")}</Th>
+                  <Th>{t("状态")}</Th>
+                  <Th numeric>{t("金额")}</Th>
+                  <Th>{t("操作员")}</Th>
+                  <Th>{t("时间")}</Th>
+                  {isAdmin ? <Th className="cell-actions">{t("操作")}</Th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -315,9 +307,9 @@ export default function SalesPage() {
                     <Td className="font-mono text-meta text-ink">{o.orderNo}</Td>
                     <Td>
                       {o.status === "voided" ? (
-                        <Badge tone="danger">已作废</Badge>
+                        <Badge tone="danger">{t("已作废")}</Badge>
                       ) : (
-                        <Badge tone="success">已完成</Badge>
+                        <Badge tone="success">{t("已完成")}</Badge>
                       )}
                     </Td>
                     <Td numeric className={cn("font-semibold", o.status === "voided" ? "text-ink-subtle line-through" : "text-ink")}>
@@ -329,16 +321,14 @@ export default function SalesPage() {
                       <Td className="cell-actions">
                         {o.status === "completed" ? (
                           <DropdownMenu
-                            label={`${o.orderNo} 操作`}
+                            label={t("{0} 操作", o.orderNo)}
                             trigger={(props) => (
-                              <Button {...props} variant="ghost" size="sm" iconOnly aria-label="更多操作">
+                              <Button {...props} variant="ghost" size="sm" iconOnly aria-label={t("更多操作")}>
                                 <MoreHorizontal size={16} aria-hidden="true" />
                               </Button>
                             )}
                           >
-                            <DropdownMenuItem icon={Ban} tone="danger" onSelect={() => void handleVoid(o)}>
-                              作废并回补库存
-                            </DropdownMenuItem>
+                            <DropdownMenuItem icon={Ban} tone="danger" onSelect={() => void handleVoid(o)}>{t("作废并回补库存")}</DropdownMenuItem>
                           </DropdownMenu>
                         ) : (
                           <span className="text-meta text-ink-subtle">—</span>
@@ -359,43 +349,40 @@ export default function SalesPage() {
       <Drawer
         open={composerOpen}
         onClose={() => setComposerOpen(false)}
-        title="新建销售单"
-        description="选择商品、数量和单价，确认后立即扣减库存。"
+        title={t("新建销售单")}
+        description={t("选择商品、数量和单价，确认后立即扣减库存。")}
         widthClassName="sm:max-w-[34rem]"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setComposerOpen(false)}>
-              取消
-            </Button>
+            <Button variant="ghost" onClick={() => setComposerOpen(false)}>{t("取消")}</Button>
             <Button
               onClick={() => void submitSale()}
               loading={submitting}
               disabled={draft.length === 0}
             >
-              {draft.length > 0 ? `提交销售 · ${formatCurrency(grandTotal)}` : "提交销售"}
+              {draft.length > 0 ? t("提交销售 · {0}", formatCurrency(grandTotal)) : t("提交销售")}
             </Button>
           </>
         }
       >
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-[1fr_4.5rem_5.5rem]">
-            <Field label="商品" htmlFor="sale-product">
+            <Field label={t("商品")} htmlFor="sale-product">
               <Select
                 id="sale-product"
                 value={selProduct}
                 onChange={(e) => onSelectProduct(e.target.value)}
               >
-                <option value="">选择商品…</option>
+                <option value="">{t("选择商品…")}</option>
                 {products.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name_en}
-                    {p.name_zh ? ` (${p.name_zh})` : ""}
+                    {productName(p.name_zh, p.name_en)}
                     {p.sku ? ` · ${p.sku}` : ""}
                   </option>
                 ))}
               </Select>
             </Field>
-            <Field label="数量" htmlFor="sale-qty">
+            <Field label={t("数量")} htmlFor="sale-qty">
               <Input
                 id="sale-qty"
                 type="number"
@@ -405,7 +392,7 @@ export default function SalesPage() {
                 onChange={(e) => setQty(e.target.value)}
               />
             </Field>
-            <Field label="单价" htmlFor="sale-price">
+            <Field label={t("单价")} htmlFor="sale-price">
               <Input
                 id="sale-price"
                 type="number"
@@ -417,15 +404,11 @@ export default function SalesPage() {
             </Field>
           </div>
 
-          <Button variant="secondary" leadingIcon={Plus} onClick={addLine} fullWidth>
-            添加到销售单
-          </Button>
+          <Button variant="secondary" leadingIcon={Plus} onClick={addLine} fullWidth>{t("添加到销售单")}</Button>
 
           <div className="rounded-xl border border-line">
             {draft.length === 0 ? (
-              <p className="px-4 py-8 text-center text-meta text-ink-subtle">
-                还没有商品。选择商品后点「添加到销售单」。
-              </p>
+              <p className="px-4 py-8 text-center text-meta text-ink-subtle">{t("还没有商品。选择商品后点「添加到销售单」。")}</p>
             ) : (
               <ul className="divide-y divide-line/70">
                 {draft.map((line) => (
@@ -442,7 +425,7 @@ export default function SalesPage() {
                     <button
                       type="button"
                       onClick={() => removeLine(line.productId)}
-                      aria-label={`移除 ${line.name}`}
+                      aria-label={t("移除 {0}", line.name)}
                       className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-ink-subtle transition-colors hover:bg-danger-soft hover:text-danger"
                     >
                       <Trash2 size={15} aria-hidden="true" />
@@ -452,17 +435,17 @@ export default function SalesPage() {
               </ul>
             )}
             <div className="flex items-center justify-between border-t border-line bg-surface-muted px-4 py-3">
-              <span className="text-meta text-ink-muted">合计</span>
+              <span className="text-meta text-ink-muted">{t("合计")}</span>
               <span className="text-title font-semibold tabular text-ink">{formatCurrency(grandTotal)}</span>
             </div>
           </div>
 
-          <Field label="备注" htmlFor="sale-note">
+          <Field label={t("备注")} htmlFor="sale-note">
             <Input
               id="sale-note"
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="可选，例如发票号或客户说明"
+              placeholder={t("可选，例如发票号或客户说明")}
             />
           </Field>
         </div>

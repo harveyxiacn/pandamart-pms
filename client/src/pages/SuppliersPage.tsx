@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Building2, Mail, MapPin, MoreHorizontal, Pencil, Phone, Plus, Trash2 } from "lucide-react";
@@ -50,6 +51,7 @@ const initialForm: SupplierForm = {
 };
 
 export default function SuppliersPage() {
+  useLanguage();
   const { canEditCatalog } = usePermission();
   const toast = useToast();
   const confirm = useConfirm();
@@ -73,7 +75,7 @@ export default function SuppliersPage() {
     try {
       setDetail(await getSupplierById(id));
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "加载供应商详情失败");
+      toast.error(err instanceof Error ? err.message : t("加载供应商详情失败"));
     }
   };
 
@@ -90,7 +92,7 @@ export default function SuppliersPage() {
       setTotal(data.pagination.total);
       setPage(data.pagination.page);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "加载供应商失败");
+      setError(err instanceof Error ? err.message : t("加载供应商失败"));
     } finally {
       setLoading(false);
     }
@@ -141,7 +143,7 @@ export default function SuppliersPage() {
 
   const submit = async () => {
     if (!form.name.trim()) {
-      setFormError("请填写供应商名称");
+      setFormError(t("请填写供应商名称"));
       return;
     }
     setFormError(null);
@@ -158,17 +160,17 @@ export default function SuppliersPage() {
     try {
       if (editing && form.id) {
         await updateSupplier(form.id, payload);
-        toast.success("供应商已更新");
+        toast.success(t("供应商已更新"));
       } else {
         await createSupplier(payload);
-        toast.success("供应商已创建");
+        toast.success(t("供应商已创建"));
       }
       setForm(initialForm);
       setEditing(false);
       setDrawerOpen(false);
       await load();
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "供应商保存失败");
+      toast.error(err instanceof Error ? err.message : t("供应商保存失败"));
     } finally {
       setSaving(false);
     }
@@ -177,13 +179,11 @@ export default function SuppliersPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="供应商"
-        description="维护供应商档案与联系方式，供发票匹配和采购分析使用。"
+        title={t("供应商")}
+        description={t("维护供应商档案与联系方式，供发票匹配和采购分析使用。")}
         actions={
           canEditCatalog ? (
-            <Button leadingIcon={Plus} onClick={beginCreate}>
-              新增供应商
-            </Button>
+            <Button leadingIcon={Plus} onClick={beginCreate}>{t("新增供应商")}</Button>
           ) : null
         }
       />
@@ -198,15 +198,13 @@ export default function SuppliersPage() {
               onKeyDown={(e) => {
                 if (e.key === "Enter") void load(1);
               }}
-              placeholder="搜索名称或编号"
-              aria-label="搜索供应商"
+              placeholder={t("搜索名称或编号")}
+              aria-label={t("搜索供应商")}
               containerClassName="w-full sm:max-w-xs"
             />
           </ToolbarGroup>
           <ToolbarGroup>
-            <span className="text-meta text-ink-subtle">
-              共 <span className="font-medium tabular text-ink-muted">{total}</span> 家供应商
-            </span>
+            <span className="text-meta text-ink-subtle">{t("共")} <span className="font-medium tabular text-ink-muted">{total}</span> {t("家供应商")}</span>
           </ToolbarGroup>
         </Toolbar>
       </Card>
@@ -216,29 +214,25 @@ export default function SuppliersPage() {
         {!loading && error ? (
           <EmptyState
             icon={Building2}
-            title="加载失败"
+            title={t("加载失败")}
             description={error}
             action={
-              <Button variant="ghost" onClick={() => void load()}>
-                重试
-              </Button>
+              <Button variant="ghost" onClick={() => void load()}>{t("重试")}</Button>
             }
           />
         ) : null}
         {!loading && !error && items.length === 0 ? (
           <EmptyState
             icon={Building2}
-            title={keyword ? "没有匹配的供应商" : "还没有供应商"}
+            title={keyword ? t("没有匹配的供应商") : t("还没有供应商")}
             description={
               keyword
-                ? "换个名称或编号试试。"
-                : "新增供应商后，识别发票时会自动匹配名称与别名。"
+                ? t("换个名称或编号试试。")
+                : t("新增供应商后，识别发票时会自动匹配名称与别名。")
             }
             action={
               !keyword && canEditCatalog ? (
-                <Button leadingIcon={Plus} onClick={beginCreate}>
-                  新增供应商
-                </Button>
+                <Button leadingIcon={Plus} onClick={beginCreate}>{t("新增供应商")}</Button>
               ) : null
             }
           />
@@ -249,12 +243,12 @@ export default function SuppliersPage() {
             <Table>
               <thead>
                 <tr>
-                  <Th>供应商</Th>
-                  <Th>编号</Th>
-                  <Th>联系人</Th>
-                  <Th>电话</Th>
-                  <Th>状态</Th>
-                  <Th className="cell-actions">操作</Th>
+                  <Th>{t("供应商")}</Th>
+                  <Th>{t("编号")}</Th>
+                  <Th>{t("联系人")}</Th>
+                  <Th>{t("电话")}</Th>
+                  <Th>{t("状态")}</Th>
+                  <Th className="cell-actions">{t("操作")}</Th>
                 </tr>
               </thead>
               <tbody>
@@ -285,22 +279,20 @@ export default function SuppliersPage() {
                       {item.phone || <span className="text-ink-subtle">—</span>}
                     </Td>
                     <Td>
-                      {item.is_active ? <Badge tone="success">合作中</Badge> : <Badge>已停用</Badge>}
+                      {item.is_active ? <Badge tone="success">{t("合作中")}</Badge> : <Badge>{t("已停用")}</Badge>}
                     </Td>
                     <Td className="cell-actions">
                       <DropdownMenu
-                        label={`${item.name} 操作`}
+                        label={t("{0} 操作", item.name)}
                         trigger={(props) => (
-                          <Button {...props} variant="ghost" size="sm" iconOnly aria-label="更多操作">
+                          <Button {...props} variant="ghost" size="sm" iconOnly aria-label={t("更多操作")}>
                             <MoreHorizontal size={16} aria-hidden="true" />
                           </Button>
                         )}
                       >
-                        <DropdownMenuItem onSelect={() => void openDetail(item.id)}>查看详情</DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => void openDetail(item.id)}>{t("查看详情")}</DropdownMenuItem>
                         {canEditCatalog ? (
-                          <DropdownMenuItem icon={Pencil} onSelect={() => beginEdit(item)}>
-                            编辑供应商
-                          </DropdownMenuItem>
+                          <DropdownMenuItem icon={Pencil} onSelect={() => beginEdit(item)}>{t("编辑供应商")}</DropdownMenuItem>
                         ) : null}
                         {canEditCatalog ? (
                           <>
@@ -310,23 +302,21 @@ export default function SuppliersPage() {
                               tone="danger"
                               onSelect={async () => {
                                 const ok = await confirm({
-                                  title: "删除供应商",
-                                  message: `确认删除供应商「${item.name}」吗？已关联的发票不会删除。`,
-                                  confirmText: "删除",
+                                  title: t("删除供应商"),
+                                  message: t("确认删除供应商「{0}」吗？已关联的发票不会删除。", item.name),
+                                  confirmText: t("删除"),
                                   danger: true,
                                 });
                                 if (!ok) return;
                                 try {
                                   await deleteSupplier(item.id);
-                                  toast.success("供应商已删除");
+                                  toast.success(t("供应商已删除"));
                                   await load();
                                 } catch (err: unknown) {
-                                  toast.error(err instanceof Error ? err.message : "删除供应商失败");
+                                  toast.error(err instanceof Error ? err.message : t("删除供应商失败"));
                                 }
                               }}
-                            >
-                              删除供应商
-                            </DropdownMenuItem>
+                            >{t("删除供应商")}</DropdownMenuItem>
                           </>
                         ) : null}
                       </DropdownMenu>
@@ -354,46 +344,44 @@ export default function SuppliersPage() {
       <Drawer
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        title={editing ? "编辑供应商" : "新增供应商"}
-        description="名称与编号会用于发票 OCR 的供应商匹配。"
+        title={editing ? t("编辑供应商") : t("新增供应商")}
+        description={t("名称与编号会用于发票 OCR 的供应商匹配。")}
         footer={
           <>
-            <Button variant="ghost" onClick={() => setDrawerOpen(false)}>
-              取消
-            </Button>
+            <Button variant="ghost" onClick={() => setDrawerOpen(false)}>{t("取消")}</Button>
             <Button onClick={() => void submit()} loading={saving}>
-              {editing ? "保存修改" : "创建供应商"}
+              {editing ? t("保存修改") : t("创建供应商")}
             </Button>
           </>
         }
       >
         <div className="space-y-3">
-          <Field label="供应商名称" htmlFor="supplier-name" required error={formError ?? undefined}>
+          <Field label={t("供应商名称")} htmlFor="supplier-name" required error={formError ?? undefined}>
             <Input
               id="supplier-name"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="例如 CBS FOODS"
+              placeholder={t("例如 CBS FOODS")}
               aria-invalid={Boolean(formError)}
             />
           </Field>
-          <Field label="编号" htmlFor="supplier-code" hint="供应商代码或简称，用于发票匹配">
+          <Field label={t("编号")} htmlFor="supplier-code" hint={t("供应商代码或简称，用于发票匹配")}>
             <Input
               id="supplier-code"
               value={form.code}
               onChange={(e) => setForm({ ...form, code: e.target.value })}
-              placeholder="可选"
+              placeholder={t("可选")}
             />
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="联系人" htmlFor="supplier-contact">
+            <Field label={t("联系人")} htmlFor="supplier-contact">
               <Input
                 id="supplier-contact"
                 value={form.contactName}
                 onChange={(e) => setForm({ ...form, contactName: e.target.value })}
               />
             </Field>
-            <Field label="电话" htmlFor="supplier-phone">
+            <Field label={t("电话")} htmlFor="supplier-phone">
               <Input
                 id="supplier-phone"
                 value={form.phone}
@@ -401,7 +389,7 @@ export default function SuppliersPage() {
               />
             </Field>
           </div>
-          <Field label="邮箱" htmlFor="supplier-email">
+          <Field label={t("邮箱")} htmlFor="supplier-email">
             <Input
               id="supplier-email"
               type="email"
@@ -409,14 +397,14 @@ export default function SuppliersPage() {
               onChange={(e) => setForm({ ...form, email: e.target.value })}
             />
           </Field>
-          <Field label="地址" htmlFor="supplier-address">
+          <Field label={t("地址")} htmlFor="supplier-address">
             <Input
               id="supplier-address"
               value={form.address}
               onChange={(e) => setForm({ ...form, address: e.target.value })}
             />
           </Field>
-          <Field label="备注" htmlFor="supplier-notes">
+          <Field label={t("备注")} htmlFor="supplier-notes">
             <Input
               id="supplier-notes"
               value={form.notes}
@@ -429,18 +417,18 @@ export default function SuppliersPage() {
       <Modal
         open={detail !== null}
         onClose={() => setDetail(null)}
-        title={detail?.name ?? "供应商详情"}
-        description={detail ? `创建于 ${formatDate(detail.created_at)}` : undefined}
+        title={detail?.name ?? t("供应商详情")}
+        description={detail ? t("创建于 {0}", formatDate(detail.created_at)) : undefined}
         size="sm"
       >
         {detail ? (
           <dl className="space-y-3 text-sm">
             {[
-              { label: "编号", value: detail.code, icon: Building2 },
-              { label: "联系人", value: detail.contact_name, icon: Building2 },
-              { label: "电话", value: detail.phone, icon: Phone },
-              { label: "邮箱", value: detail.email, icon: Mail },
-              { label: "地址", value: detail.address, icon: MapPin },
+              { label: t("编号"), value: detail.code, icon: Building2 },
+              { label: t("联系人"), value: detail.contact_name, icon: Building2 },
+              { label: t("电话"), value: detail.phone, icon: Phone },
+              { label: t("邮箱"), value: detail.email, icon: Mail },
+              { label: t("地址"), value: detail.address, icon: MapPin },
             ].map((row) => {
               const Icon = row.icon;
               return (
@@ -450,15 +438,15 @@ export default function SuppliersPage() {
                     {row.label}
                   </dt>
                   <dd className="min-w-0 flex-1 break-words text-ink">
-                    {row.value || <span className="text-ink-subtle">未填写</span>}
+                    {row.value || <span className="text-ink-subtle">{t("未填写")}</span>}
                   </dd>
                 </div>
               );
             })}
             <div className="border-t border-line pt-3">
-              <dt className="mb-1 text-ink-subtle">备注</dt>
+              <dt className="mb-1 text-ink-subtle">{t("备注")}</dt>
               <dd className="whitespace-pre-wrap text-ink">
-                {detail.notes || <span className="text-ink-subtle">无</span>}
+                {detail.notes || <span className="text-ink-subtle">{t("无")}</span>}
               </dd>
             </div>
           </dl>

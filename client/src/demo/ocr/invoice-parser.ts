@@ -1,3 +1,4 @@
+import { t } from "../../i18n";
 import type { OcrRecognizedItem, OcrRecognizedResult } from './types';
 import { documentFromText, joinOcrWords, mergeVisualLines } from './document';
 import type {
@@ -650,9 +651,9 @@ function parseItems(document: OcrDocument): { items: OcrRecognizedItem[]; warnin
   }
 
   if (items.length === 0) {
-    warnings.push('未识别出商品明细，请检查发票清晰度或改用 Excel 导入。');
+    warnings.push(t("未识别出商品明细，请检查发票清晰度或改用 Excel 导入。"));
   } else if (columnItems.length > tokenItems.length) {
-    warnings.push('明细由表头列坐标解析，已按行尾数字规则交叉校验。');
+    warnings.push(t("明细由表头列坐标解析，已按行尾数字规则交叉校验。"));
   }
 
   return { items, warnings };
@@ -687,14 +688,14 @@ export function parseInvoiceDocument(document: OcrDocument, options: ParseOption
       (totals.total !== null && Math.abs(itemTotal + taxTotal - totals.total) <= tolerance));
 
   if (items.length > 0 && totals.salesTotal !== null && !totalsReconciled) {
-    warnings.push(`明细合计 ${itemTotal.toFixed(2)} 与发票小计 ${totals.salesTotal.toFixed(2)} 不一致，请核对。`);
+    warnings.push(t("明细合计 {0} 与发票小计 {1} 不一致，请核对。", itemTotal.toFixed(2), totals.salesTotal.toFixed(2)));
   }
   if (supplierName && (options.knownSuppliers || []).every((supplier) => supplier.name !== supplierName)) {
-    warnings.push(`供应商「${supplierName}」不在供应商库中，确认前请手动选择。`);
+    warnings.push(t("供应商「{0}」不在供应商库中，确认前请手动选择。", supplierName));
   }
-  if (!invoiceNumber) warnings.push('未识别到发票编号，已生成临时编号。');
+  if (!invoiceNumber) warnings.push(t("未识别到发票编号，已生成临时编号。"));
   if (source === 'ocr' && document.confidence > 0 && document.confidence < 60) {
-    warnings.push(`OCR 平均置信度 ${document.confidence.toFixed(0)}%，建议人工核对明细。`);
+    warnings.push(t("OCR 平均置信度 {0}%，建议人工核对明细。", document.confidence.toFixed(0)));
   }
 
   const recognized: OcrRecognizedResult = {

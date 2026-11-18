@@ -1,3 +1,5 @@
+import { formatNumber } from "../utils/formatters";
+import { productName, t, useLanguage } from "../i18n";
 import { useEffect, useState } from "react";
 import { AlertTriangle, CalendarClock, PackagePlus, Boxes } from "lucide-react";
 import { getAllProducts } from "../api/products";
@@ -40,6 +42,7 @@ function daysUntil(dateStr: string | null): number | null {
 }
 
 export default function BatchesPage() {
+  useLanguage();
   const toast = useToast();
   const confirm = useConfirm();
   const { canEditCatalog } = usePermission();
@@ -77,7 +80,7 @@ export default function BatchesPage() {
       setPage(batchRes.pagination.page);
       setExpiring(expRes);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "批次数据加载失败");
+      setError(err instanceof Error ? err.message : t("批次数据加载失败"));
     } finally {
       setLoading(false);
     }
@@ -100,11 +103,11 @@ export default function BatchesPage() {
 
   async function addBatch() {
     if (!productId) {
-      toast.error("请选择商品");
+      toast.error(t("请选择商品"));
       return;
     }
     if (!(Number(qty) > 0)) {
-      toast.error("数量必须大于 0");
+      toast.error(t("数量必须大于 0"));
       return;
     }
     setSaving(true);
@@ -115,14 +118,14 @@ export default function BatchesPage() {
         expiryDate: expiry || null,
         batchNo: batchNo || null,
       });
-      toast.success("批次入库成功");
+      toast.success(t("批次入库成功"));
       setProductId("");
       setQty("");
       setExpiry("");
       setBatchNo("");
       void load();
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "批次入库失败");
+      toast.error(err instanceof Error ? err.message : t("批次入库失败"));
     } finally {
       setSaving(false);
     }
@@ -130,66 +133,66 @@ export default function BatchesPage() {
 
   async function handleDispose(batch: Batch) {
     const ok = await confirm({
-      title: "批次报损",
-      message: `确认将「${batch.nameZh || batch.nameEn}」该批次剩余 ${batch.quantity} 全部报损？库存将相应扣减。`,
-      confirmText: "报损",
+      title: t("批次报损"),
+      message: t("确认将「{0}」该批次剩余 {1} 全部报损？库存将相应扣减。", productName(batch.nameZh, batch.nameEn), batch.quantity),
+      confirmText: t("报损"),
       danger: true,
     });
     if (!ok) return;
     try {
       await disposeBatch(batch.id, { reason: "过期报损" });
-      toast.success("已报损并扣减库存");
+      toast.success(t("已报损并扣减库存"));
       void load();
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "报损失败");
+      toast.error(err instanceof Error ? err.message : t("报损失败"));
     }
   }
 
   function expiryBadge(b: { expiryDate: string | null }) {
     const d = daysUntil(b.expiryDate);
-    if (d === null) return <Badge>无保质期</Badge>;
-    if (d < 0) return <Badge tone="danger">已过期 {-d} 天</Badge>;
-    if (d <= 7) return <Badge tone="warning">{d} 天后到期</Badge>;
-    return <Badge tone="success">{d} 天</Badge>;
+    if (d === null) return <Badge>{t("无保质期")}</Badge>;
+    if (d < 0) return <Badge tone="danger">{t("已过期")} {-d} {t("天")}</Badge>;
+    if (d <= 7) return <Badge tone="warning">{d} {t("天后到期")}</Badge>;
+    return <Badge tone="success">{d} {t("天")}</Badge>;
   }
 
   return (
     <div className="space-y-5">
       <PageHeader
-        title="批次与保质期"
-        description="按收货批次跟踪库存和到期日，临期商品优先售出，过期批次及时报损。"
-        meta={`当前页 ${batches.length} 个批次 · 共 ${total} 个在库批次`}
+        title={t("批次与保质期")}
+        description={t("按收货批次跟踪库存和到期日，临期商品优先售出，过期批次及时报损。")}
+        meta={t("当前页 {0} 个批次 · 共 {1} 个在库批次", batches.length, total)}
       />
 
       <section className="grid gap-3 sm:grid-cols-3">
         <StatCard
-          label="已过期批次"
+          label={t("已过期批次")}
           value={expiring?.expiredCount ?? 0}
           icon={AlertTriangle}
           tone="danger"
-          hint="需要立即报损下架"
+          hint={t("需要立即报损下架")}
         />
         <StatCard
-          label="7 天内临期"
+          label={t("7 天内临期")}
           value={expiring?.expiringCount ?? 0}
           icon={CalendarClock}
           tone="warning"
-          hint="建议优先陈列销售"
+          hint={t("建议优先陈列销售")}
         />
         <StatCard
-          label="在库批次"
+          label={t("在库批次")}
           value={total}
           icon={Boxes}
           tone="accent"
-          hint="状态为 active 的批次"
+          hint={t("状态为 active 的批次")}
         />
       </section>
 
       {canEditCatalog ? (
         <Card>
           <CardHeader
-            title="收货入批次"
-            description="选择商品后按货架期自动预填到期日，可手动调整。"
+            title={t("收货入批次")}
+            description={t("选择商品后按货架期自动预填到期日，可手动调整。")}
             action={
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-soft text-accent">
                 <PackagePlus size={16} aria-hidden="true" />
@@ -197,19 +200,18 @@ export default function BatchesPage() {
             }
           />
           <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.2fr)_auto] lg:items-end">
-            <Field label="商品" htmlFor="batch-product">
+            <Field label={t("商品")} htmlFor="batch-product">
               <Select id="batch-product" value={productId} onChange={(e) => onSelectProduct(e.target.value)}>
-                <option value="">选择商品…</option>
+                <option value="">{t("选择商品…")}</option>
                 {products.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name_en}
-                    {p.name_zh ? ` (${p.name_zh})` : ""}
+                    {productName(p.name_zh, p.name_en)}
                     {p.sku ? ` · ${p.sku}` : ""}
                   </option>
                 ))}
               </Select>
             </Field>
-            <Field label="数量" htmlFor="batch-qty">
+            <Field label={t("数量")} htmlFor="batch-qty">
               <Input
                 id="batch-qty"
                 type="number"
@@ -221,54 +223,50 @@ export default function BatchesPage() {
                 inputMode="decimal"
               />
             </Field>
-            <Field label="到期日" htmlFor="batch-expiry" hint="可留空">
+            <Field label={t("到期日")} htmlFor="batch-expiry" hint={t("可留空")}>
               <DatePicker
                 id="batch-expiry"
                 value={expiry || null}
                 onChange={(value) => setExpiry(value ?? "")}
-                label="批次到期日"
+                label={t("批次到期日")}
                 clearable
               />
             </Field>
-            <Field label="批次号" htmlFor="batch-no" hint="可选">
+            <Field label={t("批次号")} htmlFor="batch-no" hint={t("可选")}>
               <Input
                 id="batch-no"
                 value={batchNo}
                 onChange={(e) => setBatchNo(e.target.value)}
-                placeholder="如 LOT-20261029"
+                placeholder={t("如 LOT-20261029")}
               />
             </Field>
-            <Button onClick={() => void addBatch()} loading={saving} className="h-9 sm:col-span-2 lg:col-span-1">
-              入库
-            </Button>
+            <Button onClick={() => void addBatch()} loading={saving} className="h-9 sm:col-span-2 lg:col-span-1">{t("入库")}</Button>
           </div>
         </Card>
       ) : null}
 
       <Card padded={false} className="p-4 sm:p-5">
         <CardHeader
-          title="在库批次"
-          description="按到期日排序，报损会扣减对应批次的库存。"
+          title={t("在库批次")}
+          description={t("按到期日排序，报损会扣减对应批次的库存。")}
           className="mb-3"
         />
         {loading ? <SkeletonTable rows={6} columns={6} /> : null}
         {!loading && error ? (
           <EmptyState
             icon={Boxes}
-            title="加载失败"
+            title={t("加载失败")}
             description={error}
             action={
-              <Button variant="ghost" onClick={() => void load()}>
-                重试
-              </Button>
+              <Button variant="ghost" onClick={() => void load()}>{t("重试")}</Button>
             }
           />
         ) : null}
         {!loading && !error && batches.length === 0 ? (
           <EmptyState
             icon={CalendarClock}
-            title="暂无在库批次"
-            description="收货时录入批次与保质期即可在此跟踪临期。确认入库发票时填写批次信息，系统会自动提醒临期商品。"
+            title={t("暂无在库批次")}
+            description={t("收货时录入批次与保质期即可在此跟踪临期。确认入库发票时填写批次信息，系统会自动提醒临期商品。")}
           />
         ) : null}
         {!loading && !error && batches.length > 0 ? (
@@ -276,32 +274,30 @@ export default function BatchesPage() {
             <Table>
               <thead>
                 <tr>
-                  <Th>商品</Th>
-                  <Th>批次号</Th>
-                  <Th numeric>数量</Th>
-                  <Th>到期日</Th>
-                  <Th>状态</Th>
-                  {canEditCatalog ? <Th className="cell-actions">操作</Th> : null}
+                  <Th>{t("商品")}</Th>
+                  <Th>{t("批次号")}</Th>
+                  <Th numeric>{t("数量")}</Th>
+                  <Th>{t("到期日")}</Th>
+                  <Th>{t("状态")}</Th>
+                  {canEditCatalog ? <Th className="cell-actions">{t("操作")}</Th> : null}
                 </tr>
               </thead>
               <tbody>
                 {batches.map((b) => (
                   <tr key={b.id}>
                     <Td>
-                      <p className="cell-strong">{b.nameZh || b.nameEn}</p>
+                      <p className="cell-strong">{productName(b.nameZh, b.nameEn)}</p>
                       <p className="text-meta text-ink-subtle">{b.nameEn}</p>
                     </Td>
                     <Td className="font-mono text-meta text-ink-muted">{b.batchNo || "—"}</Td>
-                    <Td numeric className="font-semibold">{b.quantity}</Td>
+                    <Td numeric className="font-semibold">{formatNumber(Number(b.quantity))}</Td>
                     <Td className="whitespace-nowrap tabular text-meta">
                       {b.expiryDate ? formatISO(b.expiryDate) : "—"}
                     </Td>
                     <Td>{expiryBadge(b)}</Td>
                     {canEditCatalog ? (
                       <Td className="cell-actions">
-                        <Button variant="danger-ghost" size="sm" onClick={() => void handleDispose(b)}>
-                          报损
-                        </Button>
+                        <Button variant="danger-ghost" size="sm" onClick={() => void handleDispose(b)}>{t("报损")}</Button>
                       </Td>
                     ) : null}
                   </tr>

@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../../i18n";
 import { useCallback, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
@@ -41,47 +42,47 @@ interface NavGroup {
 
 const navGroups: NavGroup[] = [
   {
-    label: "总览",
-    items: [{ to: "/", label: "仪表盘", icon: LayoutDashboard, end: true, adminOnly: true }],
+    get label() { return t("总览"); },
+    items: [{ to: "/", get label() { return t("仪表盘"); }, icon: LayoutDashboard, end: true, adminOnly: true }],
   },
   {
-    label: "进货管理",
+    get label() { return t("进货管理"); },
     items: [
-      { to: "/invoices/scan", label: "发票识别", icon: FileSearch },
-      { to: "/invoices", label: "发票列表", icon: Files, end: true },
+      { to: "/invoices/scan", get label() { return t("发票识别"); }, icon: FileSearch },
+      { to: "/invoices", get label() { return t("发票列表"); }, icon: Files, end: true },
     ],
   },
   {
-    label: "销售与库存",
+    get label() { return t("销售与库存"); },
     items: [
-      { to: "/sales", label: "销售出库", icon: ShoppingCart },
-      { to: "/inventory", label: "库存管理", icon: Boxes },
-      { to: "/batches", label: "批次保质期", icon: CalendarClock },
-      { to: "/stocktake", label: "库存盘点", icon: ClipboardCheck, adminOnly: true },
+      { to: "/sales", get label() { return t("销售出库"); }, icon: ShoppingCart },
+      { to: "/inventory", get label() { return t("库存管理"); }, icon: Boxes },
+      { to: "/batches", get label() { return t("批次保质期"); }, icon: CalendarClock },
+      { to: "/stocktake", get label() { return t("库存盘点"); }, icon: ClipboardCheck, adminOnly: true },
     ],
   },
   {
-    label: "商品与供应商",
+    get label() { return t("商品与供应商"); },
     items: [
-      { to: "/products", label: "产品管理", icon: Tag },
-      { to: "/suppliers", label: "供应商", icon: Building2 },
-      { to: "/payables", label: "应付账款", icon: Wallet, adminOnly: true },
+      { to: "/products", get label() { return t("产品管理"); }, icon: Tag },
+      { to: "/suppliers", get label() { return t("供应商"); }, icon: Building2 },
+      { to: "/payables", get label() { return t("应付账款"); }, icon: Wallet, adminOnly: true },
     ],
   },
   {
-    label: "经营分析",
+    get label() { return t("经营分析"); },
     items: [
-      { to: "/analytics", label: "数据分析", icon: BarChart3, adminOnly: true },
-      { to: "/ai-assistant", label: "智能助手", icon: MessageSquare, adminOnly: true },
-      { to: "/exports", label: "数据导出", icon: Database, adminOnly: true },
+      { to: "/analytics", get label() { return t("数据分析"); }, icon: BarChart3, adminOnly: true },
+      { to: "/ai-assistant", get label() { return t("智能助手"); }, icon: MessageSquare, adminOnly: true },
+      { to: "/exports", get label() { return t("数据导出"); }, icon: Database, adminOnly: true },
     ],
   },
   {
-    label: "系统管理",
+    get label() { return t("系统管理"); },
     items: [
-      { to: "/audit-logs", label: "审计日志", icon: ScrollText, adminOnly: true },
-      { to: "/settings", label: "系统设置", icon: Settings, adminOnly: true },
-      { to: "/users", label: "用户管理", icon: Users, adminOnly: true },
+      { to: "/audit-logs", get label() { return t("审计日志"); }, icon: ScrollText, adminOnly: true },
+      { to: "/settings", get label() { return t("系统设置"); }, icon: Settings, adminOnly: true },
+      { to: "/users", get label() { return t("用户管理"); }, icon: Users, adminOnly: true },
     ],
   },
 ];
@@ -92,6 +93,7 @@ function initials(name: string | undefined) {
 }
 
 export function Sidebar() {
+  useLanguage();
   const { isAdmin, user, logout } = useAuth();
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -110,13 +112,11 @@ export function Sidebar() {
         />
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold tracking-tight text-ink">{APP_NAME}</p>
-          <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-subtle">
-            熊猫超市 · 运营后台
-          </p>
+          <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-subtle">{t("熊猫超市 · 运营后台")}</p>
         </div>
       </div>
 
-      <nav className="flex-1 space-y-3 overflow-y-auto px-2.5 py-4" aria-label="主导航">
+      <nav className="flex-1 space-y-3 overflow-y-auto px-2.5 py-4" aria-label={t("主导航")}>
         {navGroups.map((group) => {
           const visibleItems = group.items.filter((item) => !item.adminOnly || isAdmin);
           if (visibleItems.length === 0) return null;
@@ -192,13 +192,13 @@ export function Sidebar() {
               {user?.displayName || user?.username}
             </p>
             <p className="text-[10px] text-ink-subtle">
-              {user?.role === "admin" ? "管理员" : "店员"}
+              {user?.role === "admin" ? t("管理员") : t("店员")}
             </p>
           </div>
           <button
             type="button"
-            aria-label="退出登录"
-            title="退出登录"
+            aria-label={t("退出登录")}
+            title={t("退出登录")}
             onClick={async () => {
               await logout();
               navigate("/login");

@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../../i18n";
 import { useCallback, useRef, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
@@ -26,30 +27,31 @@ import { useAuth } from "../../hooks/useAuth";
 import { Popover } from "../ui/Popover";
 
 const primaryItems = [
-  { to: "/", label: "首页", icon: LayoutDashboard, end: true, adminOnly: true },
-  { to: "/invoices/scan", label: "识别", icon: FileSearch },
-  { to: "/sales", label: "销售", icon: ShoppingCart },
-  { to: "/inventory", label: "库存", icon: Boxes },
-  { to: "/analytics", label: "分析", icon: BarChart3, adminOnly: true },
+  { to: "/", get label() { return t("首页"); }, icon: LayoutDashboard, end: true, adminOnly: true },
+  { to: "/invoices/scan", get label() { return t("识别"); }, icon: FileSearch },
+  { to: "/sales", get label() { return t("销售"); }, icon: ShoppingCart },
+  { to: "/inventory", get label() { return t("库存"); }, icon: Boxes },
+  { to: "/analytics", get label() { return t("分析"); }, icon: BarChart3, adminOnly: true },
 ];
 
 // 「更多」菜单需覆盖全部已注册路由，否则移动端无法到达这些页面。
 const overflowItems = [
-  { to: "/invoices", label: "发票列表", icon: Files },
-  { to: "/products", label: "产品管理", icon: Package },
-  { to: "/suppliers", label: "供应商", icon: Building2 },
-  { to: "/batches", label: "批次保质期", icon: CalendarClock },
-  { to: "/notifications", label: "通知", icon: Bell },
-  { to: "/stocktake", label: "库存盘点", icon: ClipboardCheck, adminOnly: true },
-  { to: "/payables", label: "应付账款", icon: Wallet, adminOnly: true },
-  { to: "/ai-assistant", label: "智能助手", icon: Sparkles, adminOnly: true },
-  { to: "/exports", label: "数据导出", icon: Download, adminOnly: true },
-  { to: "/audit-logs", label: "审计日志", icon: ScrollText, adminOnly: true },
-  { to: "/users", label: "用户管理", icon: Users, adminOnly: true },
-  { to: "/settings", label: "设置", icon: Settings, adminOnly: true },
+  { to: "/invoices", get label() { return t("发票列表"); }, icon: Files },
+  { to: "/products", get label() { return t("产品管理"); }, icon: Package },
+  { to: "/suppliers", get label() { return t("供应商"); }, icon: Building2 },
+  { to: "/batches", get label() { return t("批次保质期"); }, icon: CalendarClock },
+  { to: "/notifications", get label() { return t("通知"); }, icon: Bell },
+  { to: "/stocktake", get label() { return t("库存盘点"); }, icon: ClipboardCheck, adminOnly: true },
+  { to: "/payables", get label() { return t("应付账款"); }, icon: Wallet, adminOnly: true },
+  { to: "/ai-assistant", get label() { return t("智能助手"); }, icon: Sparkles, adminOnly: true },
+  { to: "/exports", get label() { return t("数据导出"); }, icon: Download, adminOnly: true },
+  { to: "/audit-logs", get label() { return t("审计日志"); }, icon: ScrollText, adminOnly: true },
+  { to: "/users", get label() { return t("用户管理"); }, icon: Users, adminOnly: true },
+  { to: "/settings", get label() { return t("设置"); }, icon: Settings, adminOnly: true },
 ];
 
 export function MobileNav() {
+  useLanguage();
   const { isAdmin } = useAuth();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -61,7 +63,7 @@ export function MobileNav() {
 
   return (
     <nav
-      aria-label="移动端导航"
+      aria-label={t("移动端导航")}
       className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 pb-safe backdrop-blur-md lg:hidden"
     >
       <ul className="flex items-stretch px-1.5 pt-1">
@@ -120,9 +122,7 @@ export function MobileNav() {
               ) : (
                 <MoreHorizontal size={18} aria-hidden="true" />
               )}
-            </span>
-            更多
-          </button>
+            </span>{t("更多")}</button>
         </li>
       </ul>
 
@@ -132,7 +132,7 @@ export function MobileNav() {
         anchorRef={moreRef}
         align="end"
         role="menu"
-        ariaLabel="更多页面"
+        ariaLabel={t("更多页面")}
         className="mb-1 p-1.5"
       >
         <div className="grid grid-cols-3 gap-1">

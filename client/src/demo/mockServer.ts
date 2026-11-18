@@ -1,3 +1,4 @@
+import { t } from "../i18n";
 import type {
   AxiosAdapter,
   AxiosProgressEvent,
@@ -1095,8 +1096,8 @@ function alertsData() {
       id: "pending-invoices",
       type: "pending_invoice",
       severity: "high",
-      title: `${pending} 张发票待审核`,
-      message: "待审核发票尚未入库，确认后才会更新库存与应付账款。",
+      title: t("{0} 张发票待审核", pending),
+      message: t("待审核发票尚未入库，确认后才会更新库存与应付账款。"),
       link: "/invoices?status=pending",
       count: pending,
     });
@@ -1108,8 +1109,8 @@ function alertsData() {
       id: "stockout",
       type: "stockout_risk",
       severity: "high",
-      title: `${outOfStock.length} 个商品已缺货`,
-      message: "当前库存为 0，建议立即补货，避免影响门店销售。",
+      title: t("{0} 个商品已缺货", outOfStock.length),
+      message: t("当前库存为 0，建议立即补货，避免影响门店销售。"),
       link: "/inventory",
       count: outOfStock.length,
     });
@@ -1121,8 +1122,8 @@ function alertsData() {
       id: "low-stock",
       type: "stockout_risk",
       severity: "medium",
-      title: `${low.length} 个商品低于安全库存`,
-      message: "库存已接近安全线，可参考补货建议提前下单。",
+      title: t("{0} 个商品低于安全库存", low.length),
+      message: t("库存已接近安全线，可参考补货建议提前下单。"),
       link: "/inventory",
       count: low.length,
     });
@@ -1135,8 +1136,8 @@ function alertsData() {
       id: "expiring-batches",
       type: "expiring_batch",
       severity: expired > 0 ? "high" : "medium",
-      title: expired > 0 ? `${expired} 个批次已过期` : `${expiring.length} 个批次临期`,
-      message: `未来 7 天内有 ${expiring.length} 个批次到期，请优先售出或及时报损。`,
+      title: expired > 0 ? t("{0} 个批次已过期", expired) : t("{0} 个批次临期", expiring.length),
+      message: t("未来 7 天内有 {0} 个批次到期，请优先售出或及时报损。", expiring.length),
       link: "/batches",
       count: expiring.length,
     });
@@ -1148,8 +1149,8 @@ function alertsData() {
       id: "price-spike",
       type: "price_spike",
       severity: "medium",
-      title: "采购价出现明显波动",
-      message: `${priceRows[0].nameEn} 最近一次进价变动 ${priceRows[0].changePercent > 0 ? "+" : ""}${priceRows[0].changePercent}%。`,
+      title: t("采购价出现明显波动"),
+      message: t("{0} 最近一次进价变动 {1}{2}%。", priceRows[0].nameEn, priceRows[0].changePercent > 0 ? "+" : "", priceRows[0].changePercent),
       link: "/analytics",
       count: priceRows.length,
     });
@@ -1161,8 +1162,8 @@ function alertsData() {
       id: "slow-movers",
       type: "slow_mover",
       severity: "low",
-      title: `${slow.length} 个商品存在滞销风险`,
-      message: "这些商品库存充足但近 30 天销量很低，可考虑促销。",
+      title: t("{0} 个商品存在滞销风险", slow.length),
+      message: t("这些商品库存充足但近 30 天销量很低，可考虑促销。"),
       link: "/analytics",
       count: slow.length,
     });
@@ -1421,20 +1422,20 @@ function assertInvoiceNumberAvailable(invoiceNumber: string, excludeId?: number)
       inv.invoice_number === invoiceNumber && Number(inv.id) !== Number(excludeId ?? -1)
   );
   if (duplicate) {
-    throw new DemoError(400, "DUPLICATE_INVOICE", `发票号 ${invoiceNumber} 已存在`);
+    throw new DemoError(400, "DUPLICATE_INVOICE", t("发票号 {0} 已存在", invoiceNumber));
   }
 }
 
 function confirmInvoiceFromPayload(invoice: Row, payload: Row) {
   const supplier = supplierOf(payload.supplierId);
-  if (!supplier) throw new DemoError(400, "VALIDATION_ERROR", "请选择供应商后再确认入库");
+  if (!supplier) throw new DemoError(400, "VALIDATION_ERROR", t("请选择供应商后再确认入库"));
   const inputs = Array.isArray(payload.items) ? (payload.items as Row[]) : [];
   if (inputs.length === 0) {
-    throw new DemoError(400, "VALIDATION_ERROR", "发票至少需要一条商品明细");
+    throw new DemoError(400, "VALIDATION_ERROR", t("发票至少需要一条商品明细"));
   }
 
   const invoiceNumber = String(payload.invoiceNumber ?? invoice.invoice_number).trim();
-  if (!invoiceNumber) throw new DemoError(400, "VALIDATION_ERROR", "请填写发票号");
+  if (!invoiceNumber) throw new DemoError(400, "VALIDATION_ERROR", t("请填写发票号"));
   assertInvoiceNumberAvailable(invoiceNumber, Number(invoice.id));
 
   db.invoiceItems = db.invoiceItems.filter(
@@ -1449,7 +1450,7 @@ function confirmInvoiceFromPayload(invoice: Row, payload: Row) {
   for (const raw of inputs) {
     const quantity = Number(raw.quantity) || 0;
     if (quantity <= 0) {
-      throw new DemoError(400, "VALIDATION_ERROR", "商品数量必须大于 0");
+      throw new DemoError(400, "VALIDATION_ERROR", t("商品数量必须大于 0"));
     }
     const unitPrice = Number(raw.unitPrice) || 0;
     const lineTotal =
@@ -1953,7 +1954,7 @@ function buildUploadedInvoice(fileName: string) {
 function createSaleOrder(payload: Row): Row {
   const inputs = Array.isArray(payload.items) ? (payload.items as Row[]) : [];
   if (inputs.length === 0) {
-    throw new DemoError(400, "VALIDATION_ERROR", "销售单至少需要一项商品");
+    throw new DemoError(400, "VALIDATION_ERROR", t("销售单至少需要一项商品"));
   }
 
   const lines = inputs.map((input) => {
@@ -1961,22 +1962,22 @@ function createSaleOrder(payload: Row): Row {
       (p) => Number(p.id) === Number(input.productId) && !p.deleted_at
     );
     if (!product) {
-      throw new DemoError(400, "VALIDATION_ERROR", `商品 #${input.productId} 不存在`);
+      throw new DemoError(400, "VALIDATION_ERROR", t("商品 #{0} 不存在", input.productId));
     }
     const quantity = Number(input.quantity);
     if (!Number.isFinite(quantity) || quantity <= 0) {
-      throw new DemoError(400, "VALIDATION_ERROR", "销售数量必须大于 0");
+      throw new DemoError(400, "VALIDATION_ERROR", t("销售数量必须大于 0"));
     }
     const unitPrice = Number(input.unitPrice);
     if (!Number.isFinite(unitPrice) || unitPrice < 0) {
-      throw new DemoError(400, "VALIDATION_ERROR", "销售单价无效");
+      throw new DemoError(400, "VALIDATION_ERROR", t("销售单价无效"));
     }
     const inventory = inventoryOf(Number(product.id));
     if (Number(inventory.quantity) < quantity) {
       throw new DemoError(
         400,
         "INSUFFICIENT_STOCK",
-        `库存不足：${product.name_en} 当前库存 ${inventory.quantity}`
+        t("库存不足：{0} 当前库存 {1}", product.name_en, inventory.quantity)
       );
     }
     return { product, quantity, unitPrice, unit: product.default_unit };
@@ -2036,7 +2037,7 @@ function createSaleOrder(payload: Row): Row {
 
 function voidSaleOrder(order: Row): Row {
   if (order.status !== "completed") {
-    throw new DemoError(400, "INVALID_STATUS", "只有已完成的销售单可以作废");
+    throw new DemoError(400, "INVALID_STATUS", t("只有已完成的销售单可以作废"));
   }
   const items = db.salesItems.filter(
     (item) => Number(item.sales_order_id) === Number(order.id)
@@ -2165,10 +2166,10 @@ async function handleRequest(
     const password = String(row.password ?? "");
     const user = db.users.find((u) => u.username === username);
     if (!user || user.password !== password) {
-      return fail(401, "INVALID_CREDENTIALS", "用户名或密码错误", config);
+      return fail(401, "INVALID_CREDENTIALS", t("用户名或密码错误"), config);
     }
     if (!user.is_active) {
-      return fail(403, "ACCOUNT_DISABLED", "该账号已被禁用，请联系管理员", config);
+      return fail(403, "ACCOUNT_DISABLED", t("该账号已被禁用，请联系管理员"), config);
     }
     user.last_login_at = nowIso();
     addAudit("login", "user", Number(user.id), { username: user.username });
@@ -2185,7 +2186,7 @@ async function handleRequest(
     const user = tokenMatch
       ? db.users.find((u) => Number(u.id) === Number(tokenMatch[1]))
       : null;
-    if (!user) return fail(401, "UNAUTHORIZED", "登录状态已失效，请重新登录", config);
+    if (!user) return fail(401, "UNAUTHORIZED", t("登录状态已失效，请重新登录"), config);
     return ok(authUser(user), config);
   }
 
@@ -2196,13 +2197,13 @@ async function handleRequest(
   if (method === "PUT" && p === "/auth/password") {
     const row = asRow(payload);
     const user = db.users.find((u) => Number(u.id) === currentUserId());
-    if (!user) return fail(401, "UNAUTHORIZED", "登录状态已失效，请重新登录", config);
+    if (!user) return fail(401, "UNAUTHORIZED", t("登录状态已失效，请重新登录"), config);
     if (user.password !== String(row.currentPassword ?? "")) {
-      return fail(400, "INVALID_PASSWORD", "当前密码不正确", config);
+      return fail(400, "INVALID_PASSWORD", t("当前密码不正确"), config);
     }
     const nextPassword = String(row.newPassword ?? "");
     if (nextPassword.length < 6) {
-      return fail(400, "VALIDATION_ERROR", "新密码至少需要 6 位", config);
+      return fail(400, "VALIDATION_ERROR", t("新密码至少需要 6 位"), config);
     }
     user.password = nextPassword;
     addAudit("change_password", "user", Number(user.id));
@@ -2259,14 +2260,14 @@ async function handleRequest(
     const form =
       typeof FormData !== "undefined" && payload instanceof FormData ? payload : null;
     const file = readFile(form);
-    if (!file) throw new DemoError(400, "VALIDATION_ERROR", "请选择 CSV 文件");
+    if (!file) throw new DemoError(400, "VALIDATION_ERROR", t("请选择 CSV 文件"));
     const text = await file.text().catch(() => "");
     const lines = text
       .replace(/^\uFEFF/, "")
       .split(/\r?\n/)
       .filter((line) => line.trim());
     if (lines.length < 2) {
-      throw new DemoError(400, "VALIDATION_ERROR", "CSV 文件没有可导入的数据行");
+      throw new DemoError(400, "VALIDATION_ERROR", t("CSV 文件没有可导入的数据行"));
     }
     const headers = lines[0].split(",").map((header) => header.trim().toLowerCase());
     const indexOf = (...names: string[]) => {
@@ -2318,7 +2319,7 @@ async function handleRequest(
       (row) => !row.deleted_at && String(row.barcode ?? "") === barcode
     );
     if (!product) {
-      return fail(404, "NOT_FOUND", `未找到条码 ${barcode} 对应的商品`, config);
+      return fail(404, "NOT_FOUND", t("未找到条码 {0} 对应的商品", barcode), config);
     }
     return ok(product, config);
   }
@@ -2331,11 +2332,11 @@ async function handleRequest(
   match = p.match(/^\/products\/(\d+)\/image$/);
   if (method === "POST" && match) {
     const product = db.products.find((row) => Number(row.id) === Number(match?.[1]));
-    if (!product) return fail(404, "NOT_FOUND", "商品不存在", config);
+    if (!product) return fail(404, "NOT_FOUND", t("商品不存在"), config);
     const form =
       typeof FormData !== "undefined" && payload instanceof FormData ? payload : null;
     const file = readFile(form);
-    if (!file) throw new DemoError(400, "VALIDATION_ERROR", "请选择图片文件");
+    if (!file) throw new DemoError(400, "VALIDATION_ERROR", t("请选择图片文件"));
     const imageUrl = URL.createObjectURL(file);
     product.image_url = imageUrl;
     product.updated_at = nowIso();
@@ -2349,12 +2350,12 @@ async function handleRequest(
     const product = db.products.find((row) => Number(row.id) === productId && !row.deleted_at);
 
     if (method === "GET") {
-      if (!product) return fail(404, "NOT_FOUND", "商品不存在", config);
+      if (!product) return fail(404, "NOT_FOUND", t("商品不存在"), config);
       return ok(product, config);
     }
 
     if (method === "PUT") {
-      if (!product) return fail(404, "NOT_FOUND", "商品不存在", config);
+      if (!product) return fail(404, "NOT_FOUND", t("商品不存在"), config);
       applyProductPayload(product, asRow(payload));
       addAudit("update_product", "product", productId, { nameEn: product.name_en });
       persist();
@@ -2362,7 +2363,7 @@ async function handleRequest(
     }
 
     if (method === "DELETE") {
-      if (!product) return fail(404, "NOT_FOUND", "商品不存在", config);
+      if (!product) return fail(404, "NOT_FOUND", t("商品不存在"), config);
       product.deleted_at = nowIso();
       product.is_active = false;
       product.updated_at = nowIso();
@@ -2375,7 +2376,7 @@ async function handleRequest(
   if (method === "POST" && p === "/products") {
     const row = asRow(payload);
     if (!String(row.nameEn ?? "").trim()) {
-      return fail(400, "VALIDATION_ERROR", "请填写商品英文名", config);
+      return fail(400, "VALIDATION_ERROR", t("请填写商品英文名"), config);
     }
     const product = createProductRecord(row);
     addAudit("create_product", "product", Number(product.id), {
@@ -2404,7 +2405,7 @@ async function handleRequest(
   if (method === "POST" && p === "/categories") {
     const row = asRow(payload);
     if (!String(row.name ?? "").trim()) {
-      return fail(400, "VALIDATION_ERROR", "请填写分类名称", config);
+      return fail(400, "VALIDATION_ERROR", t("请填写分类名称"), config);
     }
     const id = nextRowId(db.categories);
     const category = {
@@ -2423,7 +2424,7 @@ async function handleRequest(
   if (match) {
     const categoryId = Number(match[1]);
     const category = db.categories.find((row) => Number(row.id) === categoryId);
-    if (!category) return fail(404, "NOT_FOUND", "分类不存在", config);
+    if (!category) return fail(404, "NOT_FOUND", t("分类不存在"), config);
     if (method === "PUT") {
       const row = asRow(payload);
       if ("name" in row) category.name = String(row.name);
@@ -2444,7 +2445,7 @@ async function handleRequest(
         return fail(
           400,
           "CATEGORY_IN_USE",
-          "该分类下仍有商品或子分类，无法删除",
+          t("该分类下仍有商品或子分类，无法删除"),
           config
         );
       }
@@ -2471,7 +2472,7 @@ async function handleRequest(
   if (method === "POST" && p === "/suppliers") {
     const row = asRow(payload);
     if (!String(row.name ?? "").trim()) {
-      return fail(400, "VALIDATION_ERROR", "请填写供应商名称", config);
+      return fail(400, "VALIDATION_ERROR", t("请填写供应商名称"), config);
     }
     const id = nextRowId(db.suppliers);
     db.suppliers.push({
@@ -2495,7 +2496,7 @@ async function handleRequest(
   if (match) {
     const supplierId = Number(match[1]);
     const supplier = supplierOf(supplierId);
-    if (!supplier) return fail(404, "NOT_FOUND", "供应商不存在", config);
+    if (!supplier) return fail(404, "NOT_FOUND", t("供应商不存在"), config);
     if (method === "GET") return ok(supplier, config);
     if (method === "PUT") {
       const row = asRow(payload);
@@ -2518,7 +2519,7 @@ async function handleRequest(
         return fail(
           400,
           "SUPPLIER_IN_USE",
-          "该供应商已有发票记录，无法删除",
+          t("该供应商已有发票记录，无法删除"),
           config
         );
       }
@@ -2566,9 +2567,9 @@ async function handleRequest(
           requestedLanguages: "eng+chi_sim",
           pdfRenderer: { available: true, binary: "pdf.js" },
           message: wasm
-            ? "浏览器内 OCR 可用（Tesseract.js；首次识别需下载 eng+chi_sim 语言包）"
-            : "当前浏览器不支持 WebAssembly，无法运行本地 OCR",
-          installHint: "演示站无需安装依赖；生产环境由服务器端 Tesseract 提供 OCR。",
+            ? t("浏览器内 OCR 可用（Tesseract.js；首次识别需下载 eng+chi_sim 语言包）")
+            : t("当前浏览器不支持 WebAssembly，无法运行本地 OCR"),
+          installHint: t("演示站无需安装依赖；生产环境由服务器端 Tesseract 提供 OCR。"),
         },
       },
       config
@@ -2633,9 +2634,9 @@ async function handleRequest(
   match = p.match(/^\/invoices\/(\d+)\/confirm$/);
   if (method === "POST" && match) {
     const invoice = db.invoices.find((row) => Number(row.id) === Number(match?.[1]));
-    if (!invoice) return fail(404, "NOT_FOUND", "发票不存在", config);
+    if (!invoice) return fail(404, "NOT_FOUND", t("发票不存在"), config);
     if (invoice.status === "confirmed") {
-      return fail(400, "INVALID_STATUS", "该发票已确认入库，请勿重复操作", config);
+      return fail(400, "INVALID_STATUS", t("该发票已确认入库，请勿重复操作"), config);
     }
     const result = confirmInvoiceFromPayload(invoice, asRow(payload));
     persist();
@@ -2645,9 +2646,9 @@ async function handleRequest(
   match = p.match(/^\/invoices\/(\d+)\/rollback-confirm$/);
   if (method === "POST" && match) {
     const invoice = db.invoices.find((row) => Number(row.id) === Number(match?.[1]));
-    if (!invoice) return fail(404, "NOT_FOUND", "发票不存在", config);
+    if (!invoice) return fail(404, "NOT_FOUND", t("发票不存在"), config);
     if (invoice.status !== "confirmed") {
-      return fail(400, "INVALID_STATUS", "只有已确认的发票可以回滚", config);
+      return fail(400, "INVALID_STATUS", t("只有已确认的发票可以回滚"), config);
     }
     const reason = String(asRow(payload).reason ?? "管理员回滚");
     reverseInvoiceInventory(invoice, reason);
@@ -2663,9 +2664,9 @@ async function handleRequest(
   match = p.match(/^\/invoices\/(\d+)\/reject$/);
   if (method === "POST" && match) {
     const invoice = db.invoices.find((row) => Number(row.id) === Number(match?.[1]));
-    if (!invoice) return fail(404, "NOT_FOUND", "发票不存在", config);
+    if (!invoice) return fail(404, "NOT_FOUND", t("发票不存在"), config);
     if (invoice.status === "confirmed") {
-      return fail(400, "INVALID_STATUS", "已确认的发票不能直接驳回，请先回滚", config);
+      return fail(400, "INVALID_STATUS", t("已确认的发票不能直接驳回，请先回滚"), config);
     }
     const reason = String(asRow(payload).reason ?? "人工驳回");
     invoice.status = "rejected";
@@ -2682,12 +2683,12 @@ async function handleRequest(
     const invoice = db.invoices.find((row) => Number(row.id) === invoiceId);
 
     if (method === "GET") {
-      if (!invoice) return fail(404, "NOT_FOUND", "发票不存在", config);
+      if (!invoice) return fail(404, "NOT_FOUND", t("发票不存在"), config);
       return ok(invoiceDetail(invoice), config);
     }
 
     if (method === "PUT") {
-      if (!invoice) return fail(404, "NOT_FOUND", "发票不存在", config);
+      if (!invoice) return fail(404, "NOT_FOUND", t("发票不存在"), config);
       const row = asRow(payload);
       const supplier = supplierOf(row.supplierId);
       if (supplier) {
@@ -2736,7 +2737,7 @@ async function handleRequest(
     }
 
     if (method === "DELETE") {
-      if (!invoice) return fail(404, "NOT_FOUND", "发票不存在", config);
+      if (!invoice) return fail(404, "NOT_FOUND", t("发票不存在"), config);
       if (invoice.status === "confirmed") {
         reverseInvoiceInventory(invoice, "发票删除回滚");
       }
@@ -2918,10 +2919,10 @@ async function handleRequest(
     const product = db.products.find(
       (item) => Number(item.id) === Number(row.productId) && !item.deleted_at
     );
-    if (!product) return fail(400, "VALIDATION_ERROR", "请选择有效的商品", config);
+    if (!product) return fail(400, "VALIDATION_ERROR", t("请选择有效的商品"), config);
     const quantity = Number(row.quantity);
     if (!Number.isFinite(quantity) || quantity <= 0) {
-      return fail(400, "VALIDATION_ERROR", "批次数量必须大于 0", config);
+      return fail(400, "VALIDATION_ERROR", t("批次数量必须大于 0"), config);
     }
     const batch = addBatchRow(
       product,
@@ -2951,9 +2952,9 @@ async function handleRequest(
   match = p.match(/^\/batches\/(\d+)\/dispose$/);
   if (method === "POST" && match) {
     const batch = db.batches.find((row) => Number(row.id) === Number(match?.[1]));
-    if (!batch) return fail(404, "NOT_FOUND", "批次不存在", config);
+    if (!batch) return fail(404, "NOT_FOUND", t("批次不存在"), config);
     if (batch.status !== "active") {
-      return fail(400, "INVALID_STATUS", "该批次已不在有效状态", config);
+      return fail(400, "INVALID_STATUS", t("该批次已不在有效状态"), config);
     }
     const row = asRow(payload);
     const available = Number(batch.quantity);
@@ -2962,7 +2963,7 @@ async function handleRequest(
         ? Math.min(available, Math.max(0, Number(row.quantity)))
         : available;
     if (quantity <= 0) {
-      return fail(400, "VALIDATION_ERROR", "报损数量必须大于 0", config);
+      return fail(400, "VALIDATION_ERROR", t("报损数量必须大于 0"), config);
     }
     const reason = row.reason ? String(row.reason) : "过期报损";
     batch.quantity = available - quantity;
@@ -3013,7 +3014,7 @@ async function handleRequest(
   match = p.match(/^\/sales\/(\d+)\/void$/);
   if (method === "POST" && match) {
     const order = db.salesOrders.find((row) => Number(row.id) === Number(match?.[1]));
-    if (!order) return fail(404, "NOT_FOUND", "销售单不存在", config);
+    if (!order) return fail(404, "NOT_FOUND", t("销售单不存在"), config);
     voidSaleOrder(order);
     persist();
     return ok(saleDetail(order), config);
@@ -3022,7 +3023,7 @@ async function handleRequest(
   match = p.match(/^\/sales\/(\d+)$/);
   if (method === "GET" && match) {
     const order = db.salesOrders.find((row) => Number(row.id) === Number(match?.[1]));
-    if (!order) return fail(404, "NOT_FOUND", "销售单不存在", config);
+    if (!order) return fail(404, "NOT_FOUND", t("销售单不存在"), config);
     return ok(saleDetail(order), config);
   }
 
@@ -3034,10 +3035,10 @@ async function handleRequest(
   if (method === "POST" && p === "/payables/payments") {
     const row = asRow(payload);
     const supplier = supplierOf(row.supplierId);
-    if (!supplier) return fail(400, "VALIDATION_ERROR", "请选择有效的供应商", config);
+    if (!supplier) return fail(400, "VALIDATION_ERROR", t("请选择有效的供应商"), config);
     const amount = Number(row.amount);
     if (!Number.isFinite(amount) || amount <= 0) {
-      return fail(400, "VALIDATION_ERROR", "付款金额必须大于 0", config);
+      return fail(400, "VALIDATION_ERROR", t("付款金额必须大于 0"), config);
     }
     const id = nextId("payment");
     db.payments.push({
@@ -3062,7 +3063,7 @@ async function handleRequest(
   match = p.match(/^\/payables\/(\d+)$/);
   if (method === "GET" && match) {
     const detail = payableDetail(Number(match[1]));
-    if (!detail) return fail(404, "NOT_FOUND", "供应商不存在", config);
+    if (!detail) return fail(404, "NOT_FOUND", t("供应商不存在"), config);
     return ok(detail, config);
   }
 
@@ -3081,7 +3082,7 @@ async function handleRequest(
   match = p.match(/^\/notifications\/(\d+)\/read$/);
   if (method === "PUT" && match) {
     const item = db.notifications.find((row) => Number(row.id) === Number(match?.[1]));
-    if (!item) return fail(404, "NOT_FOUND", "通知不存在", config);
+    if (!item) return fail(404, "NOT_FOUND", t("通知不存在"), config);
     item.is_read = true;
     persist();
     return ok(null, config);
@@ -3130,13 +3131,13 @@ async function handleRequest(
     const row = asRow(payload);
     const username = String(row.username ?? "").trim();
     if (!username || !String(row.password ?? "").trim()) {
-      return fail(400, "VALIDATION_ERROR", "用户名和密码为必填项", config);
+      return fail(400, "VALIDATION_ERROR", t("用户名和密码为必填项"), config);
     }
     if (db.users.some((user) => user.username === username)) {
-      return fail(400, "DUPLICATE_USERNAME", "该用户名已存在", config);
+      return fail(400, "DUPLICATE_USERNAME", t("该用户名已存在"), config);
     }
     if (String(row.password).length < 6) {
-      return fail(400, "VALIDATION_ERROR", "密码至少需要 6 位", config);
+      return fail(400, "VALIDATION_ERROR", t("密码至少需要 6 位"), config);
     }
     const id = nextRowId(db.users);
     db.users.push({
@@ -3158,7 +3159,7 @@ async function handleRequest(
   match = p.match(/^\/users\/(\d+)\/status$/);
   if (method === "PUT" && match) {
     const user = db.users.find((row) => Number(row.id) === Number(match?.[1]));
-    if (!user) return fail(404, "NOT_FOUND", "用户不存在", config);
+    if (!user) return fail(404, "NOT_FOUND", t("用户不存在"), config);
     user.is_active = Boolean(asRow(payload).isActive);
     addAudit("update_user_status", "user", Number(user.id), {
       isActive: user.is_active,
@@ -3170,10 +3171,10 @@ async function handleRequest(
   match = p.match(/^\/users\/(\d+)\/reset-password$/);
   if (method === "PUT" && match) {
     const user = db.users.find((row) => Number(row.id) === Number(match?.[1]));
-    if (!user) return fail(404, "NOT_FOUND", "用户不存在", config);
+    if (!user) return fail(404, "NOT_FOUND", t("用户不存在"), config);
     const password = String(asRow(payload).newPassword ?? "");
     if (password.length < 6) {
-      return fail(400, "VALIDATION_ERROR", "新密码至少需要 6 位", config);
+      return fail(400, "VALIDATION_ERROR", t("新密码至少需要 6 位"), config);
     }
     user.password = password;
     addAudit("reset_password", "user", Number(user.id));
@@ -3184,7 +3185,7 @@ async function handleRequest(
   match = p.match(/^\/users\/(\d+)$/);
   if (method === "PUT" && match) {
     const user = db.users.find((row) => Number(row.id) === Number(match?.[1]));
-    if (!user) return fail(404, "NOT_FOUND", "用户不存在", config);
+    if (!user) return fail(404, "NOT_FOUND", t("用户不存在"), config);
     const row = asRow(payload);
     if ("displayName" in row) user.display_name = String(row.displayName);
     if ("email" in row) user.email = row.email ? String(row.email) : null;
@@ -3272,7 +3273,7 @@ async function handleRequest(
     const before = db.aliases.length;
     db.aliases = db.aliases.filter((alias) => Number(alias.id) !== aliasId);
     if (db.aliases.length === before) {
-      return fail(404, "NOT_FOUND", "该匹配记录不存在", config);
+      return fail(404, "NOT_FOUND", t("该匹配记录不存在"), config);
     }
     persist();
     return ok(null, config);
@@ -3313,7 +3314,7 @@ async function handleRequest(
   if (method === "PUT" && match) {
     const id = Number(match[1]);
     const provider = db.aiProviders.find((row) => Number(row.id) === id);
-    if (!provider) return fail(404, "NOT_FOUND", "AI 提供商不存在", config);
+    if (!provider) return fail(404, "NOT_FOUND", t("AI 提供商不存在"), config);
     for (const row of db.aiProviders) row.isDefault = Number(row.id) === id;
     provider.isActive = true;
     persist();
@@ -3323,7 +3324,7 @@ async function handleRequest(
   match = p.match(/^\/ai-providers\/(\d+)\/test$/);
   if (method === "POST" && match) {
     const provider = db.aiProviders.find((row) => Number(row.id) === Number(match?.[1]));
-    if (!provider) return fail(404, "NOT_FOUND", "AI 提供商不存在", config);
+    if (!provider) return fail(404, "NOT_FOUND", t("AI 提供商不存在"), config);
     await wait(650);
     const latencyMs = 120 + (hashText(String(provider.name)) % 180);
     provider.lastTestAt = nowIso();
@@ -3333,7 +3334,7 @@ async function handleRequest(
     return ok(
       {
         success: true,
-        message: "连接成功（演示环境模拟响应）",
+        message: t("连接成功（演示环境模拟响应）"),
         latencyMs,
         modelResponse: `pong from ${provider.model}`,
       },
@@ -3344,7 +3345,7 @@ async function handleRequest(
   match = p.match(/^\/ai-providers\/(\d+)$/);
   if (match) {
     const provider = db.aiProviders.find((row) => Number(row.id) === Number(match?.[1]));
-    if (!provider) return fail(404, "NOT_FOUND", "AI 提供商不存在", config);
+    if (!provider) return fail(404, "NOT_FOUND", t("AI 提供商不存在"), config);
     if (method === "PUT") {
       const row = asRow(payload);
       if ("name" in row) provider.name = String(row.name);
@@ -3384,7 +3385,7 @@ async function handleRequest(
         {
           ...result,
           mode: "llm",
-          fallback: { from: "llm", reason: "GitHub Pages 演示环境没有连接任何 LLM" },
+          fallback: { from: "llm", reason: t("GitHub Pages 演示环境没有连接任何 LLM") },
         },
         config
       );
@@ -3481,7 +3482,7 @@ async function handleRequest(
         invoice.subtotal,
         invoice.tax_amount,
         invoice.grand_total,
-        invoice.status,
+        t(({ pending: "待处理", confirmed: "已确认", rejected: "已驳回" } as Record<string, string>)[invoice.status] ?? invoice.status),
       ])
     );
     return raw(new Blob([csv], { type: "text/csv;charset=utf-8" }), config);
@@ -3498,7 +3499,7 @@ async function handleRequest(
         row.quantity,
         row.unit,
         row.safeStock,
-        row.isLowStock ? "是" : "否",
+        t(row.isLowStock ? "是" : "否"),
       ])
     );
     return raw(new Blob([csv], { type: "text/csv;charset=utf-8" }), config);
@@ -3598,7 +3599,7 @@ async function handleRequest(
     );
   }
 
-  return fail(404, "NOT_FOUND", `演示环境未实现该接口：${method} ${p}`, config);
+  return fail(404, "NOT_FOUND", t("演示环境未实现该接口：{0} {1}", method, p), config);
 }
 
 /* ── AI replies ────────────────────────────────────────────────── */
@@ -3632,26 +3633,26 @@ function aiInsightsData(period: string) {
 
   if (lowCount > 0) {
     alerts.push({
-      type: "库存",
-      message: `${lowCount} 个商品低于安全库存，建议优先补货。`,
+      type: t("库存"),
+      message: t("{0} 个商品低于安全库存，建议优先补货。", lowCount),
     });
   }
   if (expiringCount > 0) {
     alerts.push({
-      type: "保质期",
-      message: `未来 7 天内有 ${expiringCount} 个批次临期或已过期，请安排促销或报损。`,
+      type: t("保质期"),
+      message: t("未来 7 天内有 {0} 个批次临期或已过期，请安排促销或报损。", expiringCount),
     });
   }
   if (pendingCount > 0) {
     alerts.push({
-      type: "发票",
-      message: `${pendingCount} 张发票仍待审核，确认后库存与应付账款才会更新。`,
+      type: t("发票"),
+      message: t("{0} 张发票仍待审核，确认后库存与应付账款才会更新。", pendingCount),
     });
   }
 
   return {
     period,
-    summary: `近 ${days} 天采购 ${invoices.length} 张发票，金额 ${formatMoney(purchaseTotal)}；完成销售 ${sales.length} 单，金额 ${formatMoney(salesTotal)}。${lowCount > 0 ? `当前 ${lowCount} 个商品低于安全库存，` : ""}${expiringCount > 0 ? `${expiringCount} 个批次临期。` : "库存与批次状态整体稳定。"}`,
+    summary: t("近 {0} 天采购 {1} 张发票，金额 {2}；完成销售 {3} 单，金额 {4}。{5}{6}", days, invoices.length, formatMoney(purchaseTotal), sales.length, formatMoney(salesTotal), lowCount > 0 ? t("当前 {0} 个商品低于安全库存，", lowCount) : "", expiringCount > 0 ? t("{0} 个批次临期。", expiringCount) : t("库存与批次状态整体稳定。")),
     alerts,
     generatedAt: nowIso(),
   };
@@ -3662,14 +3663,14 @@ function aiReorderAdviceData() {
   return {
     advice:
       rows.length === 0
-        ? "当前没有低于安全库存的商品，建议维持现有订货节奏。"
-        : `结合近 30 天销量与安全库存，建议本次优先补货 ${rows.length} 个商品，其中紧急商品 ${rows.filter((row) => row.urgency === "high").length} 个。下单前可核对供应商账期与在途数量，避免重复进货。`,
+        ? t("当前没有低于安全库存的商品，建议维持现有订货节奏。")
+        : t("结合近 30 天销量与安全库存，建议本次优先补货 {0} 个商品，其中紧急商品 {1} 个。下单前可核对供应商账期与在途数量，避免重复进货。", rows.length, rows.filter((row) => row.urgency === "high").length),
     suggestedItems: rows.map((row) => ({
       productId: row.productId,
       nameZh: row.nameZh ?? row.nameEn,
       suggestedQty: row.suggestedQty,
       normalQty: row.safeStock,
-      reason: `现有 ${row.currentStock}，安全库存 ${row.safeStock}，${row.urgency === "high" ? "存在缺货风险" : "接近安全线"}`,
+      reason: t("现有 {0}，安全库存 {1}，{2}", row.currentStock, row.safeStock, t(row.urgency === "high" ? "存在缺货风险" : "接近安全线")),
     })),
   };
 }
@@ -3681,7 +3682,7 @@ function toCsv(headers: string[], rows: Array<Array<unknown>>): string {
     const text = value === null || value === undefined ? "" : String(value);
     return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
   };
-  return `\uFEFF${[headers, ...rows]
+  return `\uFEFF${[headers.map((header) => t(header)), ...rows]
     .map((row) => row.map(escape).join(","))
     .join("\r\n")}`;
 }

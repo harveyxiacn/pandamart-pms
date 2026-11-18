@@ -1,3 +1,5 @@
+import { LanguageSelector } from "../../i18n/LanguageSelector";
+import { productName, t, useLanguage } from "../../i18n";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -33,6 +35,7 @@ interface FlatResult {
 }
 
 export function Header() {
+  useLanguage();
   const [unreadCount, setUnreadCount] = useState(0);
   const { user, logout, isAdmin } = useAuth();
   const navigate = useNavigate();
@@ -102,9 +105,9 @@ export function Header() {
     results.products.slice(0, 5).forEach((p) =>
       items.push({
         id: `p-${p.id}`,
-        section: "产品",
+        section: t("产品"),
         icon: Package,
-        label: p.nameZh || p.nameEn,
+        label: productName(p.nameZh, p.nameEn),
         sub: p.sku || p.barcode || undefined,
         to: `/products?id=${p.id}`,
       })
@@ -112,7 +115,7 @@ export function Header() {
     results.invoices.slice(0, 5).forEach((inv) =>
       items.push({
         id: `i-${inv.id}`,
-        section: "发票",
+        section: t("发票"),
         icon: FileText,
         label: inv.invoiceNumber,
         sub: inv.supplierName || undefined,
@@ -122,7 +125,7 @@ export function Header() {
     results.suppliers.slice(0, 5).forEach((s) =>
       items.push({
         id: `s-${s.id}`,
-        section: "供应商",
+        section: t("供应商"),
         icon: Building2,
         label: s.name,
         sub: s.code || s.phone || undefined,
@@ -209,8 +212,8 @@ export function Header() {
               }}
               onFocus={() => setOpen(true)}
               onKeyDown={onSearchKeyDown}
-              placeholder="搜索产品、发票、供应商…"
-              aria-label="全局搜索"
+              placeholder={t("搜索产品、发票、供应商…")}
+              aria-label={t("全局搜索")}
               className="h-9 w-full rounded-lg border border-line bg-surface-muted pl-9 pr-16 text-sm text-ink outline-none transition-colors placeholder:text-ink-subtle focus:border-accent focus:bg-surface focus:ring-2 focus:ring-accent/20"
             />
             <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
@@ -224,7 +227,7 @@ export function Header() {
                     inputRef.current?.focus();
                   }}
                   className="flex h-6 w-6 items-center justify-center rounded text-ink-subtle hover:bg-surface-inset hover:text-ink"
-                  aria-label="清除搜索"
+                  aria-label={t("清除搜索")}
                 >
                   <X size={14} aria-hidden="true" />
                 </button>
@@ -243,8 +246,8 @@ export function Header() {
           <button
             type="button"
             onClick={() => navigate("/notifications")}
-            title="通知"
-            aria-label={unreadCount > 0 ? `通知，${unreadCount} 条未读` : "通知"}
+            title={t("通知")}
+            aria-label={unreadCount > 0 ? t("通知，{0} 条未读", unreadCount) : t("通知")}
             className="relative flex h-9 w-9 items-center justify-center rounded-lg border border-line bg-surface text-ink-muted transition-colors hover:bg-surface-inset hover:text-ink"
           >
             <Bell size={17} aria-hidden="true" />
@@ -260,8 +263,9 @@ export function Header() {
 
           <div className="mx-1 hidden h-6 w-px bg-line sm:block" aria-hidden="true" />
 
+          <LanguageSelector />
           <DropdownMenu
-            label="账户菜单"
+            label={t("账户菜单")}
             trigger={(props) => (
               <button
                 {...props}
@@ -276,24 +280,18 @@ export function Header() {
                     {user?.displayName || user?.username}
                   </span>
                   <span className="block text-[10px] leading-tight text-ink-subtle">
-                    {user?.role === "admin" ? "管理员" : "店员"}
+                    {user?.role === "admin" ? t("管理员") : t("店员")}
                   </span>
                 </span>
                 <ChevronDown size={13} aria-hidden="true" className="hidden text-ink-subtle sm:block" />
               </button>
             )}
           >
-            <DropdownMenuItem icon={Bell} onSelect={() => navigate("/notifications")}>
-              通知中心
-            </DropdownMenuItem>
+            <DropdownMenuItem icon={Bell} onSelect={() => navigate("/notifications")}>{t("通知中心")}</DropdownMenuItem>
             {isAdmin ? (
               <>
-                <DropdownMenuItem icon={Settings} onSelect={() => navigate("/settings")}>
-                  系统设置
-                </DropdownMenuItem>
-                <DropdownMenuItem icon={Users} onSelect={() => navigate("/users")}>
-                  用户管理
-                </DropdownMenuItem>
+                <DropdownMenuItem icon={Settings} onSelect={() => navigate("/settings")}>{t("系统设置")}</DropdownMenuItem>
+                <DropdownMenuItem icon={Users} onSelect={() => navigate("/users")}>{t("用户管理")}</DropdownMenuItem>
               </>
             ) : null}
             <DropdownMenuSeparator />
@@ -304,9 +302,7 @@ export function Header() {
                 await logout();
                 navigate("/login");
               }}
-            >
-              退出登录
-            </DropdownMenuItem>
+            >{t("退出登录")}</DropdownMenuItem>
           </DropdownMenu>
         </div>
       </div>
@@ -316,16 +312,16 @@ export function Header() {
         onClose={() => setOpen(false)}
         anchorRef={anchorRef}
         matchWidth
-        ariaLabel="搜索结果"
+        ariaLabel={t("搜索结果")}
         className="p-1.5"
         role="listbox"
       >
         <div id="global-search-results">
           {searching && flatResults.length === 0 ? (
-            <p className="px-3 py-4 text-meta text-ink-subtle">搜索中…</p>
+            <p className="px-3 py-4 text-meta text-ink-subtle">{t("搜索中…")}</p>
           ) : null}
           {!searching && results && flatResults.length === 0 ? (
-            <p className="px-3 py-4 text-meta text-ink-subtle">未找到匹配结果</p>
+            <p className="px-3 py-4 text-meta text-ink-subtle">{t("未找到匹配结果")}</p>
           ) : null}
 
           {sections.map((section) => {

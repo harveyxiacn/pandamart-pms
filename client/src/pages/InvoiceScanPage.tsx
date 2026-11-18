@@ -1,3 +1,7 @@
+import { formatNumber } from "../utils/formatters";
+import { categoryName } from "../i18n";
+import { getLocale } from "../i18n";
+import { t, useLanguage } from "../i18n";
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
@@ -26,11 +30,12 @@ import { cn } from "../utils/classnames";
 type UploadStage = "idle" | "uploading" | "analyzing" | "finalizing" | "done" | "error";
 
 const OCR_METHOD_LABELS: Record<string, string> = {
-  text_extract: "PDF 文本解析",
-  local_ocr: "本地 OCR（无需 AI）",
-  ai_vision: "AI 视觉识别",
-  excel_parse: "Excel 解析",
-  manual: "手动录入",
+  get text_extract() { return t("PDF 文本解析"); },
+  get local_ocr() { return t("本地 OCR（无需 AI）"); },
+  get ai_vision() { return t("AI 视觉识别"); },
+  get excel_parse() { return t("Excel 解析"); },
+  get demo_ocr() { return t("示例数据"); },
+  get manual() { return t("手动录入"); },
 };
 
 function ocrMethodLabel(method: string): string {
@@ -62,12 +67,13 @@ type RecognizedItem = {
 };
 
 const steps = [
-  { title: "上传文件", description: "PDF、图片或 Excel，单文件建议不超过 20MB。" },
-  { title: "校对结果", description: "核对供应商、日期、金额与商品明细。" },
-  { title: "确认入库", description: "写入库存与应付；未匹配的商品会新建档案。" },
+  { get title() { return t("上传文件"); }, get description() { return t("PDF、图片或 Excel，单文件建议不超过 20MB。"); } },
+  { get title() { return t("校对结果"); }, get description() { return t("核对供应商、日期、金额与商品明细。"); } },
+  { get title() { return t("确认入库"); }, get description() { return t("写入库存与应付；未匹配的商品会新建档案。"); } },
 ];
 
 export default function InvoiceScanPage() {
+  const language = useLanguage();
   const [file, setFile] = useState<File | null>(null);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -119,36 +125,36 @@ export default function InvoiceScanPage() {
   const uploadStageText = useMemo(() => {
     switch (uploadStage) {
       case "uploading":
-        return "正在上传文件";
+        return t("正在上传文件");
       case "analyzing":
-        return "正在识别发票内容";
+        return t("正在识别发票内容");
       case "finalizing":
-        return "正在整理识别结果";
+        return t("正在整理识别结果");
       case "done":
-        return "识别已完成";
+        return t("识别已完成");
       case "error":
-        return "处理失败";
+        return t("处理失败");
       default:
-        return "等待上传";
+        return t("等待上传");
     }
-  }, [uploadStage]);
+  }, [uploadStage, language]);
 
   const uploadStageDesc = useMemo(() => {
     switch (uploadStage) {
       case "uploading":
-        return "正在将文件传输到服务器，请稍候。";
+        return t("正在将文件传输到服务器，请稍候。");
       case "analyzing":
-        return "服务器正在调用 OCR 与 AI 解析，这一阶段耗时会更长。";
+        return t("服务器正在调用 OCR 与 AI 解析，这一阶段耗时会更长。");
       case "finalizing":
-        return "正在写入发票与明细数据，并准备校对结果。";
+        return t("正在写入发票与明细数据，并准备校对结果。");
       case "done":
-        return "可继续人工校对并确认入库。";
+        return t("可继续人工校对并确认入库。");
       case "error":
-        return "处理遇到错误，请查看下方错误信息后重试。";
+        return t("处理遇到错误，请查看下方错误信息后重试。");
       default:
-        return "支持 PDF / PNG / JPG / Excel，建议单文件不超过 20MB。";
+        return t("支持 PDF / PNG / JPG / Excel，建议单文件不超过 20MB。");
     }
-  }, [uploadStage]);
+  }, [uploadStage, language]);
 
   useEffect(() => {
     if (!loading) return;
@@ -167,7 +173,7 @@ export default function InvoiceScanPage() {
   }, [loading, uploadStage]);
 
   const appendUploadLog = (message: string) => {
-    const timestamp = new Date().toLocaleTimeString("zh-CN", { hour12: false });
+    const timestamp = new Date().toLocaleTimeString(getLocale(), { hour12: false });
     setUploadLogs((prev) => [...prev, `[${timestamp}] ${message}`].slice(-6));
   };
 
@@ -193,8 +199,8 @@ export default function InvoiceScanPage() {
     setUploadLogs([]);
     setUploadStage("uploading");
     setUploadProgress(3);
-    appendUploadLog(`已选择文件：${file.name}（${formatFileSize(file.size)}）`);
-    appendUploadLog("开始上传文件");
+    appendUploadLog(t("已选择文件：{0}（{1}）", file.name, formatFileSize(file.size)));
+    appendUploadLog(t("开始上传文件"));
 
     try {
       const result = await uploadInvoice(file, {
@@ -206,18 +212,18 @@ export default function InvoiceScanPage() {
             enteredAnalyzing = true;
             setUploadStage("analyzing");
             setUploadProgress((prev) => Math.max(prev, 70));
-            appendUploadLog("文件上传完成，开始 OCR 识别");
+            appendUploadLog(t("文件上传完成，开始 OCR 识别"));
           }
         },
       });
       if (!enteredAnalyzing) {
         setUploadStage("analyzing");
         setUploadProgress((prev) => Math.max(prev, 70));
-        appendUploadLog("开始 OCR 识别");
+        appendUploadLog(t("开始 OCR 识别"));
       }
       setUploadStage("finalizing");
       setUploadProgress((prev) => Math.max(prev, 95));
-      appendUploadLog("识别完成，正在写入系统");
+      appendUploadLog(t("识别完成，正在写入系统"));
 
       setInvoiceId(result.invoiceId);
       setRecognized({
@@ -246,21 +252,21 @@ export default function InvoiceScanPage() {
       const methodLabel = ocrMethodLabel(result.ocrMethod);
       const confidenceText =
         typeof result.ocrConfidence === "number"
-          ? `，置信度 ${Math.round(result.ocrConfidence * 100)}%`
+          ? t("，置信度 {0}%", Math.round(result.ocrConfidence * 100))
           : "";
-      appendUploadLog(`识别完成：${methodLabel}${confidenceText}，共 ${result.recognized.items.length} 条明细`);
+      appendUploadLog(t("识别完成：{0}{1}，共 {2} 条明细", methodLabel, confidenceText, result.recognized.items.length));
       for (const warning of result.ocrWarnings || []) {
-        appendUploadLog(`提示：${warning}`);
+        appendUploadLog(t("提示：{0}", warning));
       }
-      setSuccess(`发票上传成功，识别方式：${methodLabel}${confidenceText}`);
+      setSuccess(t("发票上传成功，识别方式：{0}{1}", methodLabel, confidenceText));
     } catch (err: unknown) {
       setUploadStage("error");
-      const rawMessage = err instanceof Error ? err.message : "上传失败";
+      const rawMessage = err instanceof Error ? err.message : t("上传失败");
       const friendlyMessage =
         /timeout|超时|ECONNABORTED/i.test(rawMessage)
-          ? "发票识别超时，请稍后重试；建议优先上传清晰且尺寸较小的图片。"
+          ? t("发票识别超时，请稍后重试；建议优先上传清晰且尺寸较小的图片。")
           : rawMessage;
-      appendUploadLog(`处理失败：${friendlyMessage}`);
+      appendUploadLog(t("处理失败：{0}", friendlyMessage));
       setError(friendlyMessage);
     } finally {
       setLoading(false);
@@ -302,7 +308,7 @@ export default function InvoiceScanPage() {
       };
       const result = await confirmInvoice(invoiceId, payload);
       setSuccess(
-        `入库完成：更新库存 ${result.inventoryUpdated} 项，创建新产品 ${result.newProductsCreated} 项。可继续上传下一张发票。`
+        t("入库完成：更新库存 {0} 项，创建新产品 {1} 项。可继续上传下一张发票。", result.inventoryUpdated, result.newProductsCreated)
       );
       // 确认成功后清空已识别发票状态，避免对已处理发票重复点击「确认入库」（canSubmit 依赖这些值，会同时禁用确认与驳回按钮）（FE-N2）
       setInvoiceId(null);
@@ -312,7 +318,7 @@ export default function InvoiceScanPage() {
       setUploadStage("idle");
       setUploadProgress(0);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "确认入库失败");
+      setError(err instanceof Error ? err.message : t("确认入库失败"));
     } finally {
       setSubmitting(false);
     }
@@ -325,9 +331,9 @@ export default function InvoiceScanPage() {
     setSuccess(null);
     try {
       await rejectInvoice(invoiceId, notes || "人工驳回");
-      setSuccess("已驳回该发票");
+      setSuccess(t("已驳回该发票"));
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "驳回失败");
+      setError(err instanceof Error ? err.message : t("驳回失败"));
     } finally {
       setSubmitting(false);
     }
@@ -338,12 +344,12 @@ export default function InvoiceScanPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="发票识别与入库"
-        description="上传采购发票，系统自动识别供应商、金额与商品明细；校对无误后确认入库。"
+        title={t("发票识别与入库")}
+        description={t("上传采购发票，系统自动识别供应商、金额与商品明细；校对无误后确认入库。")}
         meta={
           recognized
-            ? `识别到 ${recognized.items.length} 条明细 · ${newProductCount} 个新产品待创建`
-            : "支持 PDF / 图片 / Excel"
+            ? t("识别到 {0} 条明细 · {1} 个新产品待创建", recognized.items.length, newProductCount)
+            : t("支持 PDF / 图片 / Excel")
         }
       />
 
@@ -369,15 +375,15 @@ export default function InvoiceScanPage() {
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_19rem]">
         <Card>
           <CardHeader
-            title="上传发票"
-            description="选择或拖入文件，上传后自动开始 OCR 识别。"
+            title={t("上传发票")}
+            description={t("选择或拖入文件，上传后自动开始 OCR 识别。")}
             action={
               loading ? (
-                <Badge tone="info">处理中</Badge>
+                <Badge tone="info">{t("处理中")}</Badge>
               ) : uploadStage === "done" ? (
-                <Badge tone="success">已识别</Badge>
+                <Badge tone="success">{t("已识别")}</Badge>
               ) : uploadStage === "error" ? (
-                <Badge tone="danger">失败</Badge>
+                <Badge tone="danger">{t("失败")}</Badge>
               ) : null
             }
           />
@@ -414,10 +420,10 @@ export default function InvoiceScanPage() {
                 <UploadCloud size={19} aria-hidden="true" />
               </span>
               <span className="text-body font-medium text-ink">
-                {file ? file.name : "点击选择或拖入发票文件"}
+                {file ? file.name : t("点击选择或拖入发票文件")}
               </span>
               <span className="text-meta text-ink-subtle">
-                {file ? formatFileSize(file.size) : "PDF / PNG / JPG / Excel · 建议不超过 20MB"}
+                {file ? formatFileSize(file.size) : t("PDF / PNG / JPG / Excel · 建议不超过 20MB")}
               </span>
             </label>
 
@@ -428,7 +434,7 @@ export default function InvoiceScanPage() {
               leadingIcon={ScanLine}
               className="sm:h-full sm:min-h-[7.5rem] sm:w-32"
             >
-              {loading ? "分析中…" : "上传并分析"}
+              {loading ? t("分析中…") : t("上传并分析")}
             </Button>
           </div>
 
@@ -440,7 +446,7 @@ export default function InvoiceScanPage() {
               </div>
               <div
                 role="progressbar"
-                aria-label="发票处理进度"
+                aria-label={t("发票处理进度")}
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-valuenow={uploadProgress}
@@ -458,7 +464,7 @@ export default function InvoiceScanPage() {
               <p className="mt-2 text-meta text-ink-subtle">{uploadStageDesc}</p>
               {uploadLogs.length > 0 ? (
                 <div className="mt-3 rounded-lg border border-line bg-surface-muted p-2.5">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">处理记录</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">{t("处理记录")}</p>
                   <ul className="mt-1 space-y-0.5 font-mono text-[11px] leading-5 text-ink-muted">
                     {uploadLogs.map((log, index) => (
                       <li key={`${log}-${index}`}>{log}</li>
@@ -471,7 +477,7 @@ export default function InvoiceScanPage() {
         </Card>
 
         <Card>
-          <CardHeader title="处理流程" description="每一步都可以回退修改。" />
+          <CardHeader title={t("处理流程")} description={t("每一步都可以回退修改。")} />
           <ol className="mt-4 space-y-4">
             {steps.map((step, index) => (
               <li key={step.title} className="flex gap-3">
@@ -487,10 +493,8 @@ export default function InvoiceScanPage() {
           </ol>
           <div className="mt-4 rounded-lg border border-line bg-surface-muted px-3 py-2.5 text-meta leading-5 text-ink-muted">
             <p className="flex items-center gap-1.5 font-medium text-ink">
-              <FileText size={13} aria-hidden="true" />
-              识别不准确时
-            </p>
-            <p className="mt-1">优先上传清晰、摆正的整张发票；Excel 请确认表头与金额列完整。</p>
+              <FileText size={13} aria-hidden="true" />{t("识别不准确时")}</p>
+            <p className="mt-1">{t("优先上传清晰、摆正的整张发票；Excel 请确认表头与金额列完整。")}</p>
           </div>
         </Card>
       </div>
@@ -498,42 +502,40 @@ export default function InvoiceScanPage() {
       {recognized ? (
         <Card padded={false} className="p-4 sm:p-5">
           <CardHeader
-            title="识别结果校对"
-            description="核对供应商、日期和明细后再确认入库；未匹配的商品会按新产品创建。"
+            title={t("识别结果校对")}
+            description={t("核对供应商、日期和明细后再确认入库；未匹配的商品会按新产品创建。")}
             action={
               <Badge tone="warning">
-                <ClipboardCheck size={12} aria-hidden="true" />
-                待确认
-              </Badge>
+                <ClipboardCheck size={12} aria-hidden="true" />{t("待确认")}</Badge>
             }
             className="mb-4"
           />
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <Field label="发票编号" htmlFor="scan-invoice-number">
+            <Field label={t("发票编号")} htmlFor="scan-invoice-number">
               <Input
                 id="scan-invoice-number"
                 value={recognized.invoiceNumber}
                 onChange={(e) => setRecognized({ ...recognized, invoiceNumber: e.target.value })}
               />
             </Field>
-            <Field label="发票日期" htmlFor="scan-invoice-date">
+            <Field label={t("发票日期")} htmlFor="scan-invoice-date">
               <DatePicker
                 id="scan-invoice-date"
                 value={recognized.invoiceDate || null}
                 onChange={(value) => setRecognized({ ...recognized, invoiceDate: value ?? "" })}
-                label="发票日期"
+                label={t("发票日期")}
                 clearable
               />
             </Field>
-            <Field label="供应商" htmlFor="scan-supplier" required error={supplierId ? undefined : "请选择供应商后才能确认入库"}>
+            <Field label={t("供应商")} htmlFor="scan-supplier" required error={supplierId ? undefined : t("请选择供应商后才能确认入库")}>
               <Select
                 id="scan-supplier"
                 value={supplierId ?? ""}
                 onChange={(e) => setSupplierId(Number(e.target.value) || null)}
                 aria-invalid={!supplierId}
               >
-                <option value="">请选择供应商</option>
+                <option value="">{t("请选择供应商")}</option>
                 {suppliers.map((supplier) => (
                   <option key={supplier.id} value={supplier.id}>
                     {supplier.name}
@@ -541,43 +543,43 @@ export default function InvoiceScanPage() {
                 ))}
               </Select>
             </Field>
-            <Field label="客户编号" htmlFor="scan-customer-code">
+            <Field label={t("客户编号")} htmlFor="scan-customer-code">
               <Input
                 id="scan-customer-code"
                 value={recognized.customerCode || ""}
                 onChange={(e) => setRecognized({ ...recognized, customerCode: e.target.value || null })}
               />
             </Field>
-            <Field label="新产品默认分类" htmlFor="scan-category" hint="仅应用于未匹配的商品。">
+            <Field label={t("新产品默认分类")} htmlFor="scan-category" hint={t("仅应用于未匹配的商品。")}>
               <Select
                 id="scan-category"
                 value={defaultCategoryId ?? ""}
                 onChange={(e) => setDefaultCategoryId(Number(e.target.value) || null)}
               >
-                <option value="">不设置</option>
+                <option value="">{t("不设置")}</option>
                 {categories.map((category) => (
                   <option key={category.id} value={category.id}>
-                    {category.name}
+                    {categoryName(category.name)}
                   </option>
                 ))}
               </Select>
             </Field>
-            <Field label="备注" htmlFor="scan-notes">
+            <Field label={t("备注")} htmlFor="scan-notes">
               <Input
                 id="scan-notes"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="可选，例如快递单号或收货说明"
+                placeholder={t("可选，例如快递单号或收货说明")}
               />
             </Field>
-            <Field label="供应商地址" htmlFor="scan-supplier-address" className="sm:col-span-2">
+            <Field label={t("供应商地址")} htmlFor="scan-supplier-address" className="sm:col-span-2">
               <Input
                 id="scan-supplier-address"
                 value={recognized.supplierAddress || ""}
                 onChange={(e) => setRecognized({ ...recognized, supplierAddress: e.target.value || null })}
               />
             </Field>
-            <Field label="供应商联系方式" htmlFor="scan-supplier-contact">
+            <Field label={t("供应商联系方式")} htmlFor="scan-supplier-contact">
               <Input
                 id="scan-supplier-contact"
                 value={recognized.supplierContact || ""}
@@ -588,31 +590,29 @@ export default function InvoiceScanPage() {
 
           <div className="mt-5">
             <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-              <h3 className="text-body-lg font-semibold text-ink">商品明细</h3>
-              <span className="text-meta text-ink-subtle">
-                共 {recognized.items.length} 条 · 新产品 {newProductCount} 条
-              </span>
+              <h3 className="text-body-lg font-semibold text-ink">{t("商品明细")}</h3>
+              <span className="text-meta text-ink-subtle">{t("共")} {recognized.items.length} {t("条 · 新产品")} {newProductCount} {t("条")}</span>
             </div>
             <Table maxHeight="28rem">
               <thead>
                 <tr>
-                  <Th>产品</Th>
-                  <Th>编码</Th>
-                  <Th>编号</Th>
+                  <Th>{t("产品")}</Th>
+                  <Th>{t("编码")}</Th>
+                  <Th>{t("编号")}</Th>
                   <Th>UN</Th>
-                  <Th>Tax</Th>
-                  <Th numeric>数量</Th>
-                  <Th>单位</Th>
-                  <Th numeric>单价</Th>
-                  <Th numeric>小计</Th>
-                  <Th>匹配</Th>
+                  <Th>{t("税码")}</Th>
+                  <Th numeric>{t("数量")}</Th>
+                  <Th>{t("单位")}</Th>
+                  <Th numeric>{t("单价")}</Th>
+                  <Th numeric>{t("小计")}</Th>
+                  <Th>{t("匹配")}</Th>
                 </tr>
               </thead>
               <tbody>
                 {recognized.items.map((item, index) => (
                   <tr key={index}>
                     <Td>
-                      <p className="cell-strong">{(item.productNameZh || item.productNameEn || "未命名").trim()}</p>
+                      <p className="cell-strong">{(item.productNameZh || item.productNameEn || t("未命名")).trim()}</p>
                       {item.productNameZh && item.productNameEn ? (
                         <p className="truncate text-meta text-ink-subtle">{item.productNameEn}</p>
                       ) : null}
@@ -621,18 +621,18 @@ export default function InvoiceScanPage() {
                     <Td className="font-mono text-meta">{item.productNumber || "—"}</Td>
                     <Td className="text-meta">{item.un || "—"}</Td>
                     <Td className="text-meta">{item.taxCode || (recognized.hasTax ? "H" : "E")}</Td>
-                    <Td numeric>{item.quantity}</Td>
+                    <Td numeric>{formatNumber(Number(item.quantity))}</Td>
                     <Td className="text-meta text-ink-muted">{item.unit}</Td>
                     <Td numeric>{formatCurrency(item.unitPrice)}</Td>
                     <Td numeric className="font-semibold">{formatCurrency(item.lineTotal)}</Td>
                     <Td>
                       {item.matchedProduct ? (
                         <Badge tone={item.matchedProduct.confidence >= 0.8 ? "success" : "warning"}>
-                          {item.matchedProduct.confidence >= 0.8 ? "已匹配" : "待复核"} ·{" "}
+                          {item.matchedProduct.confidence >= 0.8 ? t("已匹配") : t("待复核")} ·{" "}
                           {Math.round(item.matchedProduct.confidence * 100)}%
                         </Badge>
                       ) : (
-                        <Badge tone="info">新产品</Badge>
+                        <Badge tone="info">{t("新产品")}</Badge>
                       )}
                     </Td>
                   </tr>
@@ -696,21 +696,17 @@ export default function InvoiceScanPage() {
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
             <p className="text-meta text-ink-subtle">
               {canSubmit
-                ? `确认后将为 ${recognized.items.length} 条明细入库${newProductCount ? `，并新建 ${newProductCount} 个商品` : ""}。`
-                : "请选择供应商后确认入库。"}
+                ? t("确认后将为 {0} 条明细入库{1}。", recognized.items.length, newProductCount ? `，并新建 ${newProductCount} 个商品` : "")
+                : t("请选择供应商后确认入库。")}
             </p>
             <div className="flex flex-wrap gap-2">
-              <Button variant="danger-ghost" onClick={() => void handleReject()} disabled={!invoiceId || submitting}>
-                驳回发票
-              </Button>
+              <Button variant="danger-ghost" onClick={() => void handleReject()} disabled={!invoiceId || submitting}>{t("驳回发票")}</Button>
               <Button
                 onClick={() => void handleConfirm()}
                 disabled={!canSubmit || submitting}
                 loading={submitting}
                 leadingIcon={CheckCircle2}
-              >
-                确认入库
-              </Button>
+              >{t("确认入库")}</Button>
             </div>
           </div>
         </Card>

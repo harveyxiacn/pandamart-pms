@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ChevronRight, FileSearch, FileText, SearchX } from "lucide-react";
@@ -148,6 +149,7 @@ function guessSupplierByOcrName(ocrSupplierName: string, suppliers: Supplier[]):
 }
 
 export default function InvoiceListPage() {
+  useLanguage();
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
   const toast = useToast();
@@ -195,7 +197,7 @@ export default function InvoiceListPage() {
       setTotal(data.pagination.total);
       setPage(data.pagination.page);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "加载失败");
+      setError(err instanceof Error ? err.message : t("加载失败"));
     } finally {
       setLoading(false);
     }
@@ -225,10 +227,6 @@ export default function InvoiceListPage() {
     if (openedDeepLinkRef.current === id) return;
     openedDeepLinkRef.current = id;
     void openDetail(id);
-    // 打开后清除 URL 中的 ?id=，避免刷新或返回时重复打开
-    const next = new URLSearchParams(searchParams);
-    next.delete("id");
-    setSearchParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, searchParams]);
 
@@ -243,13 +241,19 @@ export default function InvoiceListPage() {
       setDetail(res);
       setDraft(toEditableInvoice(res));
     } catch (err: unknown) {
-      setActionError(err instanceof Error ? err.message : "加载发票详情失败");
+      setActionError(err instanceof Error ? err.message : t("加载发票详情失败"));
     } finally {
       setDetailLoading(false);
     }
   };
 
   const closeDetail = () => {
+    openedDeepLinkRef.current = null;
+    if (searchParams.has("id")) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("id");
+      setSearchParams(next, { replace: true });
+    }
     setDetail(null);
     setEditing(false);
     setDraft(null);
@@ -331,7 +335,7 @@ export default function InvoiceListPage() {
       grandTotal,
     });
     setActionError(null);
-    setActionMessage(`已重新计算：Sales ${formatCurrency(subtotal)}，Tax ${formatCurrency(taxAmount)}，Total ${formatCurrency(grandTotal)}`);
+    setActionMessage(t("已重新计算：Sales {0}，Tax {1}，Total {2}", formatCurrency(subtotal), formatCurrency(taxAmount), formatCurrency(grandTotal)));
   };
 
   const handleSaveUpdate = async () => {
@@ -370,11 +374,11 @@ export default function InvoiceListPage() {
       setDetail(updated);
       setEditing(false);
       setDraft(toEditableInvoice(updated));
-      setActionMessage("发票修改已保存");
-      toast.success("发票修改已保存");
+      setActionMessage(t("发票修改已保存"));
+      toast.success(t("发票修改已保存"));
       await load();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "发票修改失败";
+      const msg = err instanceof Error ? err.message : t("发票修改失败");
       setActionError(msg);
       toast.error(msg);
     } finally {
@@ -386,7 +390,7 @@ export default function InvoiceListPage() {
     if (!detail || !activeDraft) return;
     if (!activeDraft.supplierId) {
       setEditing(true);
-      setActionError("请先选择供应商后再确认入库（已切换到编辑模式）");
+      setActionError(t("请先选择供应商后再确认入库（已切换到编辑模式）"));
       return;
     }
 
@@ -425,11 +429,11 @@ export default function InvoiceListPage() {
       setDetail(refreshed);
       setEditing(false);
       setDraft(toEditableInvoice(refreshed));
-      setActionMessage("发票已确认入库");
-      toast.success("发票已确认入库");
+      setActionMessage(t("发票已确认入库"));
+      toast.success(t("发票已确认入库"));
       await load();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "确认入库失败";
+      const msg = err instanceof Error ? err.message : t("确认入库失败");
       setActionError(msg);
       toast.error(msg);
     } finally {
@@ -440,9 +444,9 @@ export default function InvoiceListPage() {
   const handleDelete = async () => {
     if (!detail) return;
     const ok = await confirm({
-      title: "删除发票",
-      message: `确认删除发票 ${detail.invoiceNumber} 吗？此操作不可撤销。`,
-      confirmText: "删除",
+      title: t("删除发票"),
+      message: t("确认删除发票 {0} 吗？此操作不可撤销。", detail.invoiceNumber),
+      confirmText: t("删除"),
       danger: true,
     });
     if (!ok) return;
@@ -453,10 +457,10 @@ export default function InvoiceListPage() {
     try {
       await deleteInvoice(detail.id);
       closeDetail();
-      toast.success("发票已删除");
+      toast.success(t("发票已删除"));
       await load();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "删除发票失败";
+      const msg = err instanceof Error ? err.message : t("删除发票失败");
       setActionError(msg);
       toast.error(msg);
     } finally {
@@ -467,9 +471,9 @@ export default function InvoiceListPage() {
   const handleRollbackConfirm = async () => {
     if (!detail) return;
     const ok = await confirm({
-      title: "回滚发票",
-      message: `确认将发票 ${detail.invoiceNumber} 回滚为待处理吗？`,
-      confirmText: "回滚",
+      title: t("回滚发票"),
+      message: t("确认将发票 {0} 回滚为待处理吗？", detail.invoiceNumber),
+      confirmText: t("回滚"),
     });
     if (!ok) return;
 
@@ -481,11 +485,11 @@ export default function InvoiceListPage() {
       setDetail(updated);
       setEditing(false);
       setDraft(toEditableInvoice(updated));
-      setActionMessage("已回滚为待处理，可再次修改或确认");
-      toast.success("已回滚为待处理");
+      setActionMessage(t("已回滚为待处理，可再次修改或确认"));
+      toast.success(t("已回滚为待处理"));
       await load();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "回滚失败";
+      const msg = err instanceof Error ? err.message : t("回滚失败");
       setActionError(msg);
       toast.error(msg);
     } finally {
@@ -515,12 +519,10 @@ export default function InvoiceListPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="发票列表"
-        description="查看、校对并确认供应商发票；确认后自动入库并更新批次。"
+        title={t("发票列表")}
+        description={t("查看、校对并确认供应商发票；确认后自动入库并更新批次。")}
         actions={
-          <Button leadingIcon={FileSearch} onClick={() => navigate("/invoices/scan")}>
-            识别新发票
-          </Button>
+          <Button leadingIcon={FileSearch} onClick={() => navigate("/invoices/scan")}>{t("识别新发票")}</Button>
         }
       />
 
@@ -534,24 +536,24 @@ export default function InvoiceListPage() {
               onKeyDown={(e) => {
                 if (e.key === "Enter") void load(1);
               }}
-              placeholder="搜索发票号"
-              aria-label="搜索发票号"
+              placeholder={t("搜索发票号")}
+              aria-label={t("搜索发票号")}
               containerClassName="w-full sm:max-w-[15rem]"
             />
             <DateRangePicker
               value={dateRange}
               onChange={setDateRange}
-              label="按开票日期筛选"
+              label={t("按开票日期筛选")}
               className="w-auto min-w-[13rem]"
             />
             {isAdmin ? (
               <Select
                 value={supplierId}
                 onChange={(e) => setSupplierId(e.target.value)}
-                aria-label="按供应商筛选"
+                aria-label={t("按供应商筛选")}
                 className="w-auto min-w-[9rem]"
               >
-                <option value="">全部供应商</option>
+                <option value="">{t("全部供应商")}</option>
                 {suppliers.map((supplier) => (
                   <option key={supplier.id} value={supplier.id}>
                     {supplier.name}
@@ -560,26 +562,24 @@ export default function InvoiceListPage() {
               </Select>
             ) : null}
             {hasFilters ? (
-              <Button variant="ghost" size="sm" onClick={clearFilters}>
-                清除筛选
-              </Button>
+              <Button variant="ghost" size="sm" onClick={clearFilters}>{t("清除筛选")}</Button>
             ) : null}
           </ToolbarGroup>
           <ToolbarGroup>
             {isAdmin ? (
               <SegmentedControl
-                label="按状态筛选"
+                label={t("按状态筛选")}
                 value={status}
                 onChange={setStatus}
                 options={[
-                  { value: "", label: "全部" },
-                  { value: "pending", label: "待处理" },
-                  { value: "confirmed", label: "已确认" },
-                  { value: "rejected", label: "已驳回" },
+                  { value: "", label: t("全部") },
+                  { value: "pending", label: t("待处理") },
+                  { value: "confirmed", label: t("已确认") },
+                  { value: "rejected", label: t("已驳回") },
                 ]}
               />
             ) : (
-              <Badge tone="warning">当前范围：待处理发票</Badge>
+              <Badge tone="warning">{t("当前范围：待处理发票")}</Badge>
             )}
           </ToolbarGroup>
         </Toolbar>
@@ -587,42 +587,34 @@ export default function InvoiceListPage() {
 
       <Card padded={false} className="p-4 sm:p-5">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-title font-semibold tracking-tight text-ink">发票记录</h2>
-          <span className="text-meta text-ink-subtle">
-            共 <span className="font-medium tabular text-ink-muted">{total}</span> 张
-          </span>
+          <h2 className="text-title font-semibold tracking-tight text-ink">{t("发票记录")}</h2>
+          <span className="text-meta text-ink-subtle">{t("共")} <span className="font-medium tabular text-ink-muted">{total}</span> {t("张")}</span>
         </div>
         {loading ? <SkeletonTable rows={6} columns={6} /> : null}
         {!loading && error ? (
           <EmptyState
             icon={FileText}
-            title="加载失败"
+            title={t("加载失败")}
             description={error}
             action={
-              <Button variant="ghost" onClick={() => void load()}>
-                重试
-              </Button>
+              <Button variant="ghost" onClick={() => void load()}>{t("重试")}</Button>
             }
           />
         ) : null}
         {!loading && !error && items.length === 0 ? (
           <EmptyState
             icon={hasFilters ? SearchX : FileText}
-            title={hasFilters ? "没有符合条件的发票" : "暂无发票"}
+            title={hasFilters ? t("没有符合条件的发票") : t("暂无发票")}
             description={
               hasFilters
-                ? "试试放宽日期范围或清除筛选条件。"
-                : "前往「发票识别」上传第一张供应商发票。"
+                ? t("试试放宽日期范围或清除筛选条件。")
+                : t("前往「发票识别」上传第一张供应商发票。")
             }
             action={
               hasFilters ? (
-                <Button variant="secondary" onClick={clearFilters}>
-                  清除筛选
-                </Button>
+                <Button variant="secondary" onClick={clearFilters}>{t("清除筛选")}</Button>
               ) : (
-                <Button leadingIcon={FileSearch} onClick={() => navigate("/invoices/scan")}>
-                  去识别发票
-                </Button>
+                <Button leadingIcon={FileSearch} onClick={() => navigate("/invoices/scan")}>{t("去识别发票")}</Button>
               )
             }
           />
@@ -632,12 +624,12 @@ export default function InvoiceListPage() {
             <Table>
               <thead>
                 <tr>
-                  <Th>发票号</Th>
-                  <Th>供应商</Th>
-                  <Th>开票日期</Th>
-                  <Th numeric>总额</Th>
-                  <Th>状态</Th>
-                  <Th className="cell-actions">操作</Th>
+                  <Th>{t("发票号")}</Th>
+                  <Th>{t("供应商")}</Th>
+                  <Th>{t("开票日期")}</Th>
+                  <Th numeric>{t("总额")}</Th>
+                  <Th>{t("状态")}</Th>
+                  <Th className="cell-actions">{t("操作")}</Th>
                 </tr>
               </thead>
               <tbody>
@@ -652,7 +644,7 @@ export default function InvoiceListPage() {
                         {item.invoiceNumber}
                       </button>
                     </Td>
-                    <Td>{item.supplierName || <span className="text-ink-subtle">未匹配供应商</span>}</Td>
+                    <Td>{item.supplierName || <span className="text-ink-subtle">{t("未匹配供应商")}</span>}</Td>
                     <Td className="whitespace-nowrap tabular">{formatDate(item.invoiceDate)}</Td>
                     <Td numeric className="font-medium text-ink">
                       {formatCurrency(item.grandTotal)}
@@ -667,7 +659,7 @@ export default function InvoiceListPage() {
                               : "warning"
                         }
                       >
-                        {item.status === "confirmed" ? "已确认" : item.status === "rejected" ? "已驳回" : "待处理"}
+                        {item.status === "confirmed" ? t("已确认") : item.status === "rejected" ? t("已驳回") : t("待处理")}
                       </Badge>
                     </Td>
                     <Td className="cell-actions">
@@ -676,10 +668,8 @@ export default function InvoiceListPage() {
                         size="sm"
                         onClick={() => void openDetail(item.id)}
                         trailingIcon={ChevronRight}
-                        aria-label={`查看发票 ${item.invoiceNumber}`}
-                      >
-                        查看
-                      </Button>
+                        aria-label={t("查看发票 {0}", item.invoiceNumber)}
+                      >{t("查看")}</Button>
                     </Td>
                   </tr>
                 ))}
@@ -703,10 +693,10 @@ export default function InvoiceListPage() {
 
       <Modal
         open={detail !== null || detailLoading}
-        title={detail ? `发票 ${detail.invoiceNumber}` : editing ? "发票编辑" : "发票详情"}
+        title={detail ? t("发票 {0}", detail.invoiceNumber) : editing ? t("发票编辑") : t("发票详情")}
         description={
           detail
-            ? `${detail.supplier?.name || "未匹配供应商"} · ${formatDate(detail.invoiceDate)}`
+            ? `${detail.supplier?.name || t("未匹配供应商")} · ${formatDate(detail.invoiceDate)}`
             : undefined
         }
         size="full"
@@ -720,52 +710,44 @@ export default function InvoiceListPage() {
             {actionError ? <p className="rounded-lg bg-danger-soft px-3 py-2 text-danger">{actionError}</p> : null}
 
             <div className="grid gap-3 rounded-lg border border-line bg-surface-muted p-3 sm:grid-cols-2 lg:grid-cols-4">
-              <label>
-                发票号
-                <Input
+              <label>{t("发票号")}<Input
                   value={source.invoiceNumber}
                   disabled={!canEditFields}
                   onChange={(e) => canEditFields && setDraft((prev) => (prev ? { ...prev, invoiceNumber: e.target.value } : prev))}
                 />
               </label>
-              <label>
-                发票日期
-                <Input
+              <label>{t("发票日期")}<Input
                   type="date"
                   value={source.invoiceDate}
                   disabled={!canEditFields}
                   onChange={(e) => canEditFields && setDraft((prev) => (prev ? { ...prev, invoiceDate: e.target.value } : prev))}
                 />
               </label>
-              <label>
-                客户编码
-                <Input
+              <label>{t("客户编码")}<Input
                   value={source.customerCode}
                   disabled={!canEditFields}
                   onChange={(e) => canEditFields && setDraft((prev) => (prev ? { ...prev, customerCode: e.target.value } : prev))}
                 />
               </label>
-              <label>
-                供应商
-                <Select
+              <label>{t("供应商")}<Select
                   value={source.supplierId ?? ""}
                   disabled={!isPending || actionLoading}
                   onChange={(e) => setDraft((prev) => (prev ? { ...prev, supplierId: Number(e.target.value) || null } : prev))}
                 >
-                  <option value="">未匹配（OCR: {ocrSupplierName}）</option>
+                  <option value="">{t("未匹配（OCR:")} {ocrSupplierName}）</option>
                   {suppliers.map((supplier) => (
                     <option key={supplier.id} value={supplier.id}>
                       {supplier.name}
                     </option>
                   ))}
                 </Select>
-                {detail.status === "pending" ? <span className="mt-1 block text-meta text-ink-subtle">确认入库前必须选择供应商</span> : null}
+                {detail.status === "pending" ? <span className="mt-1 block text-meta text-ink-subtle">{t("确认入库前必须选择供应商")}</span> : null}
                 {!source.supplierId && suggestedSupplier ? (
-                  <span className="mt-1 block text-meta text-success">建议匹配: {suggestedSupplier.name}</span>
+                  <span className="mt-1 block text-meta text-success">{t("建议匹配:")} {suggestedSupplier.name}</span>
                 ) : null}
               </label>
               <label>
-                Sales Total
+                {t("未税金额")}
                 <Input
                   type="number"
                   step="0.01"
@@ -779,7 +761,7 @@ export default function InvoiceListPage() {
                 />
               </label>
               <label>
-                Tax Total
+                {t("税额")}
                 <Input
                   type="number"
                   step="0.01"
@@ -802,7 +784,7 @@ export default function InvoiceListPage() {
                 />
               </label>
               <label>
-                Total
+                {t("价税合计")}
                 <Input
                   type="number"
                   step="0.01"
@@ -811,9 +793,7 @@ export default function InvoiceListPage() {
                   onChange={(e) => canEditFields && setDraft((prev) => (prev ? { ...prev, grandTotal: Number(e.target.value) || 0 } : prev))}
                 />
               </label>
-              <label>
-                是否应税
-                <Select
+              <label>{t("是否应税")}<Select
                   value={source.hasTax ? "yes" : "no"}
                   disabled={!canEditFields}
                   onChange={(e) => {
@@ -831,48 +811,43 @@ export default function InvoiceListPage() {
                     });
                   }}
                 >
-                  <option value="no">否</option>
-                  <option value="yes">是</option>
+                  <option value="no">{t("否")}</option>
+                  <option value="yes">{t("是")}</option>
                 </Select>
               </label>
-              <label className="sm:col-span-2 lg:col-span-4">
-                备注
-                <Textarea
+              <label className="sm:col-span-2 lg:col-span-4">{t("备注")}<Textarea
                   rows={2}
-                  value={source.notes}
+                  value={detail.status === "rejected" && ["重复发票", "OCR 识别结果不正确", "金额与纸质单据不一致"].includes(source.notes) ? t(source.notes) : source.notes}
                   disabled={!canEditFields}
                   onChange={(e) => canEditFields && setDraft((prev) => (prev ? { ...prev, notes: e.target.value } : prev))}
                 />
               </label>
-              <p className="sm:col-span-2 lg:col-span-4">
-                OCR 供应商: <span className="font-semibold">{ocrSupplierName}</span> | 供应商地址: {String(ocr?.supplierAddress || "-")} | 供应商联系方式:{" "}
+              <p className="sm:col-span-2 lg:col-span-4">{t("OCR 供应商:")} <span className="font-semibold">{ocrSupplierName}</span> {t("| 供应商地址:")} {String(ocr?.supplierAddress || "-")} {t("| 供应商联系方式:")}{" "}
                 {String(ocr?.supplierContact || "-")}
               </p>
             </div>
 
             <div className="grid gap-2 rounded-lg border border-line bg-surface p-3 sm:grid-cols-2 lg:grid-cols-3">
-              <p>
-                商品总数量: <span className="font-semibold">{quantityTotal.toFixed(2)}</span>
+              <p>{t("商品总数量:")} <span className="font-semibold">{quantityTotal.toFixed(2)}</span>
+              </p>
+              <p>{t("商品种类数:")} <span className="font-semibold">{kindCount}</span>
               </p>
               <p>
-                商品种类数: <span className="font-semibold">{kindCount}</span>
-              </p>
-              <p>
-                Sales Total: {formatCurrency(source.subtotal)} / OCR {formatCurrency(ocrSalesTotal ?? 0)}{" "}
+                {t("未税金额")}: {formatCurrency(source.subtotal)} / OCR {formatCurrency(ocrSalesTotal ?? 0)}{" "}
                 <Badge tone={isClose(source.subtotal, ocrSalesTotal) ? "success" : "danger"}>
-                  {isClose(source.subtotal, ocrSalesTotal) ? "一致" : "不一致"}
+                  {isClose(source.subtotal, ocrSalesTotal) ? t("一致") : t("不一致")}
                 </Badge>
               </p>
               <p>
-                Tax Total: {formatCurrency(source.taxAmount)} / OCR {formatCurrency(ocrTaxTotal ?? 0)}{" "}
+                {t("税额")}: {formatCurrency(source.taxAmount)} / OCR {formatCurrency(ocrTaxTotal ?? 0)}{" "}
                 <Badge tone={isClose(source.taxAmount, ocrTaxTotal) ? "success" : "danger"}>
-                  {isClose(source.taxAmount, ocrTaxTotal) ? "一致" : "不一致"}
+                  {isClose(source.taxAmount, ocrTaxTotal) ? t("一致") : t("不一致")}
                 </Badge>
               </p>
               <p className="sm:col-span-2 lg:col-span-1">
-                Total: {formatCurrency(source.grandTotal)} / OCR {formatCurrency(ocrTotal ?? 0)}{" "}
+                {t("价税合计")}: {formatCurrency(source.grandTotal)} / OCR {formatCurrency(ocrTotal ?? 0)}{" "}
                 <Badge tone={isClose(source.grandTotal, ocrTotal) ? "success" : "danger"}>
-                  {isClose(source.grandTotal, ocrTotal) ? "一致" : "不一致"}
+                  {isClose(source.grandTotal, ocrTotal) ? t("一致") : t("不一致")}
                 </Badge>
               </p>
             </div>
@@ -882,16 +857,16 @@ export default function InvoiceListPage() {
                 <table className="min-w-[1200px] text-sm">
                 <thead>
                   <tr>
-                    <th className="p-2">中文名</th>
-                    <th className="border-b p-2">English Name</th>
-                    <th className="border-b p-2">Code</th>
-                    <th className="border-b p-2">Number</th>
+                    <th className="p-2">{t("中文名")}</th>
+                    <th className="border-b p-2">{t("英文名")}</th>
+                    <th className="border-b p-2">{t("编码")}</th>
+                    <th className="border-b p-2">{t("货号")}</th>
                     <th className="border-b p-2">UN</th>
-                    <th className="border-b p-2">Tax</th>
-                    <th className="border-b p-2">数量</th>
-                    <th className="border-b p-2">单位</th>
-                    <th className="border-b p-2">单价</th>
-                    <th className="border-b p-2">小计</th>
+                    <th className="border-b p-2">{t("税码")}</th>
+                    <th className="border-b p-2">{t("数量")}</th>
+                    <th className="border-b p-2">{t("单位")}</th>
+                    <th className="border-b p-2">{t("单价")}</th>
+                    <th className="border-b p-2">{t("小计")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -992,7 +967,7 @@ export default function InvoiceListPage() {
 
             <div className="sticky bottom-0 z-10 flex flex-wrap items-center gap-2 rounded-lg border border-line bg-surface/95 p-3 backdrop-blur">
               <Badge tone={detail.status === "confirmed" ? "success" : detail.status === "rejected" ? "danger" : "warning"}>
-                {detail.status === "confirmed" ? "已确认" : detail.status === "rejected" ? "已驳回" : "待处理"}
+                {detail.status === "confirmed" ? t("已确认") : detail.status === "rejected" ? t("已驳回") : t("待处理")}
               </Badge>
 
               {detail.status === "pending" ? (
@@ -1009,37 +984,29 @@ export default function InvoiceListPage() {
                     }}
                     disabled={actionLoading}
                   >
-                    {editing ? "退出编辑" : "进入编辑"}
+                    {editing ? t("退出编辑") : t("进入编辑")}
                   </Button>
 
                   {editing ? (
-                    <Button variant="secondary" onClick={recalculateDraftTotals} disabled={actionLoading}>
-                      重新计算
-                    </Button>
+                    <Button variant="secondary" onClick={recalculateDraftTotals} disabled={actionLoading}>{t("重新计算")}</Button>
                   ) : null}
 
                   <Button onClick={() => void handleSaveUpdate()} disabled={actionLoading || !editing}>
-                    {actionLoading ? "保存中..." : "保存修改"}
+                    {actionLoading ? t("保存中...") : t("保存修改")}
                   </Button>
 
                   <Button variant="secondary" onClick={() => void handleConfirm()} disabled={actionLoading}>
-                    {actionLoading ? "处理中..." : "确认入库"}
+                    {actionLoading ? t("处理中...") : t("确认入库")}
                   </Button>
 
                   {isAdmin ? (
-                    <Button variant="danger" onClick={() => void handleDelete()} disabled={actionLoading}>
-                      删除发票
-                    </Button>
+                    <Button variant="danger" onClick={() => void handleDelete()} disabled={actionLoading}>{t("删除发票")}</Button>
                   ) : null}
                 </>
               ) : detail.status === "rejected" && isAdmin ? (
-                <Button variant="danger" onClick={() => void handleDelete()} disabled={actionLoading}>
-                  删除发票
-                </Button>
+                <Button variant="danger" onClick={() => void handleDelete()} disabled={actionLoading}>{t("删除发票")}</Button>
               ) : detail.status === "confirmed" && isAdmin ? (
-                <Button variant="secondary" onClick={() => void handleRollbackConfirm()} disabled={actionLoading}>
-                  回滚未确认
-                </Button>
+                <Button variant="secondary" onClick={() => void handleRollbackConfirm()} disabled={actionLoading}>{t("回滚未确认")}</Button>
               ) : null}
             </div>
           </div>

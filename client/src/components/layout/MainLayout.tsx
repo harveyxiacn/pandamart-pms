@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../../i18n";
 import type { PropsWithChildren } from "react";
 import { DemoBanner } from "./DemoBanner";
 import { Header } from "./Header";
@@ -5,15 +6,14 @@ import { MobileNav } from "./MobileNav";
 import { Sidebar } from "./Sidebar";
 
 export function MainLayout({ children }: PropsWithChildren) {
+  useLanguage();
   return (
     <div className="flex min-h-dvh bg-surface-muted">
       {/* Keyboard users should not have to tab through 15 nav links on every page. */}
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"
-      >
-        跳到主要内容
-      </a>
+      >{t("跳到主要内容")}</a>
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <DemoBanner />

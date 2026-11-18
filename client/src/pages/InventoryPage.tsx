@@ -1,3 +1,6 @@
+import { formatNumber } from "../utils/formatters";
+import { categoryName } from "../i18n";
+import { productName, t, useLanguage } from "../i18n";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Boxes, ClipboardCheck, PackageSearch, AlertTriangle, CalendarClock } from "lucide-react";
@@ -38,15 +41,16 @@ type InventoryLog = {
 };
 
 const logTypeLabels: Record<string, string> = {
-  inbound: "入库",
-  outbound: "出库",
-  adjust: "调整",
-  stocktake: "盘点",
-  sale: "销售",
-  void: "作废",
+  get inbound() { return t("入库"); },
+  get outbound() { return t("出库"); },
+  get adjust() { return t("调整"); },
+  get stocktake() { return t("盘点"); },
+  get sale() { return t("销售"); },
+  get void() { return t("作废"); },
 };
 
 export default function InventoryPage() {
+  useLanguage();
   const navigate = useNavigate();
   const { canAdjustInventory, canAdjustSafeStock } = usePermission();
   const toast = useToast();
@@ -86,7 +90,7 @@ export default function InventoryPage() {
       setPage(data.pagination.page);
     } catch (err: unknown) {
       if (myReq !== reqIdRef.current) return;
-      setError(err instanceof Error ? err.message : "加载库存失败");
+      setError(err instanceof Error ? err.message : t("加载库存失败"));
     } finally {
       if (myReq === reqIdRef.current) setLoading(false);
     }
@@ -110,7 +114,7 @@ export default function InventoryPage() {
       setLogs(logRes.items as InventoryLog[]);
     } catch (err: unknown) {
       setLogs([]);
-      toast.error(err instanceof Error ? err.message : "加载库存日志失败");
+      toast.error(err instanceof Error ? err.message : t("加载库存日志失败"));
     }
   };
 
@@ -123,11 +127,11 @@ export default function InventoryPage() {
         quantity: actionQty,
         reason: actionReason,
       });
-      toast.success("库存已调整");
+      toast.success(t("库存已调整"));
       await load();
       setActionProduct(null);
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "库存调整失败");
+      toast.error(err instanceof Error ? err.message : t("库存调整失败"));
     } finally {
       setSubmitting(false);
     }
@@ -136,17 +140,13 @@ export default function InventoryPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="库存管理"
-        description="查看实时库存与安全库存线，处理补货和盘亏盘盈。"
+        title={t("库存管理")}
+        description={t("查看实时库存与安全库存线，处理补货和盘亏盘盈。")}
         actions={
           <>
-            <Button variant="secondary" leadingIcon={CalendarClock} onClick={() => navigate("/batches")}>
-              批次保质期
-            </Button>
+            <Button variant="secondary" leadingIcon={CalendarClock} onClick={() => navigate("/batches")}>{t("批次保质期")}</Button>
             {canAdjustInventory ? (
-              <Button leadingIcon={ClipboardCheck} onClick={() => navigate("/stocktake")}>
-                库存盘点
-              </Button>
+              <Button leadingIcon={ClipboardCheck} onClick={() => navigate("/stocktake")}>{t("库存盘点")}</Button>
             ) : null}
           </>
         }
@@ -154,20 +154,20 @@ export default function InventoryPage() {
 
       {summary ? (
         <section className="grid gap-3 sm:grid-cols-3">
-          <StatCard label="在管商品" value={summary.totalProducts} icon={Boxes} tone="neutral" hint="已建立库存记录" />
+          <StatCard label={t("在管商品")} value={summary.totalProducts} icon={Boxes} tone="neutral" hint={t("已建立库存记录")} />
           <StatCard
-            label="低库存"
+            label={t("低库存")}
             value={summary.lowStockCount}
             icon={AlertTriangle}
             tone={summary.lowStockCount > 0 ? "warning" : "success"}
-            hint="低于安全库存线"
+            hint={t("低于安全库存线")}
           />
           <StatCard
-            label="缺货"
+            label={t("缺货")}
             value={summary.outOfStockCount}
             icon={PackageSearch}
             tone={summary.outOfStockCount > 0 ? "danger" : "success"}
-            hint="库存为 0，需立即补货"
+            hint={t("库存为 0，需立即补货")}
           />
         </section>
       ) : null}
@@ -182,19 +182,19 @@ export default function InventoryPage() {
               onKeyDown={(e) => {
                 if (e.key === "Enter") void load(1);
               }}
-              placeholder="搜索产品名或 SKU"
-              aria-label="搜索库存"
+              placeholder={t("搜索产品名或 SKU")}
+              aria-label={t("搜索库存")}
               containerClassName="w-full sm:max-w-xs"
             />
           </ToolbarGroup>
           <ToolbarGroup>
             <SegmentedControl
-              label="库存范围"
+              label={t("库存范围")}
               value={alertOnly ? "low" : "all"}
               onChange={(value) => setAlertOnly(value === "low")}
               options={[
-                { value: "all", label: "全部库存" },
-                { value: "low", label: "仅低库存" },
+                { value: "all", label: t("全部库存") },
+                { value: "low", label: t("仅低库存") },
               ]}
             />
           </ToolbarGroup>
@@ -206,23 +206,21 @@ export default function InventoryPage() {
         {!loading && error ? (
           <EmptyState
             icon={Boxes}
-            title="加载失败"
+            title={t("加载失败")}
             description={error}
             action={
-              <Button variant="ghost" onClick={() => void load()}>
-                重试
-              </Button>
+              <Button variant="ghost" onClick={() => void load()}>{t("重试")}</Button>
             }
           />
         ) : null}
         {!loading && !error && items.length === 0 ? (
           <EmptyState
             icon={Boxes}
-            title={alertOnly ? "没有低库存商品" : "暂无库存记录"}
+            title={alertOnly ? t("没有低库存商品") : t("暂无库存记录")}
             description={
               alertOnly
-                ? "所有商品都高于安全库存线。"
-                : "确认采购发票后，库存会自动建立并更新。"
+                ? t("所有商品都高于安全库存线。")
+                : t("确认采购发票后，库存会自动建立并更新。")
             }
           />
         ) : null}
@@ -232,12 +230,12 @@ export default function InventoryPage() {
             <Table>
               <thead>
                 <tr>
-                  <Th>商品</Th>
-                  <Th numeric>当前库存</Th>
-                  <Th numeric>安全库存</Th>
-                  <Th>补货水位</Th>
-                  <Th>最近入库</Th>
-                  <Th className="cell-actions">操作</Th>
+                  <Th>{t("商品")}</Th>
+                  <Th numeric>{t("当前库存")}</Th>
+                  <Th numeric>{t("安全库存")}</Th>
+                  <Th>{t("补货水位")}</Th>
+                  <Th>{t("最近入库")}</Th>
+                  <Th className="cell-actions">{t("操作")}</Th>
                 </tr>
               </thead>
               <tbody>
@@ -253,18 +251,18 @@ export default function InventoryPage() {
                           </span>
                           <div className="min-w-0">
                             <p className="cell-strong truncate">
-                              {item.product.nameZh || item.product.nameEn}
+                              {productName(item.product.nameZh, item.product.nameEn)}
                             </p>
                             <p className="truncate text-meta text-ink-subtle">
-                              {item.product.sku || "无 SKU"}
-                              {item.product.category ? ` · ${item.product.category}` : ""}
+                              {item.product.sku || t("无 SKU")}
+                              {item.product.category ? ` · ${categoryName(item.product.category)}` : ""}
                             </p>
                           </div>
                         </div>
                       </Td>
                       <Td numeric>
                         <span className={cn("font-semibold", item.isLowStock ? "text-danger" : "text-ink")}>
-                          {item.quantity}
+                          {formatNumber(Number(item.quantity))}
                         </span>
                         <span className="ml-1 text-meta text-ink-subtle">{item.unit}</span>
                       </Td>
@@ -281,7 +279,7 @@ export default function InventoryPage() {
                             />
                           </div>
                           <Badge tone={item.isLowStock ? "warning" : "success"} size="sm">
-                            {item.isLowStock ? "需补货" : "正常"}
+                            {item.isLowStock ? t("需补货") : t("正常")}
                           </Badge>
                         </div>
                       </Td>
@@ -297,13 +295,9 @@ export default function InventoryPage() {
                       </Td>
                       <Td className="cell-actions">
                         {canAdjustInventory ? (
-                          <Button variant="secondary" size="sm" onClick={() => void openAdjust(item)}>
-                            调整
-                          </Button>
+                          <Button variant="secondary" size="sm" onClick={() => void openAdjust(item)}>{t("调整")}</Button>
                         ) : (
-                          <Link to="/sales" className="text-meta text-accent hover:underline">
-                            去收银
-                          </Link>
+                          <Link to="/sales" className="text-meta text-accent hover:underline">{t("去收银")}</Link>
                         )}
                       </Td>
                     </tr>
@@ -330,42 +324,38 @@ export default function InventoryPage() {
       <Modal
         open={canAdjustInventory && actionProduct !== null}
         onClose={() => setActionProduct(null)}
-        title="库存调整"
+        title={t("库存调整")}
         description={
           actionProduct
-            ? `${actionProduct.product.nameZh || actionProduct.product.nameEn} · 当前 ${actionProduct.quantity} ${actionProduct.unit}`
+            ? t("{0} · 当前 {1} {2}", productName(actionProduct.product.nameZh, actionProduct.product.nameEn), actionProduct.quantity, actionProduct.unit)
             : undefined
         }
         size="md"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setActionProduct(null)}>
-              取消
-            </Button>
-            <Button onClick={() => void submitAdjust()} loading={submitting}>
-              提交调整
-            </Button>
+            <Button variant="ghost" onClick={() => setActionProduct(null)}>{t("取消")}</Button>
+            <Button onClick={() => void submitAdjust()} loading={submitting}>{t("提交调整")}</Button>
           </>
         }
       >
         {actionProduct ? (
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-3">
-              <Field label="调整类型" htmlFor="adjust-type">
+              <Field label={t("调整类型")} htmlFor="adjust-type">
                 <Select
                   id="adjust-type"
                   value={actionType}
                   onChange={(e) => setActionType(e.target.value as typeof actionType)}
                 >
-                  <option value="adjust">调整（增减）</option>
-                  <option value="out">出库</option>
-                  <option value="stocktake">盘点（设为实际值）</option>
+                  <option value="adjust">{t("调整（增减）")}</option>
+                  <option value="out">{t("出库")}</option>
+                  <option value="stocktake">{t("盘点（设为实际值）")}</option>
                 </Select>
               </Field>
               <Field
-                label={actionType === "stocktake" ? "实际数量" : "数量变化"}
+                label={actionType === "stocktake" ? t("实际数量") : t("数量变化")}
                 htmlFor="adjust-qty"
-                hint={actionType === "adjust" ? "正数增加，负数减少" : undefined}
+                hint={actionType === "adjust" ? t("正数增加，负数减少") : undefined}
               >
                 <Input
                   id="adjust-qty"
@@ -374,19 +364,19 @@ export default function InventoryPage() {
                   onChange={(e) => setActionQty(Number(e.target.value))}
                 />
               </Field>
-              <Field label="原因" htmlFor="adjust-reason">
+              <Field label={t("原因")} htmlFor="adjust-reason">
                 <Input
                   id="adjust-reason"
                   value={actionReason}
                   onChange={(e) => setActionReason(e.target.value)}
-                  placeholder="可选"
+                  placeholder={t("可选")}
                 />
               </Field>
             </div>
 
             {canAdjustSafeStock ? (
               <div className="rounded-lg border border-line bg-surface-muted p-3">
-                <Field label="安全库存" htmlFor="safe-stock" hint="低于该值时进入补货提醒">
+                <Field label={t("安全库存")} htmlFor="safe-stock" hint={t("低于该值时进入补货提醒")}>
                   <div className="flex gap-2">
                     <Input
                       id="safe-stock"
@@ -399,27 +389,23 @@ export default function InventoryPage() {
                       onClick={async () => {
                         try {
                           await setSafeStock(actionProduct.product.id, safeStockValue);
-                          toast.success("安全库存已保存");
+                          toast.success(t("安全库存已保存"));
                           await load();
                         } catch (err: unknown) {
-                          toast.error(err instanceof Error ? err.message : "安全库存保存失败");
+                          toast.error(err instanceof Error ? err.message : t("安全库存保存失败"));
                         }
                       }}
-                    >
-                      保存
-                    </Button>
+                    >{t("保存")}</Button>
                   </div>
                 </Field>
               </div>
             ) : null}
 
             <div>
-              <h3 className="mb-2 text-meta font-semibold uppercase tracking-wider text-ink-subtle">
-                最近库存变动
-              </h3>
+              <h3 className="mb-2 text-meta font-semibold uppercase tracking-wider text-ink-subtle">{t("最近库存变动")}</h3>
               <div className="max-h-52 space-y-1 overflow-y-auto rounded-lg border border-line bg-surface p-2">
                 {logs.length === 0 ? (
-                  <p className="px-1 py-2 text-meta text-ink-subtle">暂无变动记录</p>
+                  <p className="px-1 py-2 text-meta text-ink-subtle">{t("暂无变动记录")}</p>
                 ) : (
                   logs.map((log) => (
                     <div
@@ -437,7 +423,7 @@ export default function InventoryPage() {
                         </p>
                       </div>
                       <span className="shrink-0 tabular text-ink-subtle">
-                        {log.quantityBefore} → <span className="font-semibold text-ink">{log.quantityAfter}</span>
+                        {formatNumber(Number(log.quantityBefore))} → <span className="font-semibold text-ink">{formatNumber(Number(log.quantityAfter))}</span>
                       </span>
                     </div>
                   ))

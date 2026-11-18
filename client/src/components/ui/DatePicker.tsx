@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../../i18n";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CalendarDays, Check, ChevronDown, X } from "lucide-react";
 import { cn } from "../../utils/classnames";
@@ -37,12 +38,13 @@ interface DatePickerProps {
 export function DatePicker({
   value,
   onChange,
-  placeholder = "选择日期",
-  label = "选择日期",
+  placeholder = t("选择日期"),
+  label = t("选择日期"),
   clearable = false,
   className,
   id,
 }: DatePickerProps) {
+  useLanguage();
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLButtonElement | null>(null);
   const selected = parseISODate(value);
@@ -78,7 +80,7 @@ export function DatePicker({
         {clearable && value ? (
           <button
             type="button"
-            aria-label="清除日期"
+            aria-label={t("清除日期")}
             onClick={() => onChange(null)}
             className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-ink-subtle transition-colors hover:bg-surface-inset hover:text-ink"
           >
@@ -87,7 +89,7 @@ export function DatePicker({
         ) : null}
       </div>
 
-      <Popover open={open} onClose={close} anchorRef={anchorRef} ariaLabel="选择日期" className="p-3">
+      <Popover open={open} onClose={close} anchorRef={anchorRef} ariaLabel={t("选择日期")} className="p-3">
         <Calendar
           month={month}
           onMonthChange={setMonth}
@@ -120,13 +122,14 @@ interface DateRangePickerProps {
 export function DateRangePicker({
   value,
   onChange,
-  placeholder = "选择日期范围",
-  label = "选择日期范围",
+  placeholder = t("选择日期范围"),
+  label = t("选择日期范围"),
   clearable = true,
   className,
   showPresets = true,
   id,
 }: DateRangePickerProps) {
+  useLanguage();
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLButtonElement | null>(null);
   const [draftStart, setDraftStart] = useState<Date | null>(null);
@@ -211,7 +214,7 @@ export function DateRangePicker({
         {clearable && (value.start || value.end) ? (
           <button
             type="button"
-            aria-label="清除日期范围"
+            aria-label={t("清除日期范围")}
             onClick={() => {
               commit(null, null);
               setDraftStart(null);
@@ -234,15 +237,13 @@ export function DateRangePicker({
         open={open}
         onClose={close}
         anchorRef={anchorRef}
-        ariaLabel="选择日期范围"
+        ariaLabel={t("选择日期范围")}
         className="p-3"
       >
         <div className="flex flex-col gap-3 sm:flex-row">
           {showPresets ? (
             <div className="flex shrink-0 flex-wrap gap-1 border-b border-line pb-2 sm:w-28 sm:flex-col sm:border-b-0 sm:border-r sm:pb-0 sm:pr-3">
-              <p className="hidden px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-ink-subtle sm:block">
-                快捷选择
-              </p>
+              <p className="hidden px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-ink-subtle sm:block">{t("快捷选择")}</p>
               {RANGE_PRESETS.map((preset) => (
                 <button
                   key={preset.key}
@@ -255,7 +256,7 @@ export function DateRangePicker({
                       : "text-ink-muted hover:bg-surface-inset hover:text-ink"
                   )}
                 >
-                  {preset.label}
+                  {t(preset.label)}
                   {activePreset === preset.key ? <Check size={13} aria-hidden="true" /> : null}
                 </button>
               ))}
@@ -274,7 +275,7 @@ export function DateRangePicker({
               onSelectDate={pick}
             />
             {draftStart && !draftEnd ? (
-              <p className="mt-1 text-center text-[11px] text-accent">再选择一个结束日期</p>
+              <p className="mt-1 text-center text-[11px] text-accent">{t("再选择一个结束日期")}</p>
             ) : null}
           </div>
         </div>

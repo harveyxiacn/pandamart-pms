@@ -1,3 +1,5 @@
+import { notificationMessage } from "../i18n/notifications";
+import { t, useLanguage } from "../i18n";
 import { useEffect, useState } from "react";
 import {
   BellOff,
@@ -22,13 +24,14 @@ import { formatDateTime } from "../utils/formatters";
 import { cn } from "../utils/classnames";
 
 const typeMeta = {
-  stock_alert: { icon: Package, label: "库存告警", tone: "warning" as const },
-  price_alert: { icon: TrendingUp, label: "价格波动", tone: "info" as const },
-  invoice: { icon: FileText, label: "发票", tone: "success" as const },
-  system: { icon: Info, label: "系统", tone: "default" as const },
+  stock_alert: { icon: Package, get label() { return t("库存告警"); }, tone: "warning" as const },
+  price_alert: { icon: TrendingUp, get label() { return t("价格波动"); }, tone: "info" as const },
+  invoice: { icon: FileText, get label() { return t("发票"); }, tone: "success" as const },
+  system: { icon: Info, get label() { return t("系统"); }, tone: "default" as const },
 };
 
 export default function NotificationsPage() {
+  useLanguage();
   const toast = useToast();
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,7 +54,7 @@ export default function NotificationsPage() {
       setTotal(data.pagination.total);
       setPage(data.pagination.page);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "加载通知失败");
+      setError(err instanceof Error ? err.message : t("加载通知失败"));
     } finally {
       setLoading(false);
     }
@@ -65,10 +68,10 @@ export default function NotificationsPage() {
   const handleMarkAllRead = async () => {
     try {
       await markAllNotificationsRead();
-      toast.success("已将全部通知标记为已读");
+      toast.success(t("已将全部通知标记为已读"));
       await load();
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "操作失败");
+      toast.error(err instanceof Error ? err.message : t("操作失败"));
     }
   };
 
@@ -77,61 +80,55 @@ export default function NotificationsPage() {
       await markNotificationRead(id);
       await load();
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "操作失败");
+      toast.error(err instanceof Error ? err.message : t("操作失败"));
     }
   };
 
   return (
     <div className="space-y-5">
       <PageHeader
-        title="通知中心"
-        description="库存不足、价格波动与发票处理进度会在这里提醒。"
+        title={t("通知中心")}
+        description={t("库存不足、价格波动与发票处理进度会在这里提醒。")}
         actions={
           <Button
             variant="secondary"
             leadingIcon={CheckCheck}
             onClick={() => void handleMarkAllRead()}
             disabled={items.every((item) => item.is_read)}
-          >
-            全部标记已读
-          </Button>
+          >{t("全部标记已读")}</Button>
         }
       />
 
       <Card padded={false} className="p-4 sm:p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <SegmentedControl
-            label="通知范围"
+            label={t("通知范围")}
             value={filter}
             onChange={setFilter}
             options={[
-              { value: "all", label: "全部" },
-              { value: "unread", label: "未读" },
+              { value: "all", label: t("全部") },
+              { value: "unread", label: t("未读") },
             ]}
           />
-          <span className="text-meta text-ink-subtle">
-            共 <span className="font-medium tabular text-ink-muted">{total}</span> 条
-          </span>
+          <span className="text-meta text-ink-subtle">{t("共")} <span className="font-medium tabular text-ink-muted">{total}</span> {t("条")}</span>
         </div>
 
         {loading ? <SkeletonTable rows={5} columns={3} /> : null}
         {!loading && error ? (
           <EmptyState
             icon={BellOff}
-            title="加载失败"
+            title={t("加载失败")}
             description={error}
             action={
-              <Button variant="ghost" onClick={() => void load()}>
-                重试
-              </Button>
+              <Button variant="ghost" onClick={() => void load()}>{t("重试")}</Button>
             }
           />
         ) : null}
         {!loading && !error && items.length === 0 ? (
           <EmptyState
             icon={BellOff}
-            title={filter === "unread" ? "没有未读通知" : "暂无通知"}
-            description="系统会在库存不足、价格异常或发票待处理时自动发送通知。"
+            title={filter === "unread" ? t("没有未读通知") : t("暂无通知")}
+            description={t("系统会在库存不足、价格异常或发票待处理时自动发送通知。")}
           />
         ) : null}
 
@@ -168,20 +165,18 @@ export default function NotificationsPage() {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className={cn("text-body", item.is_read ? "font-medium text-ink-muted" : "font-semibold text-ink")}>
-                          {item.title}
+                          {t(item.title)}
                         </p>
                         <Badge size="sm" tone={meta.tone}>
                           {meta.label}
                         </Badge>
-                        {!item.is_read ? <Badge size="sm" tone="info">未读</Badge> : null}
+                        {!item.is_read ? <Badge size="sm" tone="info">{t("未读")}</Badge> : null}
                       </div>
-                      <p className="mt-0.5 text-sm text-ink-muted">{item.message}</p>
+                      <p className="mt-0.5 text-sm text-ink-muted">{notificationMessage(item.message)}</p>
                       <p className="mt-1 text-meta tabular text-ink-subtle">{formatDateTime(item.created_at)}</p>
                     </div>
                     {!item.is_read ? (
-                      <Button variant="ghost" size="sm" onClick={() => void handleMarkRead(item.id)}>
-                        标记已读
-                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => void handleMarkRead(item.id)}>{t("标记已读")}</Button>
                     ) : null}
                   </li>
                 );

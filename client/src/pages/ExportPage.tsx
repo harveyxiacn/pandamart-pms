@@ -1,3 +1,4 @@
+import { t, useLanguage } from "../i18n";
 import { useEffect, useState } from "react";
 import {
   Boxes,
@@ -39,6 +40,7 @@ interface ExportAction {
 }
 
 export default function ExportPage() {
+  useLanguage();
   const toast = useToast();
   const [dateRange, setDateRange] = useState<DateRange>({ start: null, end: null });
   const [status, setStatus] = useState("");
@@ -58,7 +60,7 @@ export default function ExportPage() {
       await handler();
       toast.success(success);
     } catch (err: unknown) {
-      toast.error(`导出失败：${err instanceof Error ? err.message : "未知错误"}`);
+      toast.error(t("导出失败：{0}", err instanceof Error ? err.message : "未知错误"));
     } finally {
       setRunning(null);
     }
@@ -69,8 +71,8 @@ export default function ExportPage() {
   const actions: ExportAction[] = [
     {
       key: "invoices",
-      title: "发票明细",
-      description: "按开票日期与状态导出采购发票抬头与金额。",
+      title: t("发票明细"),
+      description: t("按开票日期与状态导出采购发票抬头与金额。"),
       icon: FileText,
       run: () =>
         exportInvoices({
@@ -81,22 +83,22 @@ export default function ExportPage() {
     },
     {
       key: "inventory",
-      title: "库存快照",
-      description: "当前所有商品的数量、安全库存与单位。",
+      title: t("库存快照"),
+      description: t("当前所有商品的数量、安全库存与单位。"),
       icon: Boxes,
       run: () => exportInventory(),
     },
     {
       key: "suppliers",
-      title: "供应商名录",
-      description: "供应商联系方式与编号，便于线下对账。",
+      title: t("供应商名录"),
+      description: t("供应商联系方式与编号，便于线下对账。"),
       icon: Building2,
       run: () => exportSuppliers(),
     },
     {
       key: "purchases",
-      title: "采购明细",
-      description: "按日期范围与供应商导出逐行采购记录。",
+      title: t("采购明细"),
+      description: t("按日期范围与供应商导出逐行采购记录。"),
       icon: ShoppingCart,
       run: () =>
         exportPurchases({
@@ -105,19 +107,19 @@ export default function ExportPage() {
           supplierId: supplierId ? Number(supplierId) : undefined,
         }),
       disabled: !hasRange,
-      disabledHint: "先在筛选区选择完整的日期范围",
+      disabledHint: t("先在筛选区选择完整的日期范围"),
     },
     {
       key: "reorder",
-      title: "补货建议",
-      description: "基于销量与安全库存计算的订货清单。",
+      title: t("补货建议"),
+      description: t("基于销量与安全库存计算的订货清单。"),
       icon: Lightbulb,
       run: () => exportReorderSuggestions(),
     },
     {
       key: "backup",
-      title: "全量备份",
-      description: "导出全部业务表，用于归档或迁移。",
+      title: t("全量备份"),
+      description: t("导出全部业务表，用于归档或迁移。"),
       icon: Database,
       run: () => exportFullBackup(),
     },
@@ -126,42 +128,40 @@ export default function ExportPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="数据导出"
-        description="把发票、库存与采购数据导出为 Excel，便于对账与归档。"
+        title={t("数据导出")}
+        description={t("把发票、库存与采购数据导出为 Excel，便于对账与归档。")}
         actions={
           <Button
             variant="secondary"
             leadingIcon={Download}
             loading={running === "backup"}
-            onClick={() => void run("backup", () => exportFullBackup(), "全量备份导出已开始。")}
-          >
-            全量备份
-          </Button>
+            onClick={() => void run("backup", () => exportFullBackup(), t("全量备份导出已开始。"))}
+          >{t("全量备份")}</Button>
         }
       />
 
       <Card>
         <div className="grid gap-3 sm:grid-cols-3">
-          <Field label="日期范围" htmlFor="export-range">
+          <Field label={t("日期范围")} htmlFor="export-range">
             <DateRangePicker
               id="export-range"
               value={dateRange}
               onChange={setDateRange}
-              label="导出日期范围"
+              label={t("导出日期范围")}
               className="w-full"
             />
           </Field>
-          <Field label="发票状态" htmlFor="export-status" hint="仅影响发票明细">
+          <Field label={t("发票状态")} htmlFor="export-status" hint={t("仅影响发票明细")}>
             <Select id="export-status" value={status} onChange={(e) => setStatus(e.target.value)}>
-              <option value="">全部</option>
-              <option value="pending">待处理</option>
-              <option value="confirmed">已确认</option>
-              <option value="rejected">已驳回</option>
+              <option value="">{t("全部")}</option>
+              <option value="pending">{t("待处理")}</option>
+              <option value="confirmed">{t("已确认")}</option>
+              <option value="rejected">{t("已驳回")}</option>
             </Select>
           </Field>
-          <Field label="供应商" htmlFor="export-supplier" hint="仅影响采购明细">
+          <Field label={t("供应商")} htmlFor="export-supplier" hint={t("仅影响采购明细")}>
             <Select id="export-supplier" value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
-              <option value="">全部供应商</option>
+              <option value="">{t("全部供应商")}</option>
               {suppliers.map((supplier) => (
                 <option key={supplier.id} value={supplier.id}>
                   {supplier.name}
@@ -189,17 +189,15 @@ export default function ExportPage() {
               </div>
               <div className="mt-4 flex items-center justify-between gap-2 border-t border-line pt-3">
                 <span className="text-meta text-ink-subtle">
-                  {action.disabled ? action.disabledHint : "导出为 .xlsx"}
+                  {action.disabled ? action.disabledHint : t("导出为 .xlsx")}
                 </span>
                 <Button
                   variant={action.key === "backup" ? "secondary" : "primary"}
                   size="sm"
                   loading={loading}
                   disabled={action.disabled || (running !== null && !loading)}
-                  onClick={() => void run(action.key, action.run, `${action.title}导出已开始。`)}
-                >
-                  导出
-                </Button>
+                  onClick={() => void run(action.key, action.run, t("{0}导出已开始。", action.title))}
+                >{t("导出")}</Button>
               </div>
             </Card>
           );

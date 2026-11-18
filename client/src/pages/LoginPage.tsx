@@ -1,5 +1,7 @@
+import { LanguageSelector } from "../i18n/LanguageSelector";
+import { t, useLanguage } from "../i18n";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   AlertTriangle,
   Boxes,
@@ -20,23 +22,25 @@ import { DEMO_ACCOUNTS, DEMO_MODE, demoAsset } from "../demo/constants";
 const highlights = [
   {
     icon: ScanLine,
-    title: "发票识别入库",
-    description: "上传采购发票，自动识别供应商、金额与商品行。",
+    get title() { return t("发票识别入库"); },
+    get description() { return t("上传采购发票，自动识别供应商、金额与商品行。"); },
   },
   {
     icon: Boxes,
-    title: "批次与临期跟踪",
-    description: "按保质期扣减库存，临期与过期批次提前提醒。",
+    get title() { return t("批次与临期跟踪"); },
+    get description() { return t("按保质期扣减库存，临期与过期批次提前提醒。"); },
   },
   {
     icon: ReceiptText,
-    title: "账款清晰可查",
-    description: "发票、付款与应付余额按供应商一屏对齐。",
+    get title() { return t("账款清晰可查"); },
+    get description() { return t("发票、付款与应付余额按供应商一屏对齐。"); },
   },
 ];
 
 export default function LoginPage() {
+  useLanguage();
   const navigate = useNavigate();
+  const location = useLocation();
   const { login } = useAuth();
   const [username, setUsername] = useState(DEMO_MODE ? "admin" : "");
   const [password, setPassword] = useState(DEMO_MODE ? "demo1234" : "");
@@ -51,9 +55,10 @@ export default function LoginPage() {
     try {
       const authData = await login(username, password);
       const nextPath = authData.user.role === "admin" ? "/" : "/invoices/scan";
-      navigate(nextPath, { replace: true });
+      const destination = location.state?.destination;
+      navigate(typeof destination === "string" && /^\/(?!\/)/.test(destination) ? destination : nextPath, { replace: true });
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "登录失败，请稍后重试");
+      setError(err instanceof Error ? err.message : t("登录失败，请稍后重试"));
     } finally {
       setLoading(false);
     }
@@ -82,19 +87,13 @@ export default function LoginPage() {
           />
           <div>
             <p className="text-body-lg font-semibold tracking-tight text-white">PandaMart</p>
-            <p className="text-meta text-white/55">进销存管理系统</p>
+            <p className="text-meta text-white/55">{t("进销存管理系统")}</p>
           </div>
         </div>
 
         <div className="relative max-w-md">
-          <h2 className="text-[32px] font-semibold leading-[1.15] tracking-tight text-white">
-            把进货、库存与账款
-            <br />
-            放在同一张桌面上。
-          </h2>
-          <p className="mt-3 text-sm leading-6 text-white/55">
-            面向社区超市与小型仓储团队，从收货到结算的每一步都有据可查。
-          </p>
+          <h2 className="text-[32px] font-semibold leading-[1.15] tracking-tight text-white">{t("把进货、库存与账款")}<br />{t("放在同一张桌面上。")}</h2>
+          <p className="mt-3 text-sm leading-6 text-white/55">{t("面向社区超市与小型仓储团队，从收货到结算的每一步都有据可查。")}</p>
 
           <ul className="mt-9 space-y-5">
             {highlights.map((item) => {
@@ -115,9 +114,7 @@ export default function LoginPage() {
         </div>
 
         <div className="relative flex items-center gap-2 text-meta text-white/40">
-          <ShieldCheck size={14} aria-hidden="true" />
-          账号登录失败会自动记录审计日志
-        </div>
+          <ShieldCheck size={14} aria-hidden="true" />{t("账号登录失败会自动记录审计日志")}</div>
       </aside>
 
       {/* Form */}
@@ -131,17 +128,16 @@ export default function LoginPage() {
             />
             <div>
               <p className="text-body font-semibold text-ink">PandaMart</p>
-              <p className="text-meta text-ink-subtle">进销存管理系统</p>
+              <p className="text-meta text-ink-subtle">{t("进销存管理系统")}</p>
             </div>
           </div>
 
-          <h1 className="text-2xl font-semibold tracking-tight text-ink">登录系统</h1>
-          <p className="mt-1.5 text-sm text-ink-muted">
-            使用门店分配的账号继续，忘记密码请联系管理员。
-          </p>
+          <div className="mb-4 flex justify-end"><LanguageSelector /></div>
+          <h1 className="text-2xl font-semibold tracking-tight text-ink">{t("登录系统")}</h1>
+          <p className="mt-1.5 text-sm text-ink-muted">{t("使用门店分配的账号继续，忘记密码请联系管理员。")}</p>
 
           <form className="mt-8 space-y-4" onSubmit={onSubmit}>
-            <Field label="用户名" htmlFor="login-username" required>
+            <Field label={t("用户名")} htmlFor="login-username" required>
               <div className="relative">
                 <User
                   aria-hidden="true"
@@ -161,7 +157,7 @@ export default function LoginPage() {
               </div>
             </Field>
 
-            <Field label="密码" htmlFor="login-password" required>
+            <Field label={t("密码")} htmlFor="login-password" required>
               <div className="relative">
                 <Lock
                   aria-hidden="true"
@@ -180,7 +176,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
-                  aria-label={showPassword ? "隐藏密码" : "显示密码"}
+                  aria-label={showPassword ? t("隐藏密码") : t("显示密码")}
                   aria-pressed={showPassword}
                   className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-ink-subtle transition-colors hover:bg-surface-inset hover:text-ink"
                 >
@@ -199,14 +195,12 @@ export default function LoginPage() {
               </div>
             ) : null}
 
-            <Button type="submit" className="w-full" loading={loading} disabled={loading}>
-              登录系统
-            </Button>
+            <Button type="submit" className="w-full" loading={loading} disabled={loading}>{t("登录系统")}</Button>
           </form>
 
           {DEMO_MODE ? (
             <div className="mt-5 rounded-xl border border-line bg-surface-muted p-3">
-              <p className="text-meta font-medium text-ink-muted">演示账号 · 点击自动填入</p>
+              <p className="text-meta font-medium text-ink-muted">{t("演示账号 · 点击自动填入")}</p>
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
                 {DEMO_ACCOUNTS.map((account) => (
                   <button
@@ -226,13 +220,11 @@ export default function LoginPage() {
                   </button>
                 ))}
               </div>
-              <p className="mt-2 text-meta text-ink-subtle">密码统一为 demo1234，数据仅保存在当前浏览器。</p>
+              <p className="mt-2 text-meta text-ink-subtle">{t("密码统一为 demo1234，数据仅保存在当前浏览器。")}</p>
             </div>
           ) : null}
 
-          <p className="mt-8 text-meta leading-5 text-ink-subtle">
-            PandaMart PMS 仅限授权门店员工使用。所有登录与数据变更都会写入审计日志。
-          </p>
+          <p className="mt-8 text-meta leading-5 text-ink-subtle">{t("PandaMart PMS 仅限授权门店员工使用。所有登录与数据变更都会写入审计日志。")}</p>
         </div>
       </main>
     </div>
